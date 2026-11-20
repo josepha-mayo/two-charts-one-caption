@@ -42,6 +42,22 @@ test('changed captions and categories require review, while unrelated data chang
   assert.throws(() => readPublishCheck({...check, claims: [{...check.claims[0], evidence: 'made-up quote'}]}), /exact excerpt/);
 });
 
+test('a legacy saved rank claim flags a changed rate when the ranking is unchanged', () => {
+  const rows = readChart('category,percent\nNorth,80\nCentral,64\nSouth,48');
+  const evidence = 'North had the highest rate, at 78%.';
+  const legacy = readPublishCheck({
+    version: 1,
+    labels: rows.map(row => row.label),
+    question: 'highest',
+    caption: evidence,
+    claims: [{type: 'highest', ids: [1], evidence}],
+  });
+  const result = runPublishCheck(rows, evidence, legacy);
+  assert.equal(result.status, 'conflict');
+  assert.equal(result.sourceAnswer, 'North');
+  assert.deepEqual(result.failedFacts, [evidence]);
+});
+
 test('CLI JSON reports a pass, a publish failure, and invalid inputs with distinct exit codes', () => {
   const path = fileURLToPath(new URL('../scripts/verify-caption.mjs', import.meta.url));
   const run = name => spawnSync(process.execPath, [

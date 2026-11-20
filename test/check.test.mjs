@@ -34,6 +34,33 @@ test('cloud candidates must satisfy the approved range, change the answer and st
   assert.deepEqual(result.alternateAnswer, [1]);
 });
 
+test('a ranked category’s quoted rate stays fixed in either kind of alternate', () => {
+  const rows = readChart('category,percent\nNorth,78\nCentral,64\nSouth,48');
+  const caption = 'North had the highest rate, at 78%.';
+  const question = {type: 'atLeast', cutoff: 75};
+  const claim = {type: 'highest', ids: [1], evidence: caption};
+  assert.deepEqual(localFacts(rows, caption), [{...claim, value: 78}]);
+  const reviewed = reviewCloudClaims(rows, caption, [claim]).claims;
+  const before = checkCaption(rows, question, reviewed, [[80, 76, 48]]);
+  assert.equal(before.status, 'ambiguous');
+  assert.equal(before.origin, 'browser');
+  assert.equal(before.alternate[0], 78);
+  assert.equal(checkCaption(rows, question, reviewed, [[78, 76, 48]]).origin, 'cloud');
+});
+
+test('custom exact values and a tied rate are parsed independently of the current chart', () => {
+  const rows = readChart('category,percent\nSt. Louis,45\nSouth,45\nCentral,60');
+  const caption = 'Central had a rate of 58%. St. Louis and South shared the lowest rate, at 44%.';
+  const claims = validateClaims(localFacts(rows, caption), caption, rows.length);
+  assert.deepEqual(claims, [
+    {type: 'value', id: 3, value: 58, evidence: 'Central had a rate of 58%.'},
+    {type: 'lowest', ids: [1, 2], value: 44, evidence: 'St. Louis and South shared the lowest rate, at 44%.'},
+  ]);
+  assert.equal(checkCaption(rows, 'lowest', claims).status, 'conflict');
+  const matching = rows.map((row, index) => ({...row, value: [44, 44, 58][index]}));
+  assert.equal(checkCaption(matching, 'lowest', claims).status, 'explicit');
+});
+
 test('a false claim is a contradiction even when the cloud can generate a candidate', () => {
   const falseCaption = 'Rates ranged from 55% to 71.5%.';
   const result = checkCaption(sample, 'lowest', localFacts(sample, falseCaption), [[55, 66, 71.5]]);

@@ -159,7 +159,8 @@ function describeClaim(claim) {
   if (claim.type === 'range') return `Range ${claim.min}%–${claim.max}%`;
   if (claim.type === 'value') return `${rows[claim.id - 1].label} is ${claim.value}%`;
   if (claim.type === 'atLeast') return `At or above ${claim.cutoff}%: ${answerText(rows, claim.ids)}`;
-  return `${claim.type === 'lowest' ? 'Lowest' : 'Highest'}: ${answerText(rows, claim.ids)}`;
+  const rate = claim.value === undefined ? '' : ` (${claim.value}%)`;
+  return `${claim.type === 'lowest' ? 'Lowest' : 'Highest'}: ${answerText(rows, claim.ids)}${rate}`;
 }
 
 function renderProof(claims, alternate) {
@@ -515,7 +516,9 @@ el('apply').addEventListener('click', () => {
   }
   caption.value = text;
   revision += 1;
-  const fact = typeof selected === 'string' ? {type: selected} : selected;
+  const fact = typeof selected === 'string'
+    ? {type: selected, value: rows[result.expected[0] - 1].value}
+    : selected;
   render([...reviewed, {...fact, ids: result.expected, evidence}]);
   if (pendingReaderTest) el('start-reader-test').focus();
   else {

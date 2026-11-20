@@ -2,6 +2,8 @@ const validPercent = value =>
   typeof value === 'number' && Number.isFinite(value) && value >= 0 && value <= 100 &&
   value === Number(value.toFixed(2));
 
+const listFormat = new Intl.ListFormat('en', {style: 'long', type: 'conjunction'});
+
 export function readChart(csv) {
   if (typeof csv !== 'string' || csv.length > 4000) throw Error('Use CSV under 4,000 characters.');
   const lines = csv.trim().split(/\r?\n/);
@@ -67,11 +69,14 @@ export function validateClaims(claims, caption, size) {
       return {type, id: claim.id, value: claim.value, evidence};
     }
     const isCutoff = type === 'atLeast' && validPercent(claim.cutoff);
-    if ((type === 'lowest' || type === 'highest' || isCutoff) && Array.isArray(claim.ids)) {
+    const isRank = (type === 'lowest' || type === 'highest') &&
+      (claim.value === undefined || validPercent(claim.value));
+    if ((isRank || isCutoff) && Array.isArray(claim.ids)) {
       const ids = [...new Set(claim.ids)].sort((a, b) => a - b);
       if ((ids.length || isCutoff) && ids.length === claim.ids.length &&
           ids.every(id => Number.isInteger(id) && id >= 1 && id <= size)) {
-        return isCutoff ? {type, cutoff: claim.cutoff, ids, evidence} : {type, ids, evidence};
+        if (isCutoff) return {type, cutoff: claim.cutoff, ids, evidence};
+        return claim.value === undefined ? {type, ids, evidence} : {type, ids, value: claim.value, evidence};
       }
     }
     throw Error('A fact falls outside the supported range, value, ranking, or cutoff checks.');
@@ -86,7 +91,8 @@ export function fitsClaim(values, claim) {
   if (claim.type === 'range') return Math.min(...values) === claim.min && Math.max(...values) === claim.max;
   if (claim.type === 'value') return values[claim.id - 1] === claim.value;
   const question = claim.type === 'atLeast' ? claim : claim.type;
-  return sameAnswer(answer(values, question), claim.ids);
+  return sameAnswer(answer(values, question), claim.ids) &&
+    (claim.value === undefined || values[claim.ids[0] - 1] === claim.value);
 }
 
 function alternatePermutation(actual, claims, expected, question) {
@@ -131,7 +137,9 @@ function intervalWitness(actual, claims, acceptGroups, changedIndex, changedBoun
   const maxBound = range ? points(range.max) : 10000;
   const bounds = actual.map(() => [minBound, maxBound]);
   for (const claim of claims) {
-    if (claim.type === 'value') bounds[claim.id - 1] = [points(claim.value), points(claim.value)];
+    if (claim.value === undefined) continue;
+    const pinned = points(claim.value);
+    for (const id of claim.type === 'value' ? [claim.id] : claim.ids) bounds[id - 1] = [pinned, pinned];
   }
   for (const claim of claims.filter(claim => claim.type === 'atLeast')) {
     const cutoff = points(claim.cutoff);
@@ -218,8 +226,7 @@ export function checkCaption(rows, question, claims, proposed = []) {
 
 export function answerText(rows, ids) {
   if (!ids.length) return 'None';
-  return new Intl.ListFormat('en', {style: 'long', type: 'conjunction'})
-    .format(ids.map(id => rows[id - 1].label));
+  return listFormat.format(ids.map(id => rows[id - 1].label));
 }
 
 export function supportedDetail(rows, question, ids) {

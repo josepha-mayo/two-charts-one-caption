@@ -1,5 +1,5 @@
 import {answerText, checkCaption, fitsClaim, questionText, readQuestion, validateClaims} from './check.mjs';
-import {checkText} from './draft.mjs';
+import {checkText, withQuotedRankValue} from './draft.mjs';
 
 function normalizeCaption(text) {
   if (typeof text !== 'string') throw Error('The check needs the reviewed caption text.');
@@ -21,9 +21,12 @@ export function readPublishCheck(check) {
   const caption = normalizeCaption(check.caption);
   const question = readQuestion(check.question);
   if (!Array.isArray(check.claims) || !check.claims.length) throw Error('A saved check needs at least one reviewed fact.');
+  const categories = labels.map(label => ({label}));
   const claims = validateClaims(check.claims.map(claim => ({
     ...claim, evidence: typeof claim?.evidence === 'string' ? claim.evidence.replace(/\r\n/g, '\n') : claim?.evidence,
-  })), caption, labels.length).sort((a, b) => caption.indexOf(a.evidence) - caption.indexOf(b.evidence));
+  })), caption, labels.length)
+    .map(claim => withQuotedRankValue(categories, claim))
+    .sort((a, b) => caption.indexOf(a.evidence) - caption.indexOf(b.evidence));
   return {version: 1, labels, question, caption, claims};
 }
 

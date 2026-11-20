@@ -14,7 +14,7 @@ npm test
 npm run dev
 ```
 
-The built-in example uses the median on-time rates in [Table 3 of the NYC Comptroller’s bus report](https://comptroller.nyc.gov/reports/life-in-the-slow-lane/). Try answering from the description alone, then inspect both charts and the exact facts they satisfy. The local text parser supports a sentence of the form “Rates ranged from 10% to 40%.” and the ranking sentence suggested by the app. The solver checks whether different minima or maxima, including ties, are feasible under those facts and the app’s two-decimal percentage domain. The alternate chart is hypothetical.
+The built-in example uses the median on-time rates in [Table 3 of the NYC Comptroller’s bus report](https://comptroller.nyc.gov/reports/life-in-the-slow-lane/). Try answering from the description alone, then inspect both charts and the exact facts they satisfy. The local text parser can check wording such as “Rates ranged from 10% to 40%.”, exact values such as “North had a rate of 40%.”, and the ranking and cutoff sentences suggested by the app. A ranking sentence with an exact rate checks both parts. The alternate chart is hypothetical.
 
 Open `/?example=cutoff` to ask which bus services reach a hypothetical 70% editorial cutoff. The caption gives the range and names the best and worst performers. Select Bus Service can still move below 70% while all three statements remain true. The cutoff is inclusive and can be changed. Reader links keep the same cutoff and offer separate responses for “none” and “the caption doesn’t say.”
 
