@@ -52,7 +52,8 @@ export async function generateOnDevice(prompt, responseConstraint) {
   return generate(model, prompt, InferenceSource.ON_DEVICE);
 }
 
-export async function generateInCloud(prompt) {
+export async function generateInCloud(prompt, {signal, onSend} = {}) {
+  signal?.throwIfAborted();
   if (!cloudModel) {
     const app = initializeApp(config.firebase, 'two-charts-cloud');
     try {
@@ -82,16 +83,18 @@ export async function generateInCloud(prompt) {
   } finally {
     clearTimeout(deadline);
   }
-  return generate(cloudModel, prompt, InferenceSource.IN_CLOUD);
+  signal?.throwIfAborted();
+  onSend?.();
+  return generate(cloudModel, prompt, InferenceSource.IN_CLOUD, signal);
 }
 
-async function generate(model, prompt, source) {
+async function generate(model, prompt, source, signal) {
   let response;
   try {
-    ({response} = await model.generateContent(prompt));
+    ({response} = await model.generateContent(prompt, signal ? {signal} : undefined));
   } catch (error) {
     if (source === InferenceSource.ON_DEVICE) throw Error('On-device inference is unavailable in this Chrome session.');
-    if (error?.status === 429 || error?.customData?.status === 429) {
+    if (error?.customErrorData?.status === 429) {
       throw Error('Cloud Gemini has reached its request limit. Try again later or use the browser check.');
     }
     throw Error('Cloud Gemini couldn’t complete the request. Retry or use the browser check.');

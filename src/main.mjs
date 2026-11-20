@@ -23,6 +23,7 @@ const status = el('status');
 const cutoffExample = new URLSearchParams(location.search).get('example') === 'cutoff';
 let rows, result, reviewed, candidate, snapshot;
 let firebaseConnection;
+let cloudOperation;
 let revision = 0;
 let busy = false;
 let readerAnswer;
@@ -114,6 +115,7 @@ function updateExampleRefresh() {
 }
 
 function invalidate() {
+  cancelCloudReview();
   revision += 1;
   candidate = null;
   reviewed = null;
@@ -164,6 +166,22 @@ function syncActions() {
     'brief-example', 'brief-submit', 'brief-apply', 'recheck-file', 'save-recheck', 'run-recheck',
     'review-saved-caption', 'apply-stale-repair', 'example-refresh']) el(id).disabled = busy;
   for (const control of el('reader-choices').querySelectorAll('button, input')) control.disabled = busy;
+  el('cloud-cancel').hidden = !cloudOperation;
+}
+
+function finishCloudReview(operation) {
+  if (cloudOperation !== operation) return false;
+  cloudOperation = null;
+  busy = false;
+  syncActions();
+  return true;
+}
+
+function cancelCloudReview() {
+  const operation = cloudOperation;
+  if (!operation) return;
+  operation.abort();
+  finishCloudReview(operation);
 }
 
 function loadSample() {
@@ -487,18 +505,26 @@ el('cloud-preview').addEventListener('click', () => {
 dialog.addEventListener('close', async () => {
   const request = snapshot;
   snapshot = null;
-  if (dialog.returnValue !== 'send' || request?.revision !== revision) return;
+  if (busy || dialog.returnValue !== 'send' || request?.revision !== revision) return;
   candidate = null;
   el('claim-review').hidden = true;
-  const current = revision;
+  const operation = new AbortController();
+  cloudOperation = operation;
+  const ownsReview = () => cloudOperation === operation && request.revision === revision;
   busy = true;
   syncActions();
   status.textContent = 'Verifying this browser for cloud review…';
+  el('cloud-cancel').focus();
   try {
     const firebase = await connectFirebase();
-    if (current !== revision) return;
-    const draft = await firebase.generateInCloud(request.prompt);
-    if (current !== revision) return;
+    if (!ownsReview()) return;
+    const draft = await firebase.generateInCloud(request.prompt, {
+      signal: operation.signal,
+      onSend: () => {
+        if (ownsReview()) status.textContent = 'Waiting for Gemini’s draft…';
+      },
+    });
+    if (!ownsReview()) return;
     if (draft?.supported !== true || !Array.isArray(draft.alternatives)) throw Error('Gemini could not interpret the caption using the supported checks.');
     const {claims, excluded, narrowed, restored} = reviewCloudClaims(rows, caption.value, draft.claims);
     candidate = {claims, alternatives: draft.alternatives};
@@ -512,14 +538,21 @@ dialog.addEventListener('close', async () => {
     if (restored) notes.push(`Recovered ${restored} ${restored === 1 ? 'fact' : 'facts'} directly from the caption.`);
     el('claim-rejections').textContent = notes.join(' ');
     el('claim-review').hidden = false;
-    el('confirm-facts').focus();
     status.textContent = 'Firebase reported in-cloud inference. Check the extracted facts.';
   } catch (error) {
-    if (current === revision) status.textContent = error.message;
+    if (ownsReview()) status.textContent = error.message;
   } finally {
-    busy = false;
-    syncActions();
+    if (finishCloudReview(operation)) {
+      el(candidate ? 'confirm-facts' : 'cloud-preview').focus();
+    }
   }
+});
+
+el('cloud-cancel').addEventListener('click', () => {
+  if (!cloudOperation) return;
+  cancelCloudReview();
+  status.textContent = 'Cloud review canceled. A request already sent may still finish at Google.';
+  el('check').focus();
 });
 
 el('confirm-facts').addEventListener('click', () => {
