@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {readChart, checkCaption, validateClaims, answer, answerText, supportedDetail, fits} from '../src/check.mjs';
 import {localFacts, cloudPrompt, localPrompt, reviewCloudClaims} from '../src/draft.mjs';
 import {questionPrompt, readQuestionDraft} from '../src/brief.mjs';
-import {sampleCsv, sampleCaption, cutoffCaption} from '../src/sample.mjs';
+import {sampleCsv, sampleCaption, cutoffCaption, foodExample} from '../src/sample.mjs';
 import {
   addReaderResponse, createReaderLink, createReaderTest, encodeResponse, readReaderLink,
   readerCounts, readerResponseId, restoreReaderTest, saveReaderTest,
@@ -11,6 +11,26 @@ import {
 
 const sample = readChart(sampleCsv);
 const sampleFacts = validateClaims(localFacts(sample, sampleCaption), sampleCaption, sample.length);
+
+test('the USDA example preserves both caption facts while changing the highest-rate answer', () => {
+  const {csv, caption, question} = foodExample;
+  const rows = readChart(csv);
+  const claims = validateClaims(localFacts(rows, caption), caption, rows.length);
+  assert.deepEqual(claims.map(claim => claim.type), ['range', 'lowest']);
+
+  const before = checkCaption(rows, question, claims);
+  assert.equal(before.status, 'ambiguous');
+  assert.equal(answerText(rows, before.expected), 'South');
+  assert.equal(answerText(rows, before.alternateAnswer), 'Midwest and South');
+  assert.equal(before.changedCategories, 1);
+  assert.deepEqual(before.alternate, [12.2, 15, 15, 12.9]);
+  assert.ok(fits(before.alternate, claims));
+
+  const revised = `${caption} ${supportedDetail(rows, question, before.expected)}`;
+  const after = checkCaption(rows, question, validateClaims(localFacts(rows, revised), revised, rows.length));
+  assert.equal(after.status, 'explicit');
+  assert.deepEqual(after.expected, before.expected);
+});
 
 test('caption repairs keep colliding category names distinct and round-trip all selections', () => {
   const labels = ['North', 'South', 'North and South', '"North"', 'None', 'All categories', 'Had a rate, at 5%. A'];

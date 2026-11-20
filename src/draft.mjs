@@ -2,7 +2,7 @@ import {isCutoffClaim, readCategoryList, readQuestion, sameAnswer, validateClaim
 
 const MAX_CAPTION = 1800;
 const percent = String.raw`\d{1,3}(?:\.\d{1,2})?`;
-const rangePattern = new RegExp(`^(?:Median on-time rates|Rates) ranged from (${percent})% to (${percent})%(?: across three bus service types)?\\.(?=\\s|$)`);
+const rangePattern = new RegExp(`^(?:Median on-time rates|In \\d{4}, household food insecurity rates|Rates) ranged from (${percent})% to (${percent})%(?: across three bus service types)?\\.(?=\\s|$)`);
 // A quoted category is a single token, including any sentence punctuation in its name.
 const subjects = String.raw`((?:"(?:[^"\\]|\\.)*"|[^"])+?)`;
 function subjectMatcher(prefix, suffix) {

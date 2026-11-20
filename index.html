@@ -20,7 +20,14 @@
     <section aria-labelledby="caption-title" class="caption-panel">
       <div class="caption-head">
         <h2 id="caption-title"><label for="caption">What the reader gets</label></h2>
-        <button type="button" class="small" id="example">Load bus report example</button>
+        <div class="example-picker">
+          <select id="example-select" aria-label="Chart example">
+            <option value="bus">Bus service ranking</option>
+            <option value="cutoff">Bus service cutoff</option>
+            <option value="food">Food insecurity by region</option>
+          </select>
+          <button type="button" id="example">Load example</button>
+        </div>
       </div>
       <textarea id="caption" maxlength="1800" rows="2"></textarea>
       <div class="controls question-controls">
@@ -165,7 +172,7 @@
       </div>
       <p id="recheck-status" role="status"></p>
     </details>
-    <footer><a id="source">Example data from the NYC Comptroller’s bus report, Table 3</a><p>Compare one question at a time. Suggested charts are hypothetical. Your CSV stays in this tab.</p></footer>
+    <footer><a id="source" hidden></a><p>Compare one question at a time. Suggested charts are hypothetical. Your CSV stays in this tab.</p></footer>
   </main>
   <main class="shell reader" id="reader" hidden>
     <header class="header"><a href="./">Two Charts, One Caption</a></header>

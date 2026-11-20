@@ -6,7 +6,7 @@ import {localFacts, cloudPrompt, localPrompt, checkText, answerConstraint, revie
 import {checkBrief, questionPrompt, questionConstraint, readQuestionDraft} from './brief.mjs';
 import {createPublishCheck, readPublishCheck, reviewPublishInputs, suggestPublishRepair} from './publish-check.mjs';
 import {deviceAvailability} from './device.mjs';
-import {sampleCsv, sampleCaption, cutoffCaption, sampleSource} from './sample.mjs';
+import {sampleCsv, sampleCaption, cutoffCaption, sampleSource, foodExample} from './sample.mjs';
 import {comparisonReport, reviewedDescription} from './report.mjs';
 import refreshedSampleCsv from '../examples/bus-cutoff/refreshed.csv?raw';
 import {
@@ -21,7 +21,8 @@ const cutoff = el('cutoff');
 const csv = el('csv');
 const dialog = el('dialog');
 const status = el('status');
-const cutoffExample = new URLSearchParams(location.search).get('example') === 'cutoff';
+const requestedExample = new URLSearchParams(location.search).get('example');
+const startingExample = ['cutoff', 'food'].includes(requestedExample) ? requestedExample : 'bus';
 let rows, result, reviewed, candidate, snapshot;
 let firebaseConnection;
 let cloudOperation;
@@ -30,8 +31,19 @@ let busy = false;
 let readerAnswer;
 let pendingReaderTest, readerTest, tabStorage;
 let savedCheck, staleRepair;
-const originalExample = {label: 'Bus report example'};
-const refreshedExample = {label: 'Simulated bus report refresh'};
+const originalExample = {
+  label: 'Bus report example',
+  csv: sampleCsv,
+  caption: sampleCaption,
+  question: 'lowest',
+  sourceUrl: sampleSource,
+  sourceCitation: 'Example data from the NYC Comptroller’s bus report, Table 3',
+};
+const refreshedExample = {
+  label: 'Simulated bus report refresh',
+  sourceUrl: sampleSource,
+  sourceCitation: 'Simulated data refresh based on the NYC Comptroller’s bus report, Table 3.',
+};
 const pastedCsv = {label: 'Pasted CSV'};
 let chartSource = originalExample;
 let exampleReview;
@@ -184,7 +196,7 @@ function invalidate() {
 }
 
 function syncActions() {
-  for (const id of ['check', 'cloud-preview', 'load', 'csv-file', 'example', 'nano', 'apply', 'confirm-facts',
+  for (const id of ['check', 'cloud-preview', 'load', 'csv-file', 'example', 'example-select', 'nano', 'apply', 'confirm-facts',
     'brief-example', 'brief-submit', 'brief-apply', 'recheck-file', 'save-recheck', 'run-recheck',
     'review-saved-caption', 'apply-stale-repair', 'example-refresh']) el(id).disabled = busy;
   for (const control of el('reader-choices').querySelectorAll('button, input')) control.disabled = busy;
@@ -206,17 +218,25 @@ function cancelCloudReview() {
   finishCloudReview(operation);
 }
 
-function loadSample() {
-  chartSource = originalExample;
+function renderSource() {
+  const link = el('source');
+  link.hidden = !chartSource.sourceUrl;
+  if (link.hidden) return;
+  link.href = chartSource.sourceUrl;
+  link.textContent = chartSource.sourceCitation;
+}
+
+function loadSample(key) {
+  chartSource = key === 'food' ? foodExample : originalExample;
   exampleReview = null;
-  csv.value = sampleCsv;
-  caption.value = cutoffExample ? cutoffCaption : sampleCaption;
-  question.value = cutoffExample ? 'atLeast' : 'lowest';
+  el('example-select').value = key;
+  csv.value = chartSource.csv;
+  caption.value = key === 'cutoff' ? cutoffCaption : chartSource.caption;
+  question.value = key === 'cutoff' ? 'atLeast' : chartSource.question;
   cutoff.value = '70';
-  rows = readChart(sampleCsv);
+  rows = readChart(chartSource.csv);
   el('csv-status').textContent = '';
-  el('source').href = sampleSource;
-  el('source').hidden = false;
+  renderSource();
   invalidate();
 }
 
@@ -343,7 +363,7 @@ function browserCheck(guess) {
   focusCheckResult();
 }
 
-el('example').addEventListener('click', () => loadSample());
+el('example').addEventListener('click', () => loadSample(el('example-select').value));
 el('check').addEventListener('click', () => browserCheck());
 el('show-fix').addEventListener('click', () => {
   const heading = el('revision-title');
@@ -357,11 +377,10 @@ function loadChart(input, source = pastedCsv) {
     chartSource = source;
     csv.value = input;
     invalidate();
-    const isExample = source === originalExample || source === refreshedExample;
-    el('source').hidden = !isExample;
-    if (!isExample) {
+    renderSource();
+    if (!source.sourceUrl) {
       exampleReview = null;
-      if ([sampleCaption, cutoffCaption].includes(caption.value)) caption.value = '';
+      if ([sampleCaption, cutoffCaption, foodExample.caption].includes(caption.value)) caption.value = '';
     }
     csvStatus.textContent = `Loaded ${rows.length} categories${source === pastedCsv ? '' : ` from ${source.label}`}.`;
     caption.focus();
@@ -819,11 +838,9 @@ savedCaptionDialog.addEventListener('close', () => {
 
 el('download-comparison').addEventListener('click', () => {
   if (result?.status !== 'ambiguous') return;
-  const sourceNote = chartSource === originalExample ? el('source').textContent
-    : chartSource === refreshedExample ? 'Simulated data refresh based on the NYC Comptroller’s bus report, Table 3.' : '';
   const report = comparisonReport(document, {
     caption: checkText(caption.value), question: selectedQuestion(), rows, result,
-    claims: reviewed, describeClaim, sourceNote,
+    claims: reviewed, describeClaim, sourceNote: chartSource.sourceCitation,
   });
   downloadFile(report, 'text/html;charset=utf-8', 'caption-comparison.html');
 });
@@ -1031,10 +1048,10 @@ try {
   if (packet) mountReader(packet);
   else {
     readerTest = restoreReaderTest(tabStorage);
-    loadSample();
+    loadSample(startingExample);
     renderReaderTest();
   }
 } catch {
-  loadSample();
+  loadSample(startingExample);
   status.textContent = 'That reader link could not be opened. The example is ready to try.';
 }

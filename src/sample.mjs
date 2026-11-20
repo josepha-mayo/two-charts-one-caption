@@ -2,3 +2,12 @@ export const sampleCsv = 'service,percent\nLocal,71.5\nSelect Bus Service,70.5\n
 export const sampleCaption = 'Median on-time rates ranged from 65.1% to 71.5% across three bus service types.';
 export const cutoffCaption = sampleCaption + ' Local had the highest rate, at 71.5%. Express had the lowest rate, at 65.1%.';
 export const sampleSource = 'https://comptroller.nyc.gov/reports/life-in-the-slow-lane/';
+
+export const foodExample = {
+  label: 'Food insecurity by region',
+  csv: 'category,percent\nNortheast,12.2\nMidwest,13.3\nSouth,15.0\nWest,12.9',
+  caption: 'In 2024, household food insecurity rates ranged from 12.2% to 15.0%. Northeast had the lowest rate, at 12.2%.',
+  question: 'highest',
+  sourceUrl: 'https://ers.usda.gov/sites/default/files/_laserfiche/publications/113623/ERR-358.pdf?v=71497',
+  sourceCitation: 'USDA Economic Research Service · Household Food Security in the United States in 2024, Table 2',
+};
