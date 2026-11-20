@@ -18,6 +18,10 @@ The built-in example uses the median on-time rates in [Table 3 of the NYC Comptr
 
 Open `/?example=cutoff` to ask which bus services reach a hypothetical 70% editorial cutoff. The caption gives the range and names the best and worst performers. Select Bus Service can still move below 70% while all three statements remain true. A sentence such as “Local reached at least 70%.” establishes a lower bound for Local. Adding “Only” makes the list complete and constrains every other category. Reader links keep the same cutoff and offer separate responses for “none” and “the caption doesn’t say.”
 
+## Share the comparison
+
+After revealing a gap, choose **Download proof with chart data**. The HTML file opens offline with both answers, the exact percentages, the checked caption facts, and a suggested sentence. Share it with an editor who can see the source data, or use a reader link for a caption-only test.
+
 ## Try a reader test
 
 1. Reveal an ambiguous caption, add the verified detail, and create before and after links.

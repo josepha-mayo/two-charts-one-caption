@@ -7,6 +7,7 @@ import {checkBrief, questionPrompt, questionConstraint, readQuestionDraft} from 
 import {createPublishCheck, readPublishCheck, reviewPublishInputs, suggestPublishRepair} from './publish-check.mjs';
 import {deviceAvailability} from './device.mjs';
 import {sampleCsv, sampleCaption, cutoffCaption, sampleSource} from './sample.mjs';
+import {comparisonReport, reviewedDescription} from './report.mjs';
 import refreshedSampleCsv from '../examples/bus-cutoff/refreshed.csv?raw';
 import {
   addReaderResponse, createReaderLink, createReaderTest, encodeResponse, readReaderLink,
@@ -816,43 +817,20 @@ savedCaptionDialog.addEventListener('close', () => {
   runSavedCheck();
 });
 
+el('download-comparison').addEventListener('click', () => {
+  if (result?.status !== 'ambiguous') return;
+  const sourceNote = chartSource === originalExample ? el('source').textContent
+    : chartSource === refreshedExample ? 'Simulated data refresh based on the NYC Comptroller’s bus report, Table 3.' : '';
+  const report = comparisonReport(document, {
+    caption: checkText(caption.value), question: selectedQuestion(), rows, result,
+    claims: reviewed, describeClaim, sourceNote,
+  });
+  downloadFile(report, 'text/html;charset=utf-8', 'caption-comparison.html');
+});
+
 el('export').addEventListener('click', () => {
   if (result?.status !== 'explicit' && result?.status !== 'implied') return;
-  const doc = document.implementation.createHTMLDocument('Reviewed chart description');
-  const encoding = doc.createElement('meta');
-  encoding.setAttribute('charset', 'utf-8');
-  const viewport = doc.createElement('meta');
-  viewport.name = 'viewport';
-  viewport.content = 'width=device-width, initial-scale=1';
-  doc.head.prepend(encoding, viewport);
-  const heading = doc.createElement('h1');
-  heading.textContent = 'Chart description';
-  const text = doc.createElement('p');
-  text.textContent = caption.value;
-  const table = doc.createElement('table');
-  const title = table.createCaption();
-  title.textContent = 'Chart data';
-  const header = table.createTHead().insertRow();
-  for (const name of ['Category', 'Rate']) {
-    const th = doc.createElement('th');
-    th.scope = 'col';
-    th.textContent = name;
-    header.append(th);
-  }
-  const body = table.createTBody();
-  for (const {label, value} of rows) {
-    const row = body.insertRow();
-    const category = doc.createElement('th');
-    category.scope = 'row';
-    category.textContent = label;
-    row.append(category);
-    row.insertCell().textContent = `${value}%`;
-  }
-  doc.documentElement.lang = 'en';
-  const main = doc.createElement('main');
-  main.append(heading, text, table);
-  doc.body.append(main);
-  downloadFile('<!doctype html>' + doc.documentElement.outerHTML, 'text/html;charset=utf-8', 'chart-description.html');
+  downloadFile(reviewedDescription(document, caption.value, rows), 'text/html;charset=utf-8', 'chart-description.html');
 });
 
 el('reader-preview').addEventListener('click', () => {
