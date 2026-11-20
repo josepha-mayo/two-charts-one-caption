@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {readChart, checkCaption, validateClaims, answer, supportedDetail, fits} from '../src/check.mjs';
+import {readChart, checkCaption, validateClaims, answer, answerText, supportedDetail, fits} from '../src/check.mjs';
 import {localFacts, cloudPrompt, localPrompt, reviewCloudClaims} from '../src/draft.mjs';
 import {questionPrompt, readQuestionDraft} from '../src/brief.mjs';
 import {sampleCsv, sampleCaption, cutoffCaption} from '../src/sample.mjs';
@@ -11,6 +11,50 @@ import {
 
 const sample = readChart(sampleCsv);
 const sampleFacts = validateClaims(localFacts(sample, sampleCaption), sampleCaption, sample.length);
+
+test('caption repairs keep colliding category names distinct and round-trip all selections', () => {
+  const labels = ['North', 'South', 'North and South', '"North"', 'None', 'All categories', 'Had a rate, at 5%. A'];
+  const question = {type: 'atLeast', cutoff: 70};
+  const rows = labels.map(label => ({label, value: 10}));
+  assert.equal(answerText(rows, [1, 2]), 'the 2 categories "North" and "South"');
+  assert.equal(answerText(rows, [3]), 'the category "North and South"');
+  assert.equal(answerText(rows, [5]), 'the category "None"');
+  assert.throws(() => localFacts(rows, 'Only North and South reached at least 70%.'), /Put each name in double quotes/);
+  assert.deepEqual(localFacts(rows, 'Only "North" and "South" reached at least 70%.')[0].ids, [1, 2]);
+  const legacy = [{label: 'North "Campus', value: 80}, {label: 'South', value: 10}];
+  assert.deepEqual(localFacts(legacy, 'North "Campus had the highest rate, at 80%.')[0].ids, [1]);
+
+  const answers = new Set();
+  for (let mask = 0; mask < (1 << labels.length); mask++) {
+    const chart = rows.map((row, i) => ({...row, value: mask & (1 << i) ? 80 : 10}));
+    const ids = answer(chart.map(row => row.value), question);
+    const text = answerText(chart, ids);
+    assert.equal(answers.has(text), false, text);
+    answers.add(text);
+    const cutoff = supportedDetail(chart, question, ids);
+    assert.deepEqual(localFacts(chart, cutoff), [{...question, ids, evidence: cutoff}]);
+
+    const ranked = answer(chart.map(row => row.value), 'highest');
+    const rank = supportedDetail(chart, 'highest', ranked);
+    assert.deepEqual(localFacts(chart, rank), [{
+      type: 'highest', ids: ranked, value: chart[ranked[0] - 1].value, evidence: rank,
+    }]);
+  }
+});
+
+test('three tied rates must move together when the remaining categories are pinned below a cutoff', () => {
+  const rows = [70.01, 70.01, 70.01, 69.99, 69.99, 69.99, 69.99]
+    .map((value, index) => ({label: `Region ${index + 1}`, value}));
+  const claims = [
+    {type: 'highest', ids: [1, 2, 3]},
+    {type: 'lowest', ids: [4, 5, 6, 7], value: 69.99},
+  ];
+  const result = checkCaption(rows, {type: 'atLeast', cutoff: 70.01}, claims);
+  assert.equal(result.status, 'ambiguous');
+  assert.equal(result.changedCategories, 3);
+  assert.deepEqual(result.alternate, [70, 70, 70, 69.99, 69.99, 69.99, 69.99]);
+  assert.deepEqual(result.alternateAnswer, []);
+});
 
 test('the public example has a real alternate, and the added fact resolves that question', () => {
   const before = checkCaption(sample, 'lowest', sampleFacts);

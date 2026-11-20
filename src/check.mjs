@@ -263,9 +263,45 @@ export function checkCaption(rows, question, claims, proposed = []) {
   return {status: 'ambiguous', expected, alternate, alternateAnswer: answerValues(alternate, selected), origin, changedCategories};
 }
 
+function formatLabels(rows, ids, quoted = false) {
+  return listFormat.format(ids.map(id => {
+    const label = rows[id - 1].label;
+    return quoted ? JSON.stringify(label) : label;
+  }));
+}
+
+function matchingLists(rows, subjects, single, quoted) {
+  const matches = [];
+  for (let mask = 1; mask < (1 << rows.length); mask++) {
+    const ids = rows.flatMap((_, index) => mask & (1 << index) ? [index + 1] : []);
+    if ((single === undefined || (ids.length === 1) === single) &&
+        formatLabels(rows, ids, quoted) === subjects) matches.push(ids);
+  }
+  return matches;
+}
+
+export function readCategoryList(rows, subjects, single) {
+  const named = /^(?:[Tt]he category |[Tt]he ([2-7]) categories )(?=")/.exec(subjects);
+  const names = named ? subjects.slice(named[0].length) : subjects;
+  if (names.startsWith('"')) {
+    const [quoted] = matchingLists(rows, names, single, true);
+    if (quoted && (!named || quoted.length === Number(named[1] ?? 1))) return quoted;
+  }
+  const matches = matchingLists(rows, subjects, single, false);
+  if (matches.length > 1) throw Error('The caption’s names could refer to different category lists. Put each name in double quotes.');
+  return matches[0];
+}
+
 export function answerText(rows, ids) {
   if (!ids.length) return 'None';
-  return listFormat.format(ids.map(id => rows[id - 1].label));
+  const text = formatLabels(rows, ids);
+  const needsQuotes = ids.some(id => {
+    const {label} = rows[id - 1];
+    return /["%\u0000-\u001f]/.test(label) || /^(?:Only |All categories$|No categories$|None$)/.test(label);
+  }) || matchingLists(rows, text, undefined, false).length > 1;
+  if (!needsQuotes) return text;
+  const noun = ids.length === 1 ? 'the category' : `the ${ids.length} categories`;
+  return `${noun} ${formatLabels(rows, ids, true)}`;
 }
 
 export function supportedDetail(rows, question, ids) {
@@ -278,7 +314,8 @@ export function supportedDetail(rows, question, ids) {
     return ids.length ? `Only ${subjects} reached at least ${cutoff}.` : `No categories reached ${cutoff}.`;
   }
   const value = rows[ids[0] - 1].value;
+  const subject = subjects === formatLabels(rows, ids) ? subjects : subjects[0].toUpperCase() + subjects.slice(1);
   return ids.length === 1
-    ? `${subjects} had the ${question} rate, at ${value}%.`
-    : `${subjects} shared the ${question} rate, at ${value}%.`;
+    ? `${subject} had the ${question} rate, at ${value}%.`
+    : `${subject} shared the ${question} rate, at ${value}%.`;
 }

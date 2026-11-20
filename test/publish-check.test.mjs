@@ -3,13 +3,28 @@ import {spawnSync} from 'node:child_process';
 import {readFileSync} from 'node:fs';
 import {fileURLToPath} from 'node:url';
 import test from 'node:test';
-import {readChart} from '../src/check.mjs';
+import {readChart, supportedDetail} from '../src/check.mjs';
+import {localFacts} from '../src/draft.mjs';
 import {createPublishCheck, readPublishCheck, runPublishCheck, suggestPublishRepair} from '../src/publish-check.mjs';
 
 const example = name => new URL(`../examples/bus-cutoff/${name}`, import.meta.url);
 const readExample = name => readFileSync(example(name), 'utf8');
 const caption = readExample('caption.txt').trim();
 const check = readPublishCheck(JSON.parse(readExample('caption-recheck.json')));
+
+test('a saved cutoff caption keeps a combined category distinct from its separate parts', () => {
+  const source = readChart('category,percent\nNorth,80\nSouth,80\nNorth and South,40');
+  const changed = readChart('category,percent\nNorth and South,80\nSouth,40\nNorth,40');
+  const question = {type: 'atLeast', cutoff: 70};
+  const caption = supportedDetail(source, question, [1, 2]);
+  assert.equal(caption, 'Only the 2 categories "North" and "South" reached at least 70%.');
+  const saved = createPublishCheck(source, question, caption, localFacts(source, caption));
+  assert.equal(runPublishCheck(source, caption, saved).status, 'explicit');
+  assert.equal(runPublishCheck(changed, caption, saved).status, 'conflict');
+  const replacement = suggestPublishRepair(changed, caption, saved);
+  assert.equal(replacement.after, 'Only the category "North and South" reached at least 70%.');
+  assert.equal(runPublishCheck(changed, replacement.caption, replacement.check).status, 'explicit');
+});
 
 test('publication check survives reordered rows and flags exactly the stale cutoff claim', () => {
   const csv = readExample('current.csv');

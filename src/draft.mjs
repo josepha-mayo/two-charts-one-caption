@@ -1,15 +1,22 @@
-import {answerText, isCutoffClaim, readQuestion, sameAnswer, validateClaims} from './check.mjs';
+import {isCutoffClaim, readCategoryList, readQuestion, sameAnswer, validateClaims} from './check.mjs';
 
 const MAX_CAPTION = 1800;
 const percent = String.raw`\d{1,3}(?:\.\d{1,2})?`;
 const rangePattern = new RegExp(`^(?:Median on-time rates|Rates) ranged from (${percent})% to (${percent})%(?: across three bus service types)?\\.(?=\\s|$)`);
-const rankPattern = new RegExp(`^(.+?) (had|shared) the (lowest|highest) rate, at (${percent})%\\.(?=\\s|$)`);
+// A quoted category is a single token, including any sentence punctuation in its name.
+const subjects = String.raw`((?:"(?:[^"\\]|\\.)*"|[^"])+?)`;
+function subjectMatcher(prefix, suffix) {
+  const quoted = new RegExp(`^${prefix}${subjects}${suffix}`);
+  const legacy = new RegExp(`^${prefix}(.+?)${suffix}`);
+  return text => quoted.exec(text) ?? legacy.exec(text);
+}
+const matchRank = subjectMatcher('', ` (had|shared) the (lowest|highest) rate, at (${percent})%\\.(?=\\s|$)`);
 const cutoffVerb = '(?:reached at least|were at or above|met or exceeded)';
 const cutoffEnding = `(${percent})(?:%| percent)(?:\\.(?=\\s|$)|$)`;
-const cutoffPattern = new RegExp(`^(Only )?(.+?) ${cutoffVerb} ${cutoffEnding}`);
+const matchCutoff = subjectMatcher('(Only )?', ` ${cutoffVerb} ${cutoffEnding}`);
 const allCutoffPattern = new RegExp(`^All categories ${cutoffVerb} ${cutoffEnding}`);
 const emptyCutoffPattern = new RegExp(`^No categories reached (?:at least )?${cutoffEnding}`);
-const valuePattern = new RegExp(`^(.+?) had a rate of (${percent})%\\.(?=\\s|$)`);
+const matchValue = subjectMatcher('', ` had a rate of (${percent})%\\.(?=\\s|$)`);
 
 export const answerConstraint = {
   type: 'object',
@@ -85,11 +92,15 @@ function matchesFact(claim, fact) {
 
 export function withQuotedRankValue(rows, claim) {
   if (claim.type !== 'lowest' && claim.type !== 'highest') return claim;
-  const quote = rankPattern.exec(claim.evidence);
+  const quote = matchRank(claim.evidence);
   if (quote?.[0] !== claim.evidence) return claim;
-  const [, subjects, verb, type, amount] = quote;
-  if (type !== claim.type || (verb === 'had') !== (claim.ids.length === 1) ||
-      answerText(rows, claim.ids) !== subjects || Number(amount) > 100) return claim;
+  const [, subject, verb, type, amount] = quote;
+  if (type !== claim.type || Number(amount) > 100) return claim;
+  try {
+    if (!sameAnswer(readCategoryList(rows, subject, verb === 'had') ?? [], claim.ids)) return claim;
+  } catch {
+    return claim;
+  }
   return {...claim, value: Number(amount)};
 }
 
@@ -106,26 +117,15 @@ export function localPrompt(rows, question) {
   ].join('\n');
 }
 
-function findIds(rows, subjects, single) {
-  let result;
-  for (let mask = 1; mask < (1 << rows.length); mask++) {
-    const ids = rows.flatMap((_, index) => mask & (1 << index) ? [index + 1] : []);
-    if ((single !== undefined && (ids.length === 1) !== single) || answerText(rows, ids) !== subjects) continue;
-    if (result) throw Error('The caption’s names could refer to different category lists. Clarify which categories you mean.');
-    result = ids;
-  }
-  return result;
-}
-
 function readCutoffFact(rows, text) {
   const none = emptyCutoffPattern.exec(text);
   if (none) return {type: 'atLeast', cutoff: Number(none[1]), ids: [], evidence: none[0]};
   const all = allCutoffPattern.exec(text);
   if (all) return {type: 'atLeast', cutoff: Number(all[1]), ids: rows.map((_, index) => index + 1), evidence: all[0]};
-  const cutoff = cutoffPattern.exec(text);
+  const cutoff = matchCutoff(text);
   if (!cutoff) return;
   const [, only, subjects, figure] = cutoff;
-  const ids = findIds(rows, subjects);
+  const ids = readCategoryList(rows, subjects);
   if (ids) return {type: only ? 'atLeast' : 'atLeastSome', cutoff: Number(figure), ids, evidence: cutoff[0]};
 }
 
@@ -150,17 +150,17 @@ export function readQuotedCutoff(rows, caption, claim) {
 function readLocalFact(rows, text) {
   const range = rangePattern.exec(text);
   if (range) return {type: 'range', min: Number(range[1]), max: Number(range[2]), evidence: range[0]};
-  const rank = rankPattern.exec(text);
+  const rank = matchRank(text);
   if (rank) {
     const [, subjects, verb, type, amount] = rank;
-    const ids = findIds(rows, subjects, verb === 'had');
+    const ids = readCategoryList(rows, subjects, verb === 'had');
     if (ids) return {type, ids, value: Number(amount), evidence: rank[0]};
   }
   const cutoff = readCutoffFact(rows, text);
   if (cutoff) return cutoff;
-  const value = valuePattern.exec(text);
+  const value = matchValue(text);
   if (value) {
-    const id = rows.findIndex(row => row.label === value[1]) + 1;
+    const [id] = readCategoryList(rows, value[1], true) ?? [];
     if (id) return {type: 'value', id, value: Number(value[2]), evidence: value[0]};
   }
 }
