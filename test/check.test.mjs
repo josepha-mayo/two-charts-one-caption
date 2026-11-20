@@ -27,11 +27,30 @@ test('the public example has a real alternate, and the added fact resolves that 
 });
 
 test('cloud candidates must satisfy the approved range, change the answer and stay within precision bounds', () => {
-  const candidates = [[99, 80, 65.1], [71.5, 69.2, 65.1], [65.1, 69.234, 71.5], [65.1, 69.2, 71.5]];
+  const candidates = [[99, 80, 65.1], [71.5, 69.2, 65.1], [65.1, 69.234, 71.5], [71.5, 65.1, 65.1]];
   const result = checkCaption(sample, 'lowest', sampleFacts, candidates);
   assert.equal(result.origin, 'cloud');
-  assert.deepEqual(result.alternate, [65.1, 69.2, 71.5]);
-  assert.deepEqual(result.alternateAnswer, [1]);
+  assert.deepEqual(result.alternate, [71.5, 65.1, 65.1]);
+  assert.deepEqual(result.alternateAnswer, [2, 3]);
+});
+
+test('one bar reaching a cutoff beats swapping or redrawing the chart', () => {
+  const rows = readChart('category,percent\nA,15\nB,40\nC,80');
+  const claims = localFacts(rows, 'Rates ranged from 15% to 80%.');
+  const result = checkCaption(rows, {type: 'atLeast', cutoff: 50}, claims, [[80, 55, 15]]);
+  assert.deepEqual(result.alternate, [15, 50, 80]);
+  assert.deepEqual(result.alternateAnswer, [2, 3]);
+  assert.equal(result.changedCategories, 1);
+  assert.equal(result.origin, 'browser');
+});
+
+test('the smallest edit can require a whole tied group to move', () => {
+  const rows = readChart('category,percent\nA,25\nB,25\nC,25\nD,70');
+  const claims = [{type: 'lowest', ids: [1, 2, 3]}, {type: 'value', id: 4, value: 70}];
+  const result = checkCaption(rows, {type: 'atLeast', cutoff: 30}, claims);
+  assert.equal(result.changedCategories, 3);
+  assert.deepEqual(result.alternateAnswer, [1, 2, 3, 4]);
+  assert.ok(fits(result.alternate, claims));
 });
 
 test('a ranked category’s quoted rate stays fixed in either kind of alternate', () => {
@@ -45,7 +64,7 @@ test('a ranked category’s quoted rate stays fixed in either kind of alternate'
   assert.equal(before.status, 'ambiguous');
   assert.equal(before.origin, 'browser');
   assert.equal(before.alternate[0], 78);
-  assert.equal(checkCaption(rows, question, reviewed, [[78, 76, 48]]).origin, 'cloud');
+  assert.equal(checkCaption(rows, question, reviewed, [[78, 75, 48]]).origin, 'cloud');
 });
 
 test('custom exact values and a tied rate are parsed independently of the current chart', () => {
@@ -134,12 +153,14 @@ test('checking bounded percentage domains agrees with exhaustive enumeration acr
       for (const question of ['lowest', 'highest']) {
         const expected = answer(actual, question);
         const differs = values => String(answer(values, question)) !== String(expected);
-        const witness = all.some(values => fits(values, scenario) && differs(values));
+        const witnesses = all.filter(values => fits(values, scenario) && differs(values));
         const result = checkCaption(rows, question, scenario);
-        assert.equal(result.status === 'ambiguous', witness);
-        if (witness) {
+        assert.equal(result.status === 'ambiguous', Boolean(witnesses.length));
+        if (witnesses.length) {
           assert.ok(fits(result.alternate, scenario));
           assert.ok(differs(result.alternate));
+          const changes = values => values.filter((value, i) => value !== actual[i]).length;
+          assert.equal(result.changedCategories, Math.min(...witnesses.map(changes)));
         }
       }
     }

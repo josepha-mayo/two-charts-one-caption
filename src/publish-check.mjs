@@ -57,6 +57,7 @@ export function runPublishCheck(rows, caption, check) {
     report.failedFacts = check.claims.filter(claim => !fitsClaim(values, claim)).map(claim => claim.evidence);
   } else if (result.status === 'ambiguous') {
     report.alternateAnswer = answerText(input.rows, result.alternateAnswer);
+    report.changedCategories = result.changedCategories;
   }
   return report;
 }

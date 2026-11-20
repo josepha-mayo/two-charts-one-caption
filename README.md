@@ -1,6 +1,6 @@
 # Two Charts, One Caption
 
-Check whether a chart description answers the question a reader needs to ask. The browser shows an alternative chart only when it fits the checked facts and changes the answer. The revised description and an HTML data table can be downloaded once the selected ranking is explicit.
+Check whether a chart description answers the question a reader needs to ask. The browser finds an alternative that changes the answer while preserving the checked facts and changing as few categories as possible. The revised description and an HTML data table can be downloaded once the selected answer is explicit.
 
 [Try the 70% cutoff demo](https://two-charts-caption-2026--judge-preview-nh1ldqbu.web.app/?example=cutoff)
 

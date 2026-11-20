@@ -95,30 +95,6 @@ export function fitsClaim(values, claim) {
     (claim.value === undefined || values[claim.ids[0] - 1] === claim.value);
 }
 
-function alternatePermutation(actual, claims, expected, question) {
-  const partial = [];
-  const used = new Set();
-  function visit() {
-    if (partial.length === actual.length) {
-      return fits(partial, claims) && !sameAnswer(answerValues(partial, question), expected)
-        ? partial.slice() : null;
-    }
-    const tried = new Set();
-    for (const [index, value] of actual.entries()) {
-      if (used.has(index) || tried.has(value)) continue;
-      tried.add(value);
-      used.add(index);
-      partial.push(value);
-      const result = visit();
-      if (result) return result;
-      partial.pop();
-      used.delete(index);
-    }
-    return null;
-  }
-  return visit();
-}
-
 function maskOf(ids) {
   return ids.reduce((mask, id) => mask | (1 << (id - 1)), 0);
 }
@@ -128,7 +104,7 @@ const points = percent => Math.round(percent * 100);
 // Each named value or cutoff narrows a category's integer interval. For a
 // pair of extremum groups, the smallest permitted minimum and the largest
 // permitted maximum give every interior category the most room.
-function intervalWitness(actual, claims, acceptGroups, changedIndex, changedBound) {
+function intervalWitness(actual, claims, movable, acceptGroups, changedIndex, changedBound) {
   const full = (1 << actual.length) - 1;
   const requiredLow = maskOf(claims.find(claim => claim.type === 'lowest')?.ids ?? []);
   const requiredHigh = maskOf(claims.find(claim => claim.type === 'highest')?.ids ?? []);
@@ -146,6 +122,9 @@ function intervalWitness(actual, claims, acceptGroups, changedIndex, changedBoun
     bounds.forEach(([lower, upper], i) => {
       bounds[i] = claim.ids.includes(i + 1) ? [Math.max(lower, cutoff), upper] : [lower, Math.min(upper, cutoff - 1)];
     });
+  }
+  for (const [i, value] of actual.entries()) {
+    if (!(movable & (1 << i))) bounds[i] = [points(value), points(value)];
   }
   if (changedBound) {
     const [lower, upper] = bounds[changedIndex];
@@ -186,19 +165,74 @@ function intervalWitness(actual, claims, acceptGroups, changedIndex, changedBoun
   return null;
 }
 
-function alternateIntervals(actual, claims, expected, question) {
+function alternateIntervals(actual, claims, expected, question, movable) {
   if (typeof question === 'string') {
     const expectedMask = maskOf(expected);
-    return intervalWitness(actual, claims, (low, high) => (question === 'lowest' ? low : high) !== expectedMask);
+    return intervalWitness(actual, claims, movable, (low, high) => (question === 'lowest' ? low : high) !== expectedMask);
   }
   const cutoff = points(question.cutoff);
   // A different answer must change the membership of at least one category.
   for (const [i, value] of actual.entries()) {
+    if (!(movable & (1 << i))) continue;
     const opposite = value >= question.cutoff ? [0, cutoff - 1] : [cutoff, 10000];
-    const candidate = intervalWitness(actual, claims, () => true, i, opposite);
+    const candidate = intervalWitness(actual, claims, movable, () => true, i, opposite);
     if (candidate) return candidate;
   }
   return null;
+}
+
+function preferWitness(best, alternate, origin, actual) {
+  if (!alternate) return best;
+  let changedCategories = 0;
+  let displacement = 0;
+  for (const [i, value] of alternate.entries()) {
+    const change = Math.abs(points(value) - points(actual[i]));
+    if (change) changedCategories += 1;
+    displacement += change;
+  }
+  if (best && (best.changedCategories < changedCategories ||
+      (best.changedCategories === changedCategories && best.displacement <= displacement))) return best;
+  return {alternate, origin, changedCategories, displacement};
+}
+
+function oneCategoryWitness(actual, claims, question, qualifies, best) {
+  // With the other values fixed, facts and answers can only change at a
+  // source value or a cutoff. Try those points and their immediate neighbors.
+  const boundaries = [0, 10000, ...actual.map(points)];
+  for (const claim of claims) if (claim.type === 'atLeast') boundaries.push(points(claim.cutoff));
+  if (typeof question !== 'string') boundaries.push(points(question.cutoff));
+  const nearby = new Set(boundaries.flatMap(point => [point - 1, point, point + 1]));
+  for (const [i, value] of actual.entries()) {
+    for (const point of nearby) {
+      const distance = Math.abs(point - points(value));
+      if (point < 0 || point > 10000 || !distance ||
+          (best?.changedCategories === 1 && distance >= best.displacement)) continue;
+      const alternate = actual.slice();
+      alternate[i] = point / 100;
+      if (qualifies(alternate)) best = preferWitness(best, alternate, 'browser', actual);
+    }
+  }
+  return best;
+}
+
+function fewestChanges(actual, claims, expected, question, best) {
+  const full = (1 << actual.length) - 1;
+  best = preferWitness(best, alternateIntervals(actual, claims, expected, question, full), 'browser', actual);
+  if (!best || best.changedCategories <= 2) return best;
+  const masksBySize = Array.from({length: actual.length}, () => []);
+  for (let mask = 1; mask < full; mask += 1) {
+    const size = actual.filter((_, index) => mask & (1 << index)).length;
+    masksBySize[size].push(mask);
+  }
+  // Pin all bars outside each subset. Once a size works, every smaller
+  // subset has already been ruled out.
+  for (let size = 2; size < best.changedCategories; size += 1) {
+    for (const movable of masksBySize[size]) {
+      const alternate = alternateIntervals(actual, claims, expected, question, movable);
+      if (alternate) return preferWitness(best, alternate, 'browser', actual);
+    }
+  }
+  return best;
 }
 
 export function checkCaption(rows, question, claims, proposed = []) {
@@ -208,20 +242,19 @@ export function checkCaption(rows, question, claims, proposed = []) {
   if (!fits(actual, claims)) return {status: 'conflict', expected};
   if (claims.some(claim => typeof selected === 'string' ? claim.type === selected :
       claim.type === selected.type && claim.cutoff === selected.cutoff)) return {status: 'explicit', expected};
+  const qualifies = values => fits(values, claims) && !sameAnswer(answerValues(values, selected), expected);
+  let best;
   for (const values of proposed.slice(0, 12)) {
-    if (Array.isArray(values) && values.length === actual.length && values.every(validPercent) &&
-        fits(values, claims) && !sameAnswer(answerValues(values, selected), expected)) {
-      return {status: 'ambiguous', expected, alternate: values, alternateAnswer: answerValues(values, selected), origin: 'cloud'};
+    if (Array.isArray(values) && values.length === actual.length && values.every(validPercent) && qualifies(values)) {
+      best = preferWitness(best, values, 'cloud', actual);
     }
   }
-  const alternate = alternatePermutation(actual, claims, expected, selected) ??
-    alternateIntervals(actual, claims, expected, selected);
-  if (!alternate) return {status: 'implied', expected};
-  const alternateAnswer = answerValues(alternate, selected);
-  if (sameAnswer(alternateAnswer, expected) || !fits(alternate, claims)) {
-    throw Error('The proposed alternate could not be verified.');
-  }
-  return {status: 'ambiguous', expected, alternate, alternateAnswer, origin: 'browser'};
+  best = oneCategoryWitness(actual, claims, selected, qualifies, best);
+  if (best?.changedCategories !== 1) best = fewestChanges(actual, claims, expected, selected, best);
+  if (!best) return {status: 'implied', expected};
+  const {alternate, origin, changedCategories} = best;
+  if (!qualifies(alternate)) throw Error('The proposed alternate could not be verified.');
+  return {status: 'ambiguous', expected, alternate, alternateAnswer: answerValues(alternate, selected), origin, changedCategories};
 }
 
 export function answerText(rows, ids) {

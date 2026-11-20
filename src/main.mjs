@@ -178,8 +178,9 @@ function renderProof(claims, alternate) {
   });
   el('proof-facts').replaceChildren(...entries);
   el('save-recheck').hidden = !claims.length;
+  const count = result.changedCategories;
   el('proof-summary').textContent = alternate
-    ? 'Each checked fact is true in both charts. The answer changes anyway.'
+    ? `Every checked fact holds in both charts. Changing ${count === 1 ? 'one category' : `${count} categories`} is the smallest edit that changes the answer.`
     : result.status === 'implied'
       ? 'Across all permitted percentage charts, the checked facts force the same answer.'
       : result.status === 'conflict'
