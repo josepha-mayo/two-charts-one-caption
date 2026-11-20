@@ -328,6 +328,9 @@ cutoff.addEventListener('input', invalidate);
 
 function connectFirebase() {
   if (firebaseConnection) return firebaseConnection;
+  if (navigator.onLine === false) {
+    return Promise.reject(Error('Reconnect to load the Firebase client for this tab.'));
+  }
   firebaseConnection = import('./firebase.mjs').catch(() => {
     throw Error('The Firebase tools could not load. Keep a copy of your edits before reloading, or continue with the browser check.');
   }).then(async module => {
@@ -348,7 +351,7 @@ const refreshDevice = el('refresh-device');
 let deviceSetupPending = false;
 
 const availabilityText = {
-  available: 'Chrome’s on-device model is ready. Private notes and source values can be processed in this browser.',
+  available: 'Chrome’s on-device model is ready for offline use in this tab. Private notes and source values stay on this device.',
   downloadable: 'Chrome can download its on-device model. The first download can take several minutes.',
   downloading: 'Chrome reports that its model is downloading. Prepare it here to follow progress.',
   unavailable: 'This browser does not offer the on-device model. The browser check and reader links are still available.',
@@ -361,13 +364,14 @@ async function refreshDeviceSetup() {
   setupStatus.textContent = 'Checking Chrome’s on-device model…';
   try {
     const state = await deviceAvailability();
-    setupStatus.textContent = availabilityText[state];
-    if (state === 'downloadable' || state === 'downloading') {
+    if (state !== 'unavailable') {
+      setupStatus.textContent = state === 'available' ? 'Chrome’s model is installed. Loading the Firebase client for this tab…' : availabilityText[state];
       await connectFirebase();
-      prepareDevice.hidden = false;
+      prepareDevice.hidden = state === 'available';
     }
+    setupStatus.textContent = availabilityText[state];
   } catch {
-    setupStatus.textContent = 'Chrome AI setup could not finish. Check again or use the browser check.';
+    setupStatus.textContent = 'Chrome AI setup could not finish. Reconnect and check again, or use the browser check.';
   } finally {
     refreshDevice.disabled = false;
   }
