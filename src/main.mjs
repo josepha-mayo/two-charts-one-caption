@@ -188,6 +188,7 @@ function renderProof(claims, alternate) {
 }
 
 function render(claims, alternatives = [], note = 'Browser check') {
+  el('detail-status').textContent = '';
   reviewed = claims;
   const selected = selectedQuestion();
   result = checkCaption(rows, selected, claims, alternatives);
@@ -279,7 +280,9 @@ cutoff.addEventListener('input', invalidate);
 
 function connectFirebase() {
   if (firebaseConnection) return firebaseConnection;
-  firebaseConnection = import('./firebase.mjs').then(async module => {
+  firebaseConnection = import('./firebase.mjs').catch(() => {
+    throw Error('The Firebase tools could not load. Keep a copy of your edits before reloading, or continue with the browser check.');
+  }).then(async module => {
     await module.configure();
     return module;
   }).catch(error => {
@@ -470,21 +473,26 @@ el('confirm-facts').addEventListener('click', () => {
 el('nano').addEventListener('click', async () => {
   if (!result) return;
   const current = revision;
+  const detailStatus = el('detail-status');
   busy = true;
   syncActions();
-  status.textContent = 'Chrome Nano is reading the draft chart on this device…';
+  detailStatus.textContent = 'Chrome Nano is reading the source chart on this device…';
   try {
     const firebase = await connectFirebase();
     if (current !== revision) return;
     const selected = selectedQuestion();
-    const reply = await firebase.generateOnDevice(localPrompt(rows, selected, caption.value), answerConstraint);
+    const reply = await firebase.generateOnDevice(localPrompt(rows, selected), answerConstraint);
     if (current !== revision) return;
-    if (!Array.isArray(reply?.ids)) throw Error('Nano did not return category IDs.');
-    const ids = [...reply.ids].sort((a, b) => a - b);
-    el('detail').textContent = supportedDetail(rows, selected, ids);
-    status.textContent = 'Firebase reported on-device inference. The browser verified the suggested detail.';
+    try {
+      if (!Array.isArray(reply?.ids)) throw Error('Chrome’s suggestion did not contain category IDs.');
+      const ids = [...reply.ids].sort((a, b) => a - b);
+      el('detail').textContent = supportedDetail(rows, selected, ids);
+      detailStatus.textContent = 'Firebase ran on-device. The browser verified Chrome’s suggestion against the source chart.';
+    } catch (error) {
+      detailStatus.textContent = `Firebase ran on-device. ${error.message} You can still add the checked detail above.`;
+    }
   } catch (error) {
-    if (current === revision) status.textContent = error.message;
+    if (current === revision) detailStatus.textContent = `${error.message} You can still add the checked detail above.`;
   } finally {
     busy = false;
     syncActions();

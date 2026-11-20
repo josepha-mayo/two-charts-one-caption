@@ -60,11 +60,13 @@ test('unsupported text, invisible evidence, duplicate names, and invalid data fa
 
 test('cloud draft receives only the approved caption and category names, with private values confined to the local route', () => {
   const cloud = cloudPrompt(sample, 'lowest', sampleCaption);
-  const local = localPrompt(sample, 'lowest', sampleCaption);
+  const local = localPrompt(sample, {type: 'atLeast', cutoff: 70});
   assert.ok(cloud.includes('Select Bus Service'));
   assert.ok(cloud.includes('65.1%'));
   assert.ok(!cloud.includes('70.5'));
-  assert.ok(local.includes('70.5'));
+  assert.match(local, /greater than or equal to 70/);
+  assert.match(local, /^2 \| 70\.5$/m);
+  assert.ok(!local.includes(sampleCaption));
   assert.ok(!cloud.includes('"value":'));
 });
 
