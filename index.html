@@ -58,7 +58,7 @@
       <p id="status" role="status"></p>
     </section>
     <section aria-label="Chart comparison" class="charts" id="comparison" hidden>
-      <article class="chart-panel"><h2>Source chart</h2><div id="actual"></div></article>
+      <article class="chart-panel"><h2 id="source-chart-title">Source chart</h2><div id="actual"></div></article>
       <article class="chart-panel alternate"><h2>Another possible chart</h2><div id="alternate"></div></article>
     </section>
     <section class="caption-panel proof" id="proof" aria-labelledby="proof-title" hidden>
@@ -69,6 +69,9 @@
       <p id="proof-summary"></p>
       <ul id="proof-facts"></ul>
     </section>
+    <div id="example-refresh-panel" class="controls" hidden>
+      <button type="button" id="example-refresh">Try a simulated data refresh</button>
+    </div>
     <section id="revision" class="revision" aria-labelledby="revision-title" hidden>
       <h2 id="revision-title">Make the answer clear</h2>
       <p id="detail"></p>

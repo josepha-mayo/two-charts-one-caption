@@ -7,6 +7,7 @@ import {checkBrief, questionPrompt, questionConstraint, readQuestionDraft} from 
 import {createPublishCheck, readPublishCheck, reviewPublishInputs} from './publish-check.mjs';
 import {deviceAvailability} from './device.mjs';
 import {sampleCsv, sampleCaption, cutoffCaption, sampleSource} from './sample.mjs';
+import refreshedSampleCsv from '../examples/bus-cutoff/refreshed.csv?raw';
 import {
   addReaderResponse, createReaderLink, createReaderTest, encodeResponse, readReaderLink,
   readerCounts, readerResponseId, restoreReaderTest, saveReaderTest,
@@ -26,7 +27,11 @@ let busy = false;
 let readerAnswer;
 let pendingReaderTest, readerTest, tabStorage;
 let savedCheck;
-let chartSource = 'Bus report example';
+const originalExample = {label: 'Bus report example'};
+const refreshedExample = {label: 'Simulated bus report refresh'};
+const pastedCsv = {label: 'Pasted CSV'};
+let chartSource = originalExample;
+let exampleReview;
 
 try { tabStorage = window.sessionStorage; } catch { /* Session storage can be disabled. */ }
 
@@ -91,6 +96,14 @@ function choiceButton(label, onClick, primary = false) {
   return button;
 }
 
+function updateExampleRefresh() {
+  const restoring = chartSource === refreshedExample;
+  const eligible = chartSource === originalExample && result?.status === 'explicit' &&
+    question.value === 'atLeast' && cutoff.valueAsNumber === 70;
+  el('example-refresh-panel').hidden = !restoring && !eligible;
+  el('example-refresh').textContent = restoring ? 'Restore original example data' : 'Try a simulated data refresh';
+}
+
 function invalidate() {
   revision += 1;
   candidate = null;
@@ -108,7 +121,9 @@ function invalidate() {
   status.textContent = '';
   status.removeAttribute('data-state');
   el('recheck-status').textContent = '';
-  el('recheck-source').textContent = `Data in use · ${chartSource}`;
+  el('recheck-source').textContent = `Data in use · ${chartSource.label}`;
+  el('source-chart-title').textContent = chartSource === refreshedExample ? 'Simulated data refresh' : 'Source chart';
+  updateExampleRefresh();
   const showCutoff = question.value === 'atLeast';
   el('cutoff-label').hidden = !showCutoff;
   try {
@@ -144,12 +159,13 @@ function invalidate() {
 function syncActions() {
   for (const id of ['check', 'cloud-preview', 'load', 'csv-file', 'example', 'nano', 'apply', 'confirm-facts',
     'brief-example', 'brief-submit', 'brief-apply', 'recheck-file', 'save-recheck', 'run-recheck',
-    'review-saved-caption']) el(id).disabled = busy;
+    'review-saved-caption', 'example-refresh']) el(id).disabled = busy;
   for (const control of el('reader-choices').querySelectorAll('button, input')) control.disabled = busy;
 }
 
 function loadSample(cutoffExample = false) {
-  chartSource = 'Bus report example';
+  chartSource = originalExample;
+  exampleReview = null;
   csv.value = sampleCsv;
   caption.value = cutoffExample ? cutoffCaption : sampleCaption;
   question.value = cutoffExample ? 'atLeast' : 'lowest';
@@ -230,6 +246,7 @@ function render(claims, alternatives = [], note = 'Browser check') {
     el('detail').textContent = supportedDetail(rows, selected, expected);
   }
   renderProof(claims, alternate);
+  updateExampleRefresh();
 }
 
 function browserCheck(guess) {
@@ -249,18 +266,24 @@ function browserCheck(guess) {
 el('example').addEventListener('click', () => loadSample());
 el('check').addEventListener('click', () => browserCheck());
 const csvStatus = el('csv-status');
-function loadChart(input, fileName = '') {
+function loadChart(input, source = pastedCsv) {
   try {
     rows = readChart(input);
-    chartSource = fileName || 'Pasted CSV';
+    chartSource = source;
     csv.value = input;
     invalidate();
-    el('source').hidden = true;
-    if ([sampleCaption, cutoffCaption].includes(caption.value)) caption.value = '';
-    csvStatus.textContent = `Loaded ${rows.length} categories${fileName ? ` from ${fileName}` : ''}.`;
+    const isExample = source === originalExample || source === refreshedExample;
+    el('source').hidden = !isExample;
+    if (!isExample) {
+      exampleReview = null;
+      if ([sampleCaption, cutoffCaption].includes(caption.value)) caption.value = '';
+    }
+    csvStatus.textContent = `Loaded ${rows.length} categories${source === pastedCsv ? '' : ` from ${source.label}`}.`;
     caption.focus();
+    return true;
   } catch (error) {
     csvStatus.textContent = error.message;
+    return false;
   }
 }
 el('load').addEventListener('click', () => loadChart(csv.value));
@@ -276,7 +299,7 @@ el('csv-file').addEventListener('change', async event => {
   busy = true;
   syncActions();
   try {
-    loadChart(await file.text(), file.name);
+    loadChart(await file.text(), {label: file.name});
   } catch {
     csvStatus.textContent = 'This CSV could not be opened. Paste its contents to try again.';
   } finally {
@@ -565,24 +588,24 @@ const recheckStatus = el('recheck-status');
 const savedCaptionDialog = el('saved-caption-dialog');
 let previewedCheck;
 
-function runSavedCheck() {
-  if (!savedCheck) return;
+function runSavedCheck(check = savedCheck, feedback = recheckStatus) {
+  if (!check) return;
   if (!caption.value.trim()) {
     invalidate();
-    recheckStatus.textContent = 'Paste the caption you plan to publish or choose Review saved caption.';
+    feedback.textContent = 'Paste the caption you plan to publish or choose Review saved caption.';
     return;
   }
   try {
-    const input = reviewPublishInputs(rows, caption.value, savedCheck);
+    const input = reviewPublishInputs(rows, caption.value, check);
     if (input.status === 'review_required') {
       invalidate();
-      recheckStatus.textContent = input.message;
+      feedback.textContent = input.message;
       return;
     }
     rows = input.rows;
-    setQuestion(savedCheck.question);
+    setQuestion(check.question);
     invalidate();
-    render(savedCheck.claims, [], 'Saved check');
+    render(check.claims, [], 'Saved check');
     if (result.status === 'conflict') status.textContent = 'Saved check failed. Review the marked excerpt before publishing.';
     if (result.status === 'explicit' || result.status === 'implied') {
       status.textContent = 'Saved check passed. The reviewed facts still resolve this question.';
@@ -591,7 +614,7 @@ function runSavedCheck() {
     status.focus();
   } catch (error) {
     invalidate();
-    recheckStatus.textContent = error.message;
+    feedback.textContent = error.message;
   }
 }
 
@@ -623,7 +646,27 @@ el('recheck-file').addEventListener('change', async event => {
   }
 });
 
-el('run-recheck').addEventListener('click', runSavedCheck);
+el('run-recheck').addEventListener('click', () => runSavedCheck());
+el('example-refresh').addEventListener('click', () => {
+  const restoring = chartSource === refreshedExample;
+  try {
+    const demo = restoring ? exampleReview : {
+      check: createPublishCheck(rows, selectedQuestion(), caption.value, reviewed),
+      readerTest: pendingReaderTest,
+    };
+    const data = restoring ? sampleCsv : refreshedSampleCsv;
+    const source = restoring ? originalExample : refreshedExample;
+    if (!loadChart(data, source)) return;
+    exampleReview = restoring ? null : demo;
+    runSavedCheck(demo.check, status);
+    if (restoring && result?.status === 'explicit' && demo.readerTest) {
+      pendingReaderTest = demo.readerTest;
+      renderReaderTest();
+    }
+  } catch (error) {
+    status.textContent = error.message;
+  }
+});
 el('review-saved-caption').addEventListener('click', () => {
   if (!savedCheck) return;
   previewedCheck = savedCheck;
