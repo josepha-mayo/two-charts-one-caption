@@ -1,0 +1,1 @@
+Median on-time rates ranged from 65.1% to 71.5% across three bus service types. Local had the highest rate, at 71.5%. Express had the lowest rate, at 65.1%. Only Local and Select Bus Service reached at least 70%.

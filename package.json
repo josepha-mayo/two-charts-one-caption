@@ -1,0 +1,16 @@
+{
+  "name": "two-charts-one-caption",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {"node": ">=24"},
+  "scripts": {
+    "dev": "vite --host 127.0.0.1",
+    "build": "vite build",
+    "test": "node --test",
+    "verify-caption": "node scripts/verify-caption.mjs"
+  },
+  "dependencies": {"firebase": "13.3.0"},
+  "devDependencies": {"vite": "8.3.8"},
+  "overrides": {"@grpc/grpc-js": "1.14.7"}
+}

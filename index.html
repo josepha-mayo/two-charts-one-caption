@@ -1,0 +1,179 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#151a29">
+  <meta name="description" content="Test whether a chart description gives readers enough information to answer the question that matters.">
+  <title>Two Charts, One Caption</title>
+</head>
+<body>
+  <main class="shell" id="studio">
+    <header class="header">
+      <a href="./" aria-label="Two Charts, One Caption home">Two Charts, One Caption</a>
+      <button type="button" id="connect" class="small">Connect Firebase</button>
+    </header>
+    <section class="hero">
+      <h1>Same words.<br><em>Different answer.</em></h1>
+      <p>See if your chart description gives readers enough information to answer the question that matters.</p>
+    </section>
+    <section aria-labelledby="caption-title" class="caption-panel">
+      <div class="caption-head">
+        <h2 id="caption-title"><label for="caption">What the reader gets</label></h2>
+        <button type="button" class="small" id="example">Load bus report example</button>
+      </div>
+      <textarea id="caption" maxlength="1800" rows="2"></textarea>
+      <div class="controls question-controls">
+        <label for="question">Test for</label>
+        <select id="question">
+          <option value="lowest">Lowest rate</option>
+          <option value="highest">Highest rate</option>
+          <option value="atLeast">Rates at or above a cutoff</option>
+        </select>
+        <label id="cutoff-label" for="cutoff" hidden>Cutoff (%) <input type="number" id="cutoff" min="0" max="100" step="0.01" value="70" inputmode="decimal"></label>
+      </div>
+      <p id="studio-question"></p>
+      <details class="brief-panel" id="brief-panel">
+        <summary>Suggest a question from a private note</summary>
+        <div class="caption-head">
+          <label for="brief">Editor’s note</label>
+          <button type="button" class="small" id="brief-example">Load an example note</button>
+        </div>
+        <textarea id="brief" rows="3" maxlength="1200" autocomplete="off" aria-describedby="brief-privacy"></textarea>
+        <p id="brief-privacy">Chrome reads this note on this device. It stays out of the cloud request and reader links.</p>
+        <button type="button" id="brief-submit">Suggest with Chrome</button>
+        <p id="brief-status" role="status"></p>
+        <div id="brief-review" hidden>
+          <p id="brief-question"></p>
+          <q id="brief-evidence"></q>
+          <button type="button" class="primary" id="brief-apply">Use this question</button>
+        </div>
+      </details>
+      <div id="reader-choices" class="choices" role="group" aria-label="Answer using only the caption"></div>
+      <div class="controls secondary-controls">
+        <button type="button" id="check">Reveal without answering</button>
+        <button type="button" id="cloud-preview">Test with cloud Gemini</button>
+        <button type="button" id="reader-preview">Make a reader link</button>
+      </div>
+      <p id="status" role="status"></p>
+    </section>
+    <section aria-label="Chart comparison" class="charts" id="comparison" hidden>
+      <article class="chart-panel"><h2>Source chart</h2><div id="actual"></div></article>
+      <article class="chart-panel alternate"><h2>Another possible chart</h2><div id="alternate"></div></article>
+    </section>
+    <section class="caption-panel proof" id="proof" aria-labelledby="proof-title" hidden>
+      <div class="caption-head">
+        <h2 id="proof-title">What the words actually prove</h2>
+        <button type="button" id="save-recheck" class="small">Save recheck file</button>
+      </div>
+      <p id="proof-summary"></p>
+      <ul id="proof-facts"></ul>
+    </section>
+    <section id="revision" class="revision" aria-labelledby="revision-title" hidden>
+      <h2 id="revision-title">Make the answer clear</h2>
+      <p id="detail"></p>
+      <div class="controls">
+        <button type="button" class="primary" id="apply">Add this detail and recheck</button>
+        <button type="button" id="nano">Ask Chrome Nano for the detail</button>
+        <button type="button" id="export">Download reviewed text and data</button>
+      </div>
+    </section>
+    <section id="reader-test" class="caption-panel reader-test" aria-labelledby="reader-test-title" hidden>
+      <div class="caption-head">
+        <h2 id="reader-test-title">Test the wording with readers</h2>
+        <button type="button" id="start-reader-test" class="primary">Create before and after links</button>
+      </div>
+      <p id="reader-test-intro">Give different readers each caption, then compare what they can answer.</p>
+      <div id="reader-test-run" hidden>
+        <p id="reader-test-question"></p>
+        <div id="reader-test-versions" class="test-versions"></div>
+        <form id="reader-response-form">
+          <label for="reader-response">Reader response code</label>
+          <div class="controls">
+            <input type="text" id="reader-response" maxlength="700" required autocomplete="off" spellcheck="false">
+            <button type="submit">Add response</button>
+          </div>
+        </form>
+        <p id="reader-test-status" role="status"></p>
+        <div class="test-footer">
+          <p id="reader-test-storage">This test is saved in this tab. Each link shows one caption and the question.</p>
+          <button type="button" class="small" id="download-reader-results" hidden>Download results</button>
+        </div>
+      </div>
+    </section>
+    <section id="claim-review" class="caption-panel" aria-labelledby="facts-title" hidden>
+      <h2 id="facts-title">Check Gemini’s reading of the caption</h2>
+      <ul id="claims"></ul>
+      <button type="button" id="confirm-facts">These facts capture the caption</button>
+    </section>
+    <details class="csv-panel" id="csv-panel">
+      <summary>Use a different chart</summary>
+      <label for="csv-file">Choose a CSV file</label>
+      <input id="csv-file" type="file" accept=".csv,text/csv">
+      <label for="csv">Or paste CSV with two to seven categories, headed <code>category,percent</code></label>
+      <textarea id="csv" rows="6" maxlength="4000" spellcheck="false"></textarea>
+      <button type="button" id="load">Load chart</button>
+      <p id="csv-status" role="status"></p>
+    </details>
+    <details class="csv-panel recheck-panel" id="recheck-panel">
+      <summary>Rerun a saved check</summary>
+      <p>Load the current CSV and paste the caption you plan to publish above. Then choose the saved recheck file.</p>
+      <label for="recheck-file">Recheck file (.json)</label>
+      <input id="recheck-file" type="file" accept=".json,application/json">
+      <p id="recheck-status" role="status"></p>
+    </details>
+    <footer><a id="source">Example data from the NYC Comptroller’s bus report, Table 3</a><p>Compare one question at a time. Suggested charts are hypothetical. Your CSV stays in this tab.</p></footer>
+  </main>
+  <main class="shell reader" id="reader" hidden>
+    <header class="header"><a href="./">Two Charts, One Caption</a></header>
+    <section class="hero"><h1>Read the caption.<br><em>Answer the question.</em></h1></section>
+    <section class="caption-panel" aria-labelledby="reader-caption-title">
+      <h2 id="reader-caption-title">Chart description</h2>
+      <p id="reader-caption"></p>
+      <fieldset id="reader-form"><legend id="reader-question"></legend><div id="reader-options"></div></fieldset>
+      <div class="controls">
+        <button type="button" class="primary" id="reader-submit">Record selected categories</button>
+        <button type="button" id="reader-none" hidden>None reach the cutoff</button>
+        <button type="button" id="reader-unknown">The caption doesn’t say</button>
+      </div>
+      <p id="reader-status" role="status"></p>
+      <button type="button" id="reader-copy" hidden>Copy my response</button>
+      <div id="reader-code-panel" hidden>
+        <label for="reader-code">Response code to send to the editor</label>
+        <input type="text" id="reader-code" readonly spellcheck="false">
+      </div>
+    </section>
+  </main>
+  <dialog id="dialog" aria-labelledby="preview-title" aria-describedby="preview-data">
+    <h2 id="preview-title">What will be sent to Google</h2>
+    <p id="preview-data">This request includes the caption, category names, and question. Your private note and unpublished chart values stay in this tab.</p>
+    <pre id="prompt" tabindex="0"></pre>
+    <form method="dialog" class="controls">
+      <button type="submit" value="cancel">Cancel</button>
+      <button type="submit" value="send" class="primary">Send to Gemini</button>
+    </form>
+  </dialog>
+  <dialog id="reader-dialog" aria-labelledby="reader-link-title">
+    <h2 id="reader-link-title">Share the caption alone</h2>
+    <p>The link contains only the caption, the question, and category names. Review the text for anything you want to keep private before sharing.</p>
+    <p id="reader-link-caption"></p>
+    <label for="reader-url">Reader link</label>
+    <input id="reader-url" type="url" readonly>
+    <form method="dialog" class="controls">
+      <a id="reader-open" target="_blank" rel="noopener noreferrer">Open reader view</a>
+      <button type="button" id="copy-link">Copy link</button>
+      <button type="submit">Close</button>
+    </form>
+    <p id="reader-link-status" role="status"></p>
+  </dialog>
+  <dialog id="replace-test-dialog" aria-labelledby="replace-test-title">
+    <h2 id="replace-test-title">Replace this reader test?</h2>
+    <p>The current test and its responses will be removed from this tab. Download its results first if you need them.</p>
+    <form method="dialog" class="controls">
+      <button type="submit" value="cancel">Keep current test</button>
+      <button type="submit" value="replace">Replace test</button>
+    </form>
+  </dialog>
+  <script type="module" src="/src/main.mjs"></script>
+</body>
+</html>

@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "labels": ["Local", "Select Bus Service", "Express"],
+  "question": {"type": "atLeast", "cutoff": 70},
+  "caption": "Median on-time rates ranged from 65.1% to 71.5% across three bus service types. Local had the highest rate, at 71.5%. Express had the lowest rate, at 65.1%. Only Local and Select Bus Service reached at least 70%.",
+  "claims": [
+    {"type": "range", "min": 65.1, "max": 71.5, "evidence": "Median on-time rates ranged from 65.1% to 71.5% across three bus service types."},
+    {"type": "highest", "ids": [1], "evidence": "Local had the highest rate, at 71.5%."},
+    {"type": "lowest", "ids": [3], "evidence": "Express had the lowest rate, at 65.1%."},
+    {"type": "atLeast", "cutoff": 70, "ids": [1, 2], "evidence": "Only Local and Select Bus Service reached at least 70%."}
+  ]
+}
