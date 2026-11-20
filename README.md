@@ -32,7 +32,7 @@ After revealing a gap, choose **Download proof with chart data**. The HTML file 
 
 Each link contains its own caption, category names, question, and random invitation ID. The reader view does not receive the chart, the source answer, or the other caption. The test and imported responses survive a reload in the editor tab. Each reader tab generates an anonymous response ID so re-importing a code or updating an answer from that tab does not add another response. Counts are descriptive, and the links do not authenticate readers.
 
-To load another chart, choose or paste a UTF-8 CSV with the header `category,percent` and two to seven data rows. The existing `service,percent` header also works.
+To load another chart, choose or paste a UTF-8 CSV with a header and two to seven data rows. The two-column formats `category,percent` and `service,percent` load directly. For other layouts, choose a category column and a percentage column. Only the chosen columns enter the chart check. Use percentages such as `71.5` or `71.5%`, with up to two decimal places.
 
 ## Recheck before publishing
 
@@ -47,6 +47,12 @@ npm run verify-caption -- examples/bus-cutoff/caption-recheck.json examples/bus-
 ```
 
 Try replacing `current.csv` with the simulated `refreshed.csv`. Select Bus Service drops below 70% while the range and named extrema stay the same. The command returns the exact stale excerpt. Exit code 0 means the approved facts still determine the answer, 1 requests editorial review, and 2 indicates invalid input. Call `node scripts/verify-caption.mjs … --json` for machine-readable output without an npm script banner.
+
+For a spreadsheet with more columns, pass the exact, case-sensitive header names for the same two fields you chose in the browser.
+
+```sh
+npm run verify-caption -- check.json latest.csv caption.txt --category-column "Bus service" --percent-column "On-time rate"
+```
 
 ## Firebase
 

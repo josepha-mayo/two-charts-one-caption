@@ -3,6 +3,7 @@ import {
   readChart, checkCaption, validateClaims, answerText, sameAnswer, supportedDetail, fitsClaim, questionText, readQuestion,
 } from './check.mjs';
 import {localFacts, cloudPrompt, localPrompt, checkText, answerConstraint, reviewCloudClaims} from './draft.mjs';
+import {defaultChartColumns, readChartRows, readCsvTable} from './csv.mjs';
 import {checkBrief, questionPrompt, questionConstraint, readQuestionDraft} from './brief.mjs';
 import {createPublishCheck, readPublishCheck, reviewPublishInputs, suggestPublishRepair} from './publish-check.mjs';
 import {deviceAvailability} from './device.mjs';
@@ -47,6 +48,7 @@ const refreshedExample = {
 const pastedCsv = {label: 'Pasted CSV'};
 let chartSource = originalExample;
 let exampleReview;
+let pendingImport;
 const aiOperations = {
   question: {label: 'Question from private note', route: 'on_device', inputs: ['Private note']},
   detail: {label: 'Caption detail from source chart', route: 'on_device', inputs: ['Source percentages', 'Category IDs', 'Selected question']},
@@ -198,7 +200,8 @@ function invalidate() {
 function syncActions() {
   for (const id of ['check', 'cloud-preview', 'load', 'csv-file', 'example', 'example-select', 'nano', 'apply', 'confirm-facts',
     'brief-example', 'brief-submit', 'brief-apply', 'recheck-file', 'save-recheck', 'run-recheck',
-    'review-saved-caption', 'apply-stale-repair', 'example-refresh']) el(id).disabled = busy;
+    'review-saved-caption', 'apply-stale-repair', 'example-refresh', 'csv-category', 'csv-percent',
+    'use-csv-columns']) el(id).disabled = busy;
   for (const control of el('reader-choices').querySelectorAll('button, input')) control.disabled = busy;
   el('cloud-cancel').hidden = !cloudOperation;
 }
@@ -227,6 +230,7 @@ function renderSource() {
 }
 
 function loadSample(key) {
+  clearCsvMapping();
   chartSource = key === 'food' ? foodExample : originalExample;
   exampleReview = null;
   el('example-select').value = key;
@@ -371,45 +375,98 @@ el('show-fix').addEventListener('click', () => {
   heading.scrollIntoView({block: 'start'});
 });
 const csvStatus = el('csv-status');
-function loadChart(input, source = pastedCsv) {
+function csvError(message) {
+  csvStatus.textContent = message + ' The current chart is still in use.';
+}
+
+function clearCsvMapping() {
+  pendingImport = null;
+  el('csv-columns').hidden = true;
+  el('csv-category').replaceChildren();
+  el('csv-percent').replaceChildren();
+}
+
+function applyChart(chart, input, source) {
+  clearCsvMapping();
+  rows = chart;
+  chartSource = source;
+  csv.value = input;
+  if (!source.sourceUrl) {
+    exampleReview = null;
+    if ([sampleCaption, cutoffCaption, foodExample.caption].includes(caption.value)) caption.value = '';
+  }
+  invalidate();
+  renderSource();
+  csvStatus.textContent = `Loaded ${rows.length} categories${source === pastedCsv ? '' : ` from ${source.label}`}.`;
+  caption.focus();
+}
+
+function importChart(input, source = pastedCsv) {
+  clearCsvMapping();
+  csv.value = input;
   try {
-    rows = readChart(input);
-    chartSource = source;
-    csv.value = input;
-    invalidate();
-    renderSource();
-    if (!source.sourceUrl) {
-      exampleReview = null;
-      if ([sampleCaption, cutoffCaption, foodExample.caption].includes(caption.value)) caption.value = '';
+    const table = readCsvTable(input);
+    const columns = defaultChartColumns(table.headers);
+    if (columns) {
+      applyChart(readChartRows(table, columns), input, source);
+      return;
     }
-    csvStatus.textContent = `Loaded ${rows.length} categories${source === pastedCsv ? '' : ` from ${source.label}`}.`;
-    caption.focus();
-    return true;
+    pendingImport = {table, source};
+    for (const id of ['csv-category', 'csv-percent']) {
+      const select = el(id);
+      select.add(new Option('Choose a column', ''));
+      table.headers.forEach((header, index) => {
+        select.add(new Option(header ? `${index + 1}. ${header}` : `Column ${index + 1} (no header)`, index));
+      });
+    }
+    el('csv-columns').hidden = false;
+    csvStatus.textContent = 'Choose two columns to replace the current chart.';
+    el('csv-category').focus();
   } catch (error) {
-    csvStatus.textContent = error.message;
-    return false;
+    csvError(error.message);
   }
 }
-el('load').addEventListener('click', () => loadChart(csv.value));
+
+el('load').addEventListener('click', () => importChart(csv.value));
+csv.addEventListener('input', () => {
+  clearCsvMapping();
+  csvStatus.textContent = '';
+});
+el('use-csv-columns').addEventListener('click', () => {
+  if (!pendingImport) return;
+  const {table, source} = pendingImport;
+  const category = el('csv-category').value;
+  const rate = el('csv-percent').value;
+  try {
+    if (!category || !rate) throw Error('Choose a category column and a percentage column.');
+    applyChart(readChartRows(table, {category: Number(category), rate: Number(rate)}), csv.value, source);
+  } catch (error) {
+    csvError(error.message);
+  }
+});
 el('csv-file').addEventListener('change', async event => {
   const picker = event.currentTarget;
   const file = picker.files[0];
   picker.value = '';
   if (!file) return;
+  clearCsvMapping();
   if (file.size > 12_000) {
-    csvStatus.textContent = 'Choose a CSV under 12 KB.';
+    csvError('Choose a CSV under 12 KB.');
     return;
   }
+  const previousDraft = csv.value;
   busy = true;
   syncActions();
+  let input;
   try {
-    loadChart(await file.text(), {label: file.name});
+    input = new TextDecoder('utf-8', {fatal: true}).decode(await file.arrayBuffer());
   } catch {
-    csvStatus.textContent = 'This CSV could not be opened. Paste its contents to try again.';
+    csvError('This CSV could not be read as UTF-8. Save it as UTF-8 or paste its contents.');
   } finally {
     busy = false;
     syncActions();
   }
+  if (input !== undefined && csv.value === previousDraft) importChart(input, {label: file.name});
 });
 caption.addEventListener('input', invalidate);
 question.addEventListener('change', invalidate);
@@ -809,7 +866,7 @@ el('example-refresh').addEventListener('click', () => {
     };
     const data = restoring ? sampleCsv : refreshedSampleCsv;
     const source = restoring ? originalExample : refreshedExample;
-    if (!loadChart(data, source)) return;
+    applyChart(readChart(data), data, source);
     exampleReview = restoring ? null : demo;
     runSavedCheck(demo.check, status);
     if (restoring && result?.status === 'explicit' && demo.readerTest) {

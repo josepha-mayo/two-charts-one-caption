@@ -3,7 +3,7 @@ import {parseArgs} from 'node:util';
 import {readChart} from '../src/check.mjs';
 import {readPublishCheck, runPublishCheck} from '../src/publish-check.mjs';
 
-const usage = 'Usage: node scripts/verify-caption.mjs check.json chart.csv caption.txt [--json]';
+const usage = 'Usage: node scripts/verify-caption.mjs check.json chart.csv caption.txt [--category-column HEADER --percent-column HEADER] [--json]';
 
 async function readText(path, limit) {
   const handle = await open(path, 'r');
@@ -27,18 +27,30 @@ async function readText(path, limit) {
 let json = false;
 try {
   const {values, positionals} = parseArgs({
-    options: {json: {type: 'boolean'}, help: {type: 'boolean'}}, allowPositionals: true,
+    options: {
+      json: {type: 'boolean'},
+      help: {type: 'boolean'},
+      'category-column': {type: 'string'},
+      'percent-column': {type: 'string'},
+    },
+    allowPositionals: true,
   });
   json = values.json;
   if (values.help) {
     console.log(usage);
   } else {
     if (positionals.length !== 3) throw Error(usage);
+    const category = values['category-column'];
+    const rate = values['percent-column'];
+    const hasMapping = category !== undefined || rate !== undefined;
+    if (hasMapping && (!category?.trim() || !rate?.trim())) {
+      throw Error('Specify both --category-column and --percent-column with nonempty header names.');
+    }
     const [recipeText, csv, caption] = await Promise.all([
       readText(positionals[0], 40000), readText(positionals[1], 12000), readText(positionals[2], 8000),
     ]);
     const check = readPublishCheck(JSON.parse(recipeText));
-    const report = runPublishCheck(readChart(csv), caption, check);
+    const report = runPublishCheck(readChart(csv, hasMapping ? {category, rate} : undefined), caption, check);
     const passed = report.status === 'explicit' || report.status === 'implied';
     process.exitCode = passed ? 0 : 1;
     if (json) console.log(JSON.stringify(report, null, 2));

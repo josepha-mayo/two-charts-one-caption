@@ -152,9 +152,20 @@
       <summary>Use a different chart</summary>
       <label for="csv-file">Choose a CSV file</label>
       <input id="csv-file" type="file" accept=".csv,text/csv">
-      <label for="csv">Or paste CSV with two to seven categories, headed <code>category,percent</code></label>
-      <textarea id="csv" rows="6" maxlength="4000" spellcheck="false"></textarea>
+      <label for="csv">Or paste CSV</label>
+      <p id="csv-help">Use two to seven data rows. You can choose which columns to use from your spreadsheet.</p>
+      <textarea id="csv" rows="6" spellcheck="false" aria-describedby="csv-help"></textarea>
       <button type="button" id="load">Load chart</button>
+      <fieldset id="csv-columns" hidden>
+        <legend>Choose chart columns</legend>
+        <div class="controls">
+          <label for="csv-category">Category</label>
+          <select id="csv-category"></select>
+          <label for="csv-percent">Percentage</label>
+          <select id="csv-percent"></select>
+        </div>
+        <button type="button" id="use-csv-columns">Use these columns</button>
+      </fieldset>
       <p id="csv-status" role="status"></p>
     </details>
     <details class="csv-panel recheck-panel" id="recheck-panel">

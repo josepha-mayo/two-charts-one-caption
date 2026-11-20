@@ -1,3 +1,5 @@
+export {readChart} from './csv.mjs';
+
 const validPercent = value =>
   typeof value === 'number' && Number.isFinite(value) && value >= 0 && value <= 100 &&
   value === Number(value.toFixed(2));
@@ -6,28 +8,6 @@ const listFormat = new Intl.ListFormat('en', {style: 'long', type: 'conjunction'
 
 export function isCutoffClaim(claim) {
   return claim.type === 'atLeast' || claim.type === 'atLeastSome';
-}
-
-export function readChart(csv) {
-  if (typeof csv !== 'string' || csv.length > 4000) throw Error('Use CSV under 4,000 characters.');
-  const lines = csv.trim().split(/\r?\n/);
-  if (!['category,percent', 'service,percent'].includes(lines.shift()?.trim().toLowerCase())) {
-    throw Error('Use the header category,percent followed by one category per line.');
-  }
-  if (lines.length < 2 || lines.length > 7) throw Error('Enter two to seven categories.');
-  const seen = new Set();
-  return lines.map(line => {
-    const match = /^\s*(?:"((?:[^"]|"")*)"|([^",]+)),\s*(\d{1,3}(?:\.\d{1,2})?)\s*%?\s*$/.exec(line);
-    if (!match) throw Error('Each line needs a name and a percentage with up to two decimal places.');
-    const label = (match[1]?.replaceAll('""', '"') ?? match[2]).trim();
-    const value = Number(match[3]);
-    const key = label.normalize('NFKC').toLowerCase();
-    if (!label || label.length > 64 || seen.has(key) || !validPercent(value)) {
-      throw Error('Use unique category names and percentages from 0 to 100.');
-    }
-    seen.add(key);
-    return {label, value};
-  });
 }
 
 export function readQuestion(question) {

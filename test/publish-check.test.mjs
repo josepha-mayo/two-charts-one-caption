@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
 import {spawnSync} from 'node:child_process';
-import {readFileSync} from 'node:fs';
+import {mkdtempSync, readFileSync, rmdirSync, unlinkSync, writeFileSync} from 'node:fs';
+import {tmpdir} from 'node:os';
+import {join} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import test from 'node:test';
 import {readChart, supportedDetail} from '../src/check.mjs';
@@ -149,4 +151,26 @@ test('CLI JSON reports a pass, a publish failure, and invalid inputs with distin
     assert.equal(runResult.status, exit, runResult.stderr);
     assert.equal(JSON.parse(runResult.stdout).status, status);
   }
+});
+
+test('CLI rechecks the chosen columns of a fresh spreadsheet export', t => {
+  const directory = mkdtempSync(join(tmpdir(), 'two-charts-cli-'));
+  const csvPath = join(directory, 'export.csv');
+  const mapping = ['--category-column', 'Bus service', '--percent-column', 'On-time rate'];
+  const script = fileURLToPath(new URL('../scripts/verify-caption.mjs', import.meta.url));
+  const run = headers => spawnSync(process.execPath, [
+    script, fileURLToPath(example('caption-recheck.json')), csvPath, fileURLToPath(example('caption.txt')), '--json', ...headers,
+  ], {encoding: 'utf8'});
+  t.after(() => {
+    unlinkSync(csvPath);
+    rmdirSync(directory);
+  });
+  writeFileSync(csvPath, '"Internal notes","On-time rate","Bus service"\r\nalpha,"71.5%",Local\r\n"note, private","70.5%",Select Bus Service\r\nbeta,65.1,Express\r\n');
+  const valid = run(mapping);
+  assert.equal(valid.status, 0, valid.stderr);
+  assert.equal(JSON.parse(valid.stdout).status, 'explicit');
+  assert.doesNotMatch(valid.stdout, /Internal notes|note, private/);
+  const missing = run(mapping.slice(0, 2));
+  assert.equal(missing.status, 2);
+  assert.match(JSON.parse(missing.stdout).message, /Specify both/);
 });

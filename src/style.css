@@ -139,6 +139,11 @@ select { min-height: 32px; padding: 3px; }
 #ai-activity-list span { color: var(--mint); font-size: .86rem; }
 #ai-activity-list p { color: var(--muted); font-size: .86rem; }
 #csv-file { max-width: 100%; font: inherit; }
+#csv-help { color: var(--muted); font-size: .88rem; margin-bottom: 6px; }
+#csv-columns { min-inline-size: 0; border: 1px solid var(--line); border-radius: 6px; margin: 12px 0 0; }
+#csv-columns .controls { gap: 6px 10px; margin: 0 0 10px; }
+#csv-columns label { margin: 0; }
+#csv-columns select { max-inline-size: 100%; min-height: 42px; }
 #csv-status:not(:empty) { color: var(--muted); margin-top: 8px; overflow-wrap: anywhere; }
 .recheck-panel { margin-top: 10px; }
 .recheck-panel p { margin-top: 8px; color: var(--muted); }
