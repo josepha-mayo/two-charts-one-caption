@@ -11,7 +11,7 @@
   <main class="shell" id="studio">
     <header class="header">
       <a href="./" aria-label="Two Charts, One Caption home">Two Charts, One Caption</a>
-      <button type="button" id="connect" class="small">Connect Firebase</button>
+      <button type="button" id="ai-setup" class="small">Chrome AI setup</button>
     </header>
     <section class="hero">
       <h1>Same words.<br><em>Different answer.</em></h1>
@@ -151,6 +151,17 @@
     <form method="dialog" class="controls">
       <button type="submit" value="cancel">Cancel</button>
       <button type="submit" value="send" class="primary">Send to Gemini</button>
+    </form>
+  </dialog>
+  <dialog id="ai-setup-dialog" aria-labelledby="ai-setup-title">
+    <h2 id="ai-setup-title">Chrome AI setup</h2>
+    <p id="ai-setup-status" role="status"></p>
+    <progress id="ai-setup-progress" aria-label="Chrome model download" max="100" hidden></progress>
+    <p><a href="https://developer.chrome.com/docs/ai/get-started" target="_blank" rel="noopener noreferrer">Chrome’s built-in AI requirements</a></p>
+    <form method="dialog" class="controls">
+      <button type="button" id="prepare-device" class="primary" hidden>Prepare Chrome’s model</button>
+      <button type="button" id="refresh-device">Check again</button>
+      <button type="submit">Close</button>
     </form>
   </dialog>
   <dialog id="reader-dialog" aria-labelledby="reader-link-title">

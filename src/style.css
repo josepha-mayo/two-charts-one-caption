@@ -136,6 +136,9 @@ footer a { color: var(--cool); text-underline-offset: 3px; }
 dialog { color: var(--text); background: var(--panel); width: min(680px, calc(100% - 28px)); border: 1px solid #7180a2; border-radius: 9px; padding: 20px; }
 dialog::backdrop { background: #090d18c9; }
 dialog p { color: var(--muted); margin-top: 8px; }
+dialog p a { color: var(--cool); text-underline-offset: 3px; }
+#ai-setup-progress { width: 100%; margin-top: 12px; accent-color: var(--mint); }
+#ai-setup-dialog .controls { margin-top: 14px; }
 dialog pre { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 43vh; overflow: auto; background: var(--background); padding: 12px; border-radius: 5px; }
 @media (max-width: 660px) {
   .hero, .charts, .test-versions { grid-template-columns: 1fr; gap: 12px; }

@@ -1,6 +1,7 @@
 import {initializeApp, deleteApp} from 'firebase/app';
 import {getToken, initializeAppCheck, ReCaptchaEnterpriseProvider} from 'firebase/app-check';
 import {getAI, GoogleAIBackend, getGenerativeModel, InferenceMode, InferenceSource} from 'firebase/ai';
+import {deviceAvailability} from './device.mjs';
 
 const deviceModels = new WeakMap();
 let deviceClient;
@@ -23,7 +24,7 @@ export async function configure() {
   }
 }
 
-export async function generateOnDevice(prompt, responseConstraint) {
+function deviceModel(responseConstraint) {
   deviceClient ??= getAI(initializeApp(config.firebase, 'two-charts-device'), {backend: new GoogleAIBackend()});
   let model = deviceModels.get(responseConstraint);
   if (!model) {
@@ -33,6 +34,21 @@ export async function generateOnDevice(prompt, responseConstraint) {
     }, {timeout: 60_000});
     deviceModels.set(responseConstraint, model);
   }
+  return model;
+}
+
+export async function prepareOnDevice(responseConstraint, onProgress) {
+  await deviceModel(responseConstraint).initializeDeviceModel(onProgress);
+}
+
+export async function generateOnDevice(prompt, responseConstraint) {
+  const state = await deviceAvailability();
+  if (state !== 'available') {
+    if (state === 'unavailable') throw Error('On-device inference is unavailable in this Chrome session.');
+    throw Error('The Chrome model needs to finish downloading. Open Chrome AI setup to prepare it.');
+  }
+  const model = deviceModel(responseConstraint);
+  await model.initializeDeviceModel();
   return generate(model, prompt, InferenceSource.ON_DEVICE);
 }
 

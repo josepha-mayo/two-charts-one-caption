@@ -5,6 +5,7 @@ import {
 import {localFacts, cloudPrompt, localPrompt, checkText, answerConstraint} from './draft.mjs';
 import {checkBrief, questionPrompt, questionConstraint, readQuestionDraft} from './brief.mjs';
 import {createPublishCheck, readPublishCheck, reviewPublishInputs} from './publish-check.mjs';
+import {deviceAvailability} from './device.mjs';
 import {sampleCsv, sampleCaption, cutoffCaption, sampleSource} from './sample.mjs';
 import {
   addReaderResponse, createReaderLink, createReaderTest, encodeResponse, readReaderLink,
@@ -278,27 +279,76 @@ cutoff.addEventListener('input', invalidate);
 
 function connectFirebase() {
   if (firebaseConnection) return firebaseConnection;
-  const button = el('connect');
-  button.disabled = true;
   firebaseConnection = import('./firebase.mjs').then(async module => {
     await module.configure();
-    button.textContent = 'Firebase configured';
     return module;
   }).catch(error => {
     firebaseConnection = null;
-    button.disabled = false;
     throw error;
   });
   return firebaseConnection;
 }
 
-el('connect').addEventListener('click', async () => {
-  const current = revision;
+const setupDialog = el('ai-setup-dialog');
+const setupStatus = el('ai-setup-status');
+const setupProgress = el('ai-setup-progress');
+const prepareDevice = el('prepare-device');
+const refreshDevice = el('refresh-device');
+let deviceSetupPending = false;
+
+const availabilityText = {
+  available: 'Chrome’s on-device model is ready. Private notes and source values can be processed in this browser.',
+  downloadable: 'Chrome can download its on-device model. The first download can take several minutes.',
+  downloading: 'Chrome reports that its model is downloading. Prepare it here to follow progress.',
+  unavailable: 'This browser does not offer the on-device model. The browser check and reader links are still available.',
+};
+
+async function refreshDeviceSetup() {
+  if (deviceSetupPending) return;
+  refreshDevice.disabled = true;
+  prepareDevice.hidden = true;
+  setupStatus.textContent = 'Checking Chrome’s on-device model…';
   try {
-    await connectFirebase();
-    if (current === revision && !busy && !result) status.textContent = 'Firebase is configured.';
-  } catch (error) {
-    if (current === revision && !busy) status.textContent = error.message;
+    const state = await deviceAvailability();
+    setupStatus.textContent = availabilityText[state];
+    if (state === 'downloadable' || state === 'downloading') {
+      await connectFirebase();
+      prepareDevice.hidden = false;
+    }
+  } catch {
+    setupStatus.textContent = 'Chrome AI setup could not finish. Check again or use the browser check.';
+  } finally {
+    refreshDevice.disabled = false;
+  }
+}
+
+el('ai-setup').addEventListener('click', () => {
+  setupDialog.showModal();
+  refreshDeviceSetup();
+});
+refreshDevice.addEventListener('click', refreshDeviceSetup);
+
+prepareDevice.addEventListener('click', async () => {
+  deviceSetupPending = true;
+  prepareDevice.disabled = true;
+  refreshDevice.disabled = true;
+  setupProgress.hidden = false;
+  setupProgress.removeAttribute('value');
+  setupStatus.textContent = 'Chrome is preparing the model. You can close setup and keep editing.';
+  try {
+    const firebase = await connectFirebase();
+    await firebase.prepareOnDevice(answerConstraint, progress => {
+      if (Number.isFinite(progress)) setupProgress.value = Math.max(0, Math.min(100, Math.round(progress * 100)));
+    });
+    deviceSetupPending = false;
+    await refreshDeviceSetup();
+  } catch {
+    setupStatus.textContent = 'Chrome could not prepare the model. Check its requirements and retry.';
+  } finally {
+    deviceSetupPending = false;
+    setupProgress.hidden = true;
+    prepareDevice.disabled = false;
+    refreshDevice.disabled = false;
   }
 });
 
