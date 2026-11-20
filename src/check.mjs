@@ -55,7 +55,7 @@ function answerValues(values, question) {
   return values.flatMap((value, index) => value === extreme ? [index + 1] : []);
 }
 
-function sameAnswer(a, b) {
+export function sameAnswer(a, b) {
   return a.length === b.length && a.every((index, position) => index === b[position]);
 }
 

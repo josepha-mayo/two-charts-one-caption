@@ -1,6 +1,6 @@
 import './style.css';
 import {
-  readChart, checkCaption, validateClaims, answerText, supportedDetail, fitsClaim, questionText, readQuestion,
+  readChart, checkCaption, validateClaims, answerText, sameAnswer, supportedDetail, fitsClaim, questionText, readQuestion,
 } from './check.mjs';
 import {localFacts, cloudPrompt, localPrompt, checkText, answerConstraint, reviewCloudClaims} from './draft.mjs';
 import {checkBrief, questionPrompt, questionConstraint, readQuestionDraft} from './brief.mjs';
@@ -20,6 +20,7 @@ const cutoff = el('cutoff');
 const csv = el('csv');
 const dialog = el('dialog');
 const status = el('status');
+const cutoffExample = new URLSearchParams(location.search).get('example') === 'cutoff';
 let rows, result, reviewed, candidate, snapshot;
 let firebaseConnection;
 let revision = 0;
@@ -96,6 +97,14 @@ function choiceButton(label, onClick, primary = false) {
   return button;
 }
 
+function categoryChoice(label, className) {
+  const input = make('input');
+  input.type = 'checkbox';
+  const option = make('label', undefined, className);
+  option.append(input, make('span', label));
+  return {input, option};
+}
+
 function updateExampleRefresh() {
   const restoring = chartSource === refreshedExample;
   const eligible = chartSource === originalExample && result?.status === 'explicit' &&
@@ -127,24 +136,15 @@ function invalidate() {
   const showCutoff = question.value === 'atLeast';
   el('cutoff-label').hidden = !showCutoff;
   try {
-    el('studio-question').textContent = questionText(selectedQuestion());
+    el('studio-question').textContent = `${questionText(selectedQuestion())} Select all that apply.`;
   } catch (error) {
     el('studio-question').textContent = error.message;
   }
   const unknown = choiceButton('The caption doesn’t say', () => browserCheck(null), true);
-  if (!showCutoff) {
-    el('reader-choices').replaceChildren(
-      ...rows.map(({label}, i) => choiceButton(label, () => browserCheck([i + 1]))), unknown,
-    );
-    return;
-  }
   const checks = rows.map(({label}) => {
-    const input = make('input');
-    input.type = 'checkbox';
-    input.disabled = busy;
-    const option = make('label', undefined, 'challenge-option');
-    option.append(input, make('span', label));
-    return {input, option};
+    const choice = categoryChoice(label, 'challenge-option');
+    choice.input.disabled = busy;
+    return choice;
   });
   const reveal = choiceButton('Check selected categories', () => {
     const ids = checks.flatMap(({input}, i) => input.checked ? [i + 1] : []);
@@ -152,7 +152,8 @@ function invalidate() {
     else status.textContent = 'Select at least one category, or choose an answer below.';
   });
   el('reader-choices').replaceChildren(
-    ...checks.map(({option}) => option), reveal, choiceButton('None reach the cutoff', () => browserCheck([])), unknown,
+    ...checks.map(({option}) => option), reveal,
+    ...(showCutoff ? [choiceButton('None reach the cutoff', () => browserCheck([]))] : []), unknown,
   );
 }
 
@@ -163,7 +164,7 @@ function syncActions() {
   for (const control of el('reader-choices').querySelectorAll('button, input')) control.disabled = busy;
 }
 
-function loadSample(cutoffExample = false) {
+function loadSample() {
   chartSource = originalExample;
   exampleReview = null;
   csv.value = sampleCsv;
@@ -238,7 +239,14 @@ function render(claims, alternatives = [], note = 'Browser check') {
     conflict: 'A checked fact contradicts the source chart. Revise the caption or its interpretation.',
     implied: `The checked facts force the same answer: ${names}. You can still state it directly for readers.`,
   };
-  status.textContent = text[state];
+  const resolved = state === 'explicit' || state === 'implied';
+  let feedback = '';
+  if (resolved && Array.isArray(readerAnswer)) {
+    feedback = sameAnswer(readerAnswer, expected)
+      ? 'Your selection matches the checked answer. '
+      : 'Your selection differs from the checked answer. ';
+  }
+  status.textContent = feedback + text[state];
   if (alternate) chart(el('alternate'), alternate, alternateAnswer, selected, true);
   else el('alternate').replaceChildren(make('p', state === 'explicit' || state === 'implied'
     ? 'The caption decides this question.' : 'No alternate is shown for this check.', 'empty'));
@@ -252,6 +260,11 @@ function render(claims, alternatives = [], note = 'Browser check') {
 function browserCheck(guess) {
   invalidate();
   readerAnswer = guess;
+  if (Array.isArray(guess)) {
+    for (const [index, input] of el('reader-choices').querySelectorAll('input').entries()) {
+      input.checked = guess.includes(index + 1);
+    }
+  }
   try {
     const text = checkText(caption.value);
     render(validateClaims(localFacts(rows, text), text, rows.length));
@@ -555,6 +568,7 @@ el('apply').addEventListener('click', () => {
   }
   caption.value = text;
   revision += 1;
+  readerAnswer = undefined;
   const fact = typeof selected === 'string'
     ? {type: selected, value: rows[result.expected[0] - 1].value}
     : selected;
@@ -869,10 +883,7 @@ function mountReader(packet) {
   const prompt = questionText(packet.question);
   el('reader-question').textContent = `${prompt} Select all that apply.`;
   const options = packet.labels.map((label, index) => {
-    const input = make('input');
-    input.type = 'checkbox';
-    const option = make('label', undefined, 'reader-option');
-    option.append(input, make('span', label));
+    const {input, option} = categoryChoice(label, 'reader-option');
     el('reader-options').append(option);
     return {input, label, id: index + 1};
   });
@@ -923,7 +934,7 @@ try {
   if (packet) mountReader(packet);
   else {
     readerTest = restoreReaderTest(tabStorage);
-    loadSample(new URLSearchParams(location.search).get('example') === 'cutoff');
+    loadSample();
     renderReaderTest();
   }
 } catch {

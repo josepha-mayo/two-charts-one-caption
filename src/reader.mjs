@@ -1,5 +1,5 @@
 import {checkText} from './draft.mjs';
-import {readQuestion} from './check.mjs';
+import {readQuestion, sameAnswer} from './check.mjs';
 
 const PREFIX = '#reader=';
 const RESPONSE_PREFIX = 'two-charts-v1.';
@@ -154,7 +154,7 @@ export function readerCounts(test, variant) {
   const result = {correct: 0, uncertain: 0, different: 0};
   for (const {selected} of test[variant].responses) {
     if (selected === null) result.uncertain++;
-    else if (selected.length === test.expected.length && selected.every((id, i) => id === test.expected[i])) result.correct++;
+    else if (sameAnswer(selected, test.expected)) result.correct++;
     else result.different++;
   }
   return result;
