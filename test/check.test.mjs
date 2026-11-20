@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readChart, checkCaption, validateClaims, answer, supportedDetail, fits} from '../src/check.mjs';
-import {localFacts, cloudPrompt, localPrompt} from '../src/draft.mjs';
+import {localFacts, cloudPrompt, localPrompt, reviewCloudClaims} from '../src/draft.mjs';
 import {questionPrompt, readQuestionDraft} from '../src/brief.mjs';
 import {sampleCsv, sampleCaption} from '../src/sample.mjs';
 import {
@@ -260,4 +260,17 @@ test('an explicit strict or opposite threshold cannot be approved as an inclusiv
   const evidence = 'Show rates at or above 70%.';
   assert.deepEqual(readQuestionDraft({kind: 'atLeast', cutoff: 70, evidence}, evidence).question,
     {type: 'atLeast', cutoff: 70});
+});
+
+test('cloud cutoff claims cannot use the question in place of evidence from the caption', () => {
+  const caption = sampleCaption + ' Local had the highest rate, at 71.5%. Express had the lowest rate, at 65.1%.';
+  const local = localFacts(sample, caption);
+  const wrongQuote = {type: 'atLeast', cutoff: 70, ids: [1, 2], evidence: 'Local had the highest rate, at 71.5%.'};
+  const reviewed = reviewCloudClaims(sample, caption, [...local, wrongQuote]);
+  assert.equal(reviewed.excluded, 1);
+  assert.equal(checkCaption(sample, {type: 'atLeast', cutoff: 70}, reviewed.claims).status, 'ambiguous');
+  const evidence = 'Only Local and Select Bus Service reached at least 70%.';
+  const repaired = reviewCloudClaims(sample, `${caption} ${evidence}`, [...local, {...wrongQuote, evidence}]);
+  assert.equal(repaired.excluded, 0);
+  assert.equal(checkCaption(sample, {type: 'atLeast', cutoff: 70}, repaired.claims).status, 'explicit');
 });

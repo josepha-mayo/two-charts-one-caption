@@ -2,7 +2,7 @@ import './style.css';
 import {
   readChart, checkCaption, validateClaims, answerText, supportedDetail, fitsClaim, questionText, readQuestion,
 } from './check.mjs';
-import {localFacts, cloudPrompt, localPrompt, checkText, answerConstraint} from './draft.mjs';
+import {localFacts, cloudPrompt, localPrompt, checkText, answerConstraint, reviewCloudClaims} from './draft.mjs';
 import {checkBrief, questionPrompt, questionConstraint, readQuestionDraft} from './brief.mjs';
 import {createPublishCheck, readPublishCheck, reviewPublishInputs} from './publish-check.mjs';
 import {deviceAvailability} from './device.mjs';
@@ -439,12 +439,15 @@ dialog.addEventListener('close', async () => {
     const draft = await firebase.generateInCloud(request.prompt);
     if (current !== revision) return;
     if (draft?.supported !== true || !Array.isArray(draft.alternatives)) throw Error('Gemini could not interpret the caption using the supported checks.');
-    const claims = validateClaims(draft.claims, checkText(caption.value), rows.length);
+    const {claims, excluded} = reviewCloudClaims(rows, caption.value, draft.claims);
     candidate = {claims, alternatives: draft.alternatives};
     const entries = claims.map(claim => {
       return make('li', `${describeClaim(claim)} · “${claim.evidence}”`);
     });
     el('claims').replaceChildren(...(entries.length ? entries : [make('li', 'Gemini found no supported quantitative claims.')]));
+    el('claim-rejections').textContent = excluded
+      ? `Excluded ${excluded} cutoff ${excluded === 1 ? 'claim' : 'claims'} without a supporting quote. Confirm the remaining facts cover the caption.`
+      : '';
     el('claim-review').hidden = false;
     el('confirm-facts').focus();
     status.textContent = 'Firebase reported in-cloud inference. Check the extracted facts.';

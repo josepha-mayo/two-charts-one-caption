@@ -94,6 +94,7 @@ select { min-height: 32px; padding: 3px; }
 .revision p { margin: 6px 0 12px; color: var(--gold); font-size: 1.15rem; }
 #claim-review { margin-bottom: 14px; }
 #claims { padding-inline-start: 23px; overflow-wrap: anywhere; }
+#claim-rejections:not(:empty) { color: var(--gold); margin-bottom: 12px; }
 .csv-panel label { display: block; margin-block: 10px 6px; color: var(--muted); }
 #csv-file { max-width: 100%; font: inherit; }
 #csv-status:not(:empty) { color: var(--muted); margin-top: 8px; overflow-wrap: anywhere; }
