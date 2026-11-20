@@ -390,12 +390,51 @@ test('cloud review rejects altered facts when it recognizes their quotes inside 
     {type: 'highest', ids: [1], evidence: 'Local had the highest rate, at 71.5%.'},
   ];
   const {claims, excluded, restored} = reviewCloudClaims(sample, caption, drafted);
-  assert.deepEqual(claims, [{...drafted[2], value: 71.5}]);
+  assert.deepEqual(claims, [{...drafted[2], value: 71.5},
+    {type: 'value', id: 2, value: 70.5, evidence: 'Select Bus Service had a rate of 70.5%.'}]);
   assert.equal(excluded, 2);
-  assert.equal(restored, 0);
+  assert.equal(restored, 1);
   const paraphrased = 'Local led all services with an on-time rate of 71.5%.';
   const cloud = {type: 'highest', ids: [1], value: 71.5, evidence: paraphrased};
   assert.deepEqual(reviewCloudClaims(sample, paraphrased, [cloud]).claims, [cloud]);
+});
+
+test('cloud review restores an omitted exact answer or contradiction from mixed prose', () => {
+  const question = {type: 'atLeast', cutoff: 70};
+  const known = 'Only Local and Select Bus Service reached at least 70%.';
+  const prefix = 'The committee reviewed these rates. ';
+  const excerpt = 'Select Bus Service reached at least 70%.';
+  const draft = {type: 'value', id: 3, value: 70, evidence: '70%'};
+  const recovered = reviewCloudClaims(sample, prefix + known, [draft]);
+  assert.deepEqual(recovered.claims, [{...question, ids: [1, 2], evidence: known}]);
+  assert.equal(recovered.excluded, 1);
+  assert.equal(recovered.restored, 1);
+  assert.equal(checkCaption(sample, question, recovered.claims).status, 'explicit');
+  const contradictory = reviewCloudClaims(sample, prefix + 'Only ' + excerpt, []);
+  assert.equal(checkCaption(sample, question, contradictory.claims).status, 'conflict');
+});
+
+test('quoted examples, asides, abbreviations and qualifications do not establish standalone facts', () => {
+  const question = {type: 'atLeast', cutoff: 70};
+  const fake = 'Only Express reached at least 70%.';
+  const actual = 'Only Local and Select Bus Service reached at least 70%.';
+  const draft = {...question, ids: [3], evidence: fake};
+  const prefixes = [
+    'An earlier draft read “Old example. ' + fake + '” ',
+    'The editor wrote (unverified example. ' + fake + ') ',
+    'The editor wrote \'unverified example. ' + fake + '\' ',
+    'An earlier draft read "Old example. ' + fake + '" ',
+    'The report used illustrative phrases, e.g. ' + fake + ' ',
+    'Only Express reached at least 70%, if the estimates are right. ',
+  ];
+  for (const prefix of prefixes) {
+    const reviewed = reviewCloudClaims(sample, prefix + actual, prefix.includes(fake) ? [draft] : []);
+    assert.deepEqual(reviewed.claims, [{...question, ids: [1, 2], evidence: actual}], prefix);
+  }
+  const rows = [{label: 'Route 9. East', value: 70}, {label: 'Route 9 West', value: 30}];
+  const quotedName = 'Only the category "Route 9. East" reached at least 70%.';
+  assert.deepEqual(reviewCloudClaims(rows, 'Service improved. ' + quotedName, []).claims,
+    [{...question, ids: [1], evidence: quotedName}]);
 });
 
 test('positive cutoff evidence constrains named categories and leaves the other bars open', () => {

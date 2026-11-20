@@ -51,30 +51,24 @@ export function cloudPrompt(rows, question, caption) {
 export function reviewCloudClaims(rows, caption, candidates) {
   const clean = checkText(caption);
   const claims = validateClaims(candidates, clean, rows.length);
-  let local;
-  try {
-    local = validateClaims(localFacts(rows, clean), clean, rows.length);
-  } catch {
-    // Free-form captions can still be reviewed using Gemini's interpretation.
-  }
+  const {facts, complete} = scanCaptionFacts(rows, clean);
+  const local = validateClaims(facts, clean, rows.length);
   const accepted = [];
   const represented = new Set();
   let narrowed = 0;
   for (const claim of claims) {
     const quote = claim.evidence.trim();
-    const parsed = local
-      ? local.find(fact => matchesQuote(quote, fact))
-      : readQuotedFact(rows, clean, quote);
+    const parsed = local.find(fact => matchesQuote(quote, fact));
     if (parsed) {
       if (!matchesFact(claim, parsed) || represented.has(parsed.evidence)) continue;
       represented.add(parsed.evidence);
       if (claim.type === 'atLeast' && parsed.type === 'atLeastSome') narrowed += 1;
       accepted.push({...parsed, evidence: claim.evidence});
-    } else if (!local && !isCutoffClaim(claim)) {
+    } else if (!complete && !isCutoffClaim(claim) && !local.some(fact => fact.evidence.includes(quote))) {
       accepted.push(claim);
     }
   }
-  const missing = local?.filter(fact => !represented.has(fact.evidence)) ?? [];
+  const missing = local.filter(fact => !represented.has(fact.evidence));
   const reviewed = validateClaims([...accepted, ...missing], clean, rows.length)
     .sort((a, b) => clean.indexOf(a.evidence) - clean.indexOf(b.evidence));
   return {claims: reviewed, excluded: claims.length - accepted.length, narrowed, restored: missing.length};
@@ -135,11 +129,7 @@ function matchesQuote(quote, fact) {
 
 export function readQuotedFact(rows, caption, quote) {
   if (!quote) return;
-  for (let start = caption.indexOf(quote); start !== -1; start = caption.indexOf(quote, start + quote.length)) {
-    if (start > 0 && !/[.!?]\s+$/.test(caption.slice(0, start))) continue;
-    const fact = readLocalFact(rows, caption.slice(start));
-    if (fact && matchesQuote(quote, fact)) return fact;
-  }
+  return scanCaptionFacts(rows, caption).facts.find(fact => matchesQuote(quote, fact));
 }
 
 export function readQuotedCutoff(rows, caption, claim) {
@@ -165,16 +155,64 @@ function readLocalFact(rows, text) {
   }
 }
 
-export function localFacts(rows, caption) {
-  let remaining = checkText(caption);
+const quotes = new Map([['"', '"'], ["'", "'"], ['“', '”'], ['‘', '’']]);
+const groups = new Map([['(', ')'], ['[', ']'], ['{', '}']]);
+const punctuation = /[.!?]/;
+const initialOrAbbreviation = /(?:\b(?:[A-Z]|Mr|Mrs|Ms|Dr|Prof|St|vs|No)|(?:\b[A-Za-z]\.)+[A-Za-z])\.$/;
+
+// An unrecognized sentence may contain quotations or asides. Advance only
+// to a sentence boundary outside them, so examples stay part of the prose.
+function skipProse(text) {
+  const closers = [];
+  let quote = '';
+  for (let i = 0; i < text.length; i++) {
+    const char = text[i];
+    const previous = text[i - 1] ?? '';
+    const next = text[i + 1] ?? '';
+    const apostrophe = char === "'" && /[\p{L}\p{N}]/u.test(previous) && /[\p{L}\p{N}]/u.test(next);
+    let end = i;
+    if (quote) {
+      if (char === '\\' && (quote === '"' || quote === "'")) { i++; continue; }
+      if (char !== quote || apostrophe) continue;
+      quote = '';
+      end--;
+    } else if (quotes.has(char) && (char !== "'" || !/[\p{L}\p{N}]/u.test(previous))) {
+      quote = quotes.get(char);
+      continue;
+    } else if (groups.has(char)) {
+      closers.push(groups.get(char));
+    } else if (char === closers.at(-1)) {
+      closers.pop();
+      end--;
+    }
+    const mark = text[end] ?? '';
+    if (!closers.length && punctuation.test(mark) && /\s/.test(next) &&
+        (mark !== '.' || !initialOrAbbreviation.test(text.slice(0, end + 1)))) return text.slice(i + 1).trimStart();
+  }
+  return '';
+}
+
+function scanCaptionFacts(rows, caption) {
+  let remaining = caption.trim();
+  let complete = true;
   const facts = [];
   while (remaining) {
     const fact = readLocalFact(rows, remaining);
     if (!fact) {
-      throw Error('This wording needs a cloud fact draft. For a local check, use a sentence such as “Rates ranged from 20% to 90%.” or “North had a rate of 45%.”');
+      complete = false;
+      remaining = skipProse(remaining);
+      continue;
     }
     facts.push(fact);
     remaining = remaining.slice(fact.evidence.length).trimStart();
+  }
+  return {facts, complete};
+}
+
+export function localFacts(rows, caption) {
+  const {facts, complete} = scanCaptionFacts(rows, checkText(caption));
+  if (!complete) {
+    throw Error('This wording needs a cloud fact draft. For a local check, use a sentence such as “Rates ranged from 20% to 90%.” or “North had a rate of 45%.”');
   }
   return facts;
 }
