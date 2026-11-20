@@ -57,7 +57,7 @@ The Firebase client is loaded on demand. Configure a Firebase web app with the G
 }
 ```
 
-**Test with cloud Gemini** shows the exact text sent to the cloud, including the approved caption, question, and category names. Sending the specific request connects Firebase on demand. Confirm the extracted facts so the browser can verify the alternate against them. **Ask Chrome Nano for the detail** uses Firebase in device-only mode. The browser independently verifies the returned category IDs against the source chart before using them in the revision.
+**Test with cloud Gemini** shows the exact text sent to the cloud, including the approved caption, question, and category names. Sending the specific request connects Firebase on demand. The browser checks the meaning of quotes it can parse and restores omitted facts when it can read the whole caption. Confirm the extracted facts before checking the alternate. **Ask Chrome Nano for the detail** uses Firebase in device-only mode. The browser independently verifies the returned category IDs against the source chart before using them in the revision.
 
 Use **Suggest a question from a private note** to turn an editorial brief into a ranking or cutoff question. Firebase requests device-only inference. The app checks that the suggestion quotes the note and that any proposed cutoff appears in that quote. Only **Use this question** applies it. The cloud route starts App Check separately and receives the selected question, caption and category names after approval. It does not get the note or the original CSV.
 

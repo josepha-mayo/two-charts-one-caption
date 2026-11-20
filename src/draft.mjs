@@ -1,4 +1,4 @@
-import {answerText, isCutoffClaim, readQuestion, validateClaims} from './check.mjs';
+import {answerText, isCutoffClaim, readQuestion, sameAnswer, validateClaims} from './check.mjs';
 
 const MAX_CAPTION = 1800;
 const percent = String.raw`\d{1,3}(?:\.\d{1,2})?`;
@@ -44,17 +44,43 @@ export function cloudPrompt(rows, question, caption) {
 export function reviewCloudClaims(rows, caption, candidates) {
   const clean = checkText(caption);
   const claims = validateClaims(candidates, clean, rows.length);
+  let local;
+  try {
+    local = validateClaims(localFacts(rows, clean), clean, rows.length);
+  } catch {
+    // Free-form captions can still be reviewed using Gemini's interpretation.
+  }
   const accepted = [];
+  const represented = new Set();
   let narrowed = 0;
   for (const claim of claims) {
-    const supported = isCutoffClaim(claim)
-      ? readQuotedCutoff(rows, clean, claim)
-      : withQuotedRankValue(rows, claim);
-    if (!supported) continue;
-    if (claim.type === 'atLeast' && supported.type === 'atLeastSome') narrowed += 1;
-    accepted.push(supported);
+    const quote = claim.evidence.trim();
+    const parsed = local
+      ? local.find(fact => matchesQuote(quote, fact))
+      : findQuotedFact(rows, clean, quote);
+    if (parsed) {
+      if (!matchesFact(claim, parsed) || represented.has(parsed.evidence)) continue;
+      represented.add(parsed.evidence);
+      if (claim.type === 'atLeast' && parsed.type === 'atLeastSome') narrowed += 1;
+      accepted.push({...parsed, evidence: claim.evidence});
+    } else if (!local && !isCutoffClaim(claim)) {
+      accepted.push(claim);
+    }
   }
-  return {claims: accepted, excluded: claims.length - accepted.length, narrowed};
+  const missing = local?.filter(fact => !represented.has(fact.evidence)) ?? [];
+  const reviewed = validateClaims([...accepted, ...missing], clean, rows.length)
+    .sort((a, b) => clean.indexOf(a.evidence) - clean.indexOf(b.evidence));
+  return {claims: reviewed, excluded: claims.length - accepted.length, narrowed, restored: missing.length};
+}
+
+function matchesFact(claim, fact) {
+  if (isCutoffClaim(fact)) {
+    return isCutoffClaim(claim) && fact.cutoff === claim.cutoff && sameAnswer(fact.ids, claim.ids);
+  }
+  if (fact.type !== claim.type) return false;
+  if (fact.type === 'range') return fact.min === claim.min && fact.max === claim.max;
+  if (fact.type === 'value') return fact.id === claim.id && fact.value === claim.value;
+  return sameAnswer(fact.ids, claim.ids) && (claim.value === undefined || fact.value === claim.value);
 }
 
 export function withQuotedRankValue(rows, claim) {
@@ -103,18 +129,22 @@ function readCutoffFact(rows, text) {
   if (ids) return {type: only ? 'atLeast' : 'atLeastSome', cutoff: Number(figure), ids, evidence: cutoff[0]};
 }
 
-export function readQuotedCutoff(rows, caption, claim) {
-  const quote = claim.evidence.trim();
+function matchesQuote(quote, fact) {
+  return quote === fact.evidence || quote === fact.evidence.replace(/\.$/, '');
+}
+
+function findQuotedFact(rows, caption, quote) {
   if (!quote) return;
   for (let start = caption.indexOf(quote); start !== -1; start = caption.indexOf(quote, start + quote.length)) {
     if (start > 0 && !/[.!?]\s+$/.test(caption.slice(0, start))) continue;
-    const fact = readCutoffFact(rows, caption.slice(start));
-    if (fact && (quote === fact.evidence || quote === fact.evidence.replace(/\.$/, '')) &&
-        fact.cutoff === claim.cutoff && fact.ids.length === claim.ids.length &&
-        fact.ids.every((id, i) => id === claim.ids[i])) {
-      return {...fact, evidence: claim.evidence};
-    }
+    const fact = readLocalFact(rows, caption.slice(start));
+    if (fact && matchesQuote(quote, fact)) return fact;
   }
+}
+
+export function readQuotedCutoff(rows, caption, claim) {
+  const fact = findQuotedFact(rows, caption, claim.evidence.trim());
+  if (fact && isCutoffClaim(fact) && matchesFact(claim, fact)) return {...fact, evidence: claim.evidence};
 }
 
 function readLocalFact(rows, text) {

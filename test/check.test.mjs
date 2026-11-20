@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {readChart, checkCaption, validateClaims, answer, supportedDetail, fits} from '../src/check.mjs';
 import {localFacts, cloudPrompt, localPrompt, reviewCloudClaims} from '../src/draft.mjs';
 import {questionPrompt, readQuestionDraft} from '../src/brief.mjs';
-import {sampleCsv, sampleCaption} from '../src/sample.mjs';
+import {sampleCsv, sampleCaption, cutoffCaption} from '../src/sample.mjs';
 import {
   addReaderResponse, createReaderLink, createReaderTest, encodeResponse, readReaderLink,
   readerCounts, readerResponseId, restoreReaderTest, saveReaderTest,
@@ -325,12 +325,41 @@ test('cloud cutoff claims cannot use the question in place of evidence from the 
   assert.equal(checkCaption(sample, {type: 'atLeast', cutoff: 70}, repaired.claims).status, 'explicit');
 });
 
+test('a cloud draft cannot pin the middle bar with a quote that only states the range', () => {
+  const facts = localFacts(sample, cutoffCaption);
+  const invented = {type: 'value', id: 2, value: 70.5, evidence: facts[0].evidence};
+  const {claims, excluded, restored} = reviewCloudClaims(sample, cutoffCaption, [...facts.slice(1), invented]);
+  assert.equal(excluded, 1);
+  assert.equal(restored, 1);
+  assert.deepEqual(claims, facts);
+  const result = checkCaption(sample, {type: 'atLeast', cutoff: 70}, claims);
+  assert.equal(result.status, 'ambiguous');
+  assert.deepEqual(result.alternate, [71.5, 69.99, 65.1]);
+});
+
+test('cloud review rejects altered facts when it recognizes their quotes inside mixed wording', () => {
+  const caption = 'Buses were slow in the morning. Local had the highest rate, at 71.5%. ' +
+    'Select Bus Service had a rate of 70.5%.';
+  const drafted = [
+    {type: 'highest', ids: [1], value: 75, evidence: 'Local had the highest rate, at 71.5%.'},
+    {type: 'value', id: 1, value: 70.5, evidence: 'Select Bus Service had a rate of 70.5%'},
+    {type: 'highest', ids: [1], evidence: 'Local had the highest rate, at 71.5%.'},
+  ];
+  const {claims, excluded, restored} = reviewCloudClaims(sample, caption, drafted);
+  assert.deepEqual(claims, [{...drafted[2], value: 71.5}]);
+  assert.equal(excluded, 2);
+  assert.equal(restored, 0);
+  const paraphrased = 'Local led all services with an on-time rate of 71.5%.';
+  const cloud = {type: 'highest', ids: [1], value: 71.5, evidence: paraphrased};
+  assert.deepEqual(reviewCloudClaims(sample, paraphrased, [cloud]).claims, [cloud]);
+});
+
 test('positive cutoff evidence constrains named categories and leaves the other bars open', () => {
   const rows = readChart('category,percent\nNorth,78\nCentral,64\nSouth,48');
   const question = {type: 'atLeast', cutoff: 70};
   const evidence = 'North reached at least 70%.';
   const cloud = reviewCloudClaims(rows, evidence, [{...question, ids: [1], evidence}]);
-  assert.deepEqual(cloud, {claims: [{type: 'atLeastSome', cutoff: 70, ids: [1], evidence}], excluded: 0, narrowed: 1});
+  assert.deepEqual(cloud, {claims: [{type: 'atLeastSome', cutoff: 70, ids: [1], evidence}], excluded: 0, narrowed: 1, restored: 0});
   assert.deepEqual(localFacts(rows, evidence), cloud.claims);
   const result = checkCaption(rows, question, cloud.claims, [[69, 70, 48]]);
   assert.equal(result.status, 'ambiguous');

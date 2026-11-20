@@ -494,15 +494,16 @@ dialog.addEventListener('close', async () => {
     const draft = await firebase.generateInCloud(request.prompt);
     if (current !== revision) return;
     if (draft?.supported !== true || !Array.isArray(draft.alternatives)) throw Error('Gemini could not interpret the caption using the supported checks.');
-    const {claims, excluded, narrowed} = reviewCloudClaims(rows, caption.value, draft.claims);
+    const {claims, excluded, narrowed, restored} = reviewCloudClaims(rows, caption.value, draft.claims);
     candidate = {claims, alternatives: draft.alternatives};
     const entries = claims.map(claim => {
       return make('li', `${describeClaim(claim)} · “${claim.evidence}”`);
     });
     el('claims').replaceChildren(...(entries.length ? entries : [make('li', 'Gemini found no supported quantitative claims.')]));
     const notes = [];
-    if (excluded) notes.push(`Excluded ${excluded} cutoff ${excluded === 1 ? 'claim' : 'claims'} without a supporting quote. Confirm the remaining facts cover the caption.`);
+    if (excluded) notes.push(`Omitted ${excluded} ${excluded === 1 ? 'draft fact' : 'draft facts'} without distinct supporting wording.`);
     if (narrowed) notes.push('The quoted wording confirms who qualifies and leaves other categories open.');
+    if (restored) notes.push(`Recovered ${restored} ${restored === 1 ? 'fact' : 'facts'} directly from the caption.`);
     el('claim-rejections').textContent = notes.join(' ');
     el('claim-review').hidden = false;
     el('confirm-facts').focus();
