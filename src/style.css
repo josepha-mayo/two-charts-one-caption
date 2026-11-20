@@ -78,9 +78,9 @@ select { min-height: 32px; padding: 3px; }
 .track { position: relative; height: 12px; background: repeating-linear-gradient(90deg, #313a50 0 calc(25% - 1px), #4b5875 calc(25% - 1px) 25%); border-radius: 3px; overflow: hidden; }
 .bar { display: block; background: var(--cool); height: 100%; border-radius: 3px; }
 .cutoff-line { position: absolute; inset-block: 0; width: 2px; transform: translateX(-1px); border-inline-start: 2px dashed var(--text); filter: drop-shadow(0 0 1px #000); }
-.alternate .bar { background: #e3b5ed; }
 .selected .bar { background: var(--gold); }
 .selected .label { font-weight: 800; color: var(--gold); }
+.changed .bar { background: #e3b5ed; }
 .value { text-align: right; font-size: .87rem; font-variant-numeric: tabular-nums; }
 .answer { border-top: 1px solid var(--line); padding-top: 10px; font-size: .94rem; font-weight: 700; }
 .revision { border-color: #886b48; margin-bottom: 14px; }

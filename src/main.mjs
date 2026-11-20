@@ -55,6 +55,7 @@ function chart(target, values, ids, selected, compareToSource = false) {
     const item = make('li', undefined, ids.includes(i + 1) ? 'selected' : '');
     const name = make('span', label, 'label');
     if (compareToSource && values[i] !== rows[i].value) {
+      item.classList.add('changed');
       const delta = (Math.round(values[i] * 100) - Math.round(rows[i].value * 100)) / 100;
       const change = make('small', `${deltaFormat.format(delta)} percentage points from source`, 'value-change');
       name.append(change);
