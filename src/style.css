@@ -101,6 +101,8 @@ select { min-height: 32px; padding: 3px; }
 #csv-status:not(:empty) { color: var(--muted); margin-top: 8px; overflow-wrap: anywhere; }
 .recheck-panel { margin-top: 10px; }
 .recheck-panel p { margin-top: 8px; color: var(--muted); }
+#recheck-actions .controls { margin-top: 12px; }
+#recheck-actions p { overflow-wrap: anywhere; }
 #recheck-file { max-width: 100%; font: inherit; }
 .reader { max-width: 820px; }
 #reader-caption { font-size: 1.2rem; padding: 12px 0 16px; }

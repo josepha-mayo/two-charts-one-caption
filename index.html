@@ -119,9 +119,17 @@
     </details>
     <details class="csv-panel recheck-panel" id="recheck-panel">
       <summary>Rerun a saved check</summary>
-      <p>Load the current CSV and paste the caption you plan to publish above. Then choose the saved recheck file.</p>
+      <p>Load the current CSV and choose a recheck file. Use the caption in the editor or restore the reviewed wording from the file.</p>
       <label for="recheck-file">Recheck file (.json)</label>
       <input id="recheck-file" type="file" accept=".json,application/json">
+      <div id="recheck-actions" hidden>
+        <p id="recheck-file-name"></p>
+        <p id="recheck-source"></p>
+        <div class="controls">
+          <button type="button" id="run-recheck">Run saved check</button>
+          <button type="button" id="review-saved-caption">Review saved caption</button>
+        </div>
+      </div>
       <p id="recheck-status" role="status"></p>
     </details>
     <footer><a id="source">Example data from the NYC Comptroller’s bus report, Table 3</a><p>Compare one question at a time. Suggested charts are hypothetical. Your CSV stays in this tab.</p></footer>
@@ -196,6 +204,15 @@
     <form method="dialog" class="controls">
       <button type="submit" value="cancel">Keep current test</button>
       <button type="submit" value="replace">Replace test</button>
+    </form>
+  </dialog>
+  <dialog id="saved-caption-dialog" aria-labelledby="saved-caption-title" aria-describedby="saved-caption-note">
+    <h2 id="saved-caption-title">Review the saved caption</h2>
+    <p id="saved-caption-note">Using this caption replaces the wording in the editor and reruns the saved check against the loaded chart.</p>
+    <pre id="saved-caption-text" tabindex="0"></pre>
+    <form method="dialog" class="controls">
+      <button type="submit" value="cancel" autofocus>Keep current caption</button>
+      <button type="submit" value="restore" class="primary">Use saved caption</button>
     </form>
   </dialog>
   <script type="module" src="/src/main.mjs"></script>

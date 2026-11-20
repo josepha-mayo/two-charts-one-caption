@@ -30,7 +30,7 @@ To load another chart, choose or paste a UTF-8 CSV with the header `category,per
 
 ## Recheck before publishing
 
-**Save recheck file** records the caption, question, category labels, and approved facts. To rerun it in the browser, load the newest CSV, paste the caption you plan to publish, and open the file under **Rerun a saved check**. Two Charts matches rows by category name, so reordering the CSV is safe. Changed caption text or category names need fresh review. The check file itself may include figures that were approved in the caption.
+**Save recheck file** records the caption, question, category labels, and approved facts. To rerun it in the browser, load the newest CSV and open the file under **Rerun a saved check**. Paste the exact wording you plan to publish, or choose **Review saved caption** to inspect and restore the approved wording. You can run the loaded check again after editing or loading another CSV. Two Charts matches rows by category name, so reordering the CSV is safe. Changed caption text or category names need fresh review. The check file itself may include figures that were approved in the caption.
 
 The same check can run offline in a publishing pipeline. The three inputs are the review file, the current chart data, and the caption from the publishing system.
 

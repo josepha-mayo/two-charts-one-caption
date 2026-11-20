@@ -25,6 +25,8 @@ let revision = 0;
 let busy = false;
 let readerAnswer;
 let pendingReaderTest, readerTest, tabStorage;
+let savedCheck;
+let chartSource = 'Bus report example';
 
 try { tabStorage = window.sessionStorage; } catch { /* Session storage can be disabled. */ }
 
@@ -106,6 +108,7 @@ function invalidate() {
   status.textContent = '';
   status.removeAttribute('data-state');
   el('recheck-status').textContent = '';
+  el('recheck-source').textContent = `Data in use · ${chartSource}`;
   const showCutoff = question.value === 'atLeast';
   el('cutoff-label').hidden = !showCutoff;
   try {
@@ -140,11 +143,13 @@ function invalidate() {
 
 function syncActions() {
   for (const id of ['check', 'cloud-preview', 'load', 'csv-file', 'example', 'nano', 'apply', 'confirm-facts',
-    'brief-example', 'brief-submit', 'brief-apply', 'recheck-file', 'save-recheck']) el(id).disabled = busy;
+    'brief-example', 'brief-submit', 'brief-apply', 'recheck-file', 'save-recheck', 'run-recheck',
+    'review-saved-caption']) el(id).disabled = busy;
   for (const control of el('reader-choices').querySelectorAll('button, input')) control.disabled = busy;
 }
 
 function loadSample(cutoffExample = false) {
+  chartSource = 'Bus report example';
   csv.value = sampleCsv;
   caption.value = cutoffExample ? cutoffCaption : sampleCaption;
   question.value = cutoffExample ? 'atLeast' : 'lowest';
@@ -247,6 +252,7 @@ const csvStatus = el('csv-status');
 function loadChart(input, fileName = '') {
   try {
     rows = readChart(input);
+    chartSource = fileName || 'Pasted CSV';
     csv.value = input;
     invalidate();
     el('source').hidden = true;
@@ -555,29 +561,28 @@ el('save-recheck').addEventListener('click', () => {
   }
 });
 
-el('recheck-file').addEventListener('change', async event => {
-  const picker = event.currentTarget;
-  const file = picker.files[0];
-  picker.value = '';
-  if (!file) return;
-  const recheckStatus = el('recheck-status');
-  const current = revision;
-  busy = true;
-  syncActions();
+const recheckStatus = el('recheck-status');
+const savedCaptionDialog = el('saved-caption-dialog');
+let previewedCheck;
+
+function runSavedCheck() {
+  if (!savedCheck) return;
+  if (!caption.value.trim()) {
+    invalidate();
+    recheckStatus.textContent = 'Paste the caption you plan to publish or choose Review saved caption.';
+    return;
+  }
   try {
-    if (file.size > 40000) throw Error('Choose a recheck file under 40 KB.');
-    const contents = await file.text();
-    if (current !== revision) return;
-    const saved = readPublishCheck(JSON.parse(contents));
-    const input = reviewPublishInputs(rows, caption.value, saved);
+    const input = reviewPublishInputs(rows, caption.value, savedCheck);
     if (input.status === 'review_required') {
+      invalidate();
       recheckStatus.textContent = input.message;
       return;
     }
     rows = input.rows;
-    setQuestion(saved.question);
+    setQuestion(savedCheck.question);
     invalidate();
-    render(saved.claims, [], 'Saved check');
+    render(savedCheck.claims, [], 'Saved check');
     if (result.status === 'conflict') status.textContent = 'Saved check failed. Review the marked excerpt before publishing.';
     if (result.status === 'explicit' || result.status === 'implied') {
       status.textContent = 'Saved check passed. The reviewed facts still resolve this question.';
@@ -585,13 +590,54 @@ el('recheck-file').addEventListener('change', async event => {
     status.setAttribute('tabindex', '-1');
     status.focus();
   } catch (error) {
-    if (current === revision) recheckStatus.textContent = error instanceof SyntaxError
+    invalidate();
+    recheckStatus.textContent = error.message;
+  }
+}
+
+el('recheck-file').addEventListener('change', async event => {
+  const picker = event.currentTarget;
+  const file = picker.files[0];
+  picker.value = '';
+  if (!file) return;
+  invalidate();
+  const current = revision;
+  savedCheck = null;
+  el('recheck-actions').hidden = true;
+  busy = true;
+  syncActions();
+  try {
+    if (file.size > 40000) throw Error('Choose a recheck file under 40 KB.');
+    savedCheck = readPublishCheck(JSON.parse(await file.text()));
+    el('recheck-file-name').textContent = file.name;
+    el('recheck-actions').hidden = false;
+    if (current === revision) runSavedCheck();
+    else recheckStatus.textContent = 'Saved check loaded. Run it when your caption and data are ready.';
+  } catch (error) {
+    recheckStatus.textContent = error instanceof SyntaxError
       ? 'This file is not a valid recheck JSON file.'
       : error.message;
   } finally {
     busy = false;
     syncActions();
   }
+});
+
+el('run-recheck').addEventListener('click', runSavedCheck);
+el('review-saved-caption').addEventListener('click', () => {
+  if (!savedCheck) return;
+  previewedCheck = savedCheck;
+  el('saved-caption-text').textContent = savedCheck.caption;
+  savedCaptionDialog.returnValue = 'cancel';
+  savedCaptionDialog.showModal();
+});
+savedCaptionDialog.addEventListener('close', () => {
+  const preview = previewedCheck;
+  previewedCheck = null;
+  if (!preview || preview !== savedCheck || savedCaptionDialog.returnValue !== 'restore') return;
+  caption.value = savedCheck.caption;
+  invalidate();
+  runSavedCheck();
 });
 
 el('export').addEventListener('click', () => {
