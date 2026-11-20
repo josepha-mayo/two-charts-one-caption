@@ -419,7 +419,13 @@ el('brief-apply').addEventListener('click', () => {
 
 el('cloud-preview').addEventListener('click', () => {
   try {
-    snapshot = {prompt: cloudPrompt(rows, selectedQuestion(), caption.value), revision};
+    const selected = selectedQuestion();
+    const text = checkText(caption.value);
+    snapshot = {prompt: cloudPrompt(rows, selected, text), revision};
+    el('cloud-question').textContent = questionText(selected);
+    el('cloud-categories').textContent = answerText(rows, rows.map((_, index) => index + 1));
+    el('cloud-caption').textContent = text;
+    el('cloud-exact').open = false;
     el('prompt').textContent = snapshot.prompt;
     dialog.returnValue = 'cancel';
     dialog.showModal();
@@ -437,7 +443,7 @@ dialog.addEventListener('close', async () => {
   const current = revision;
   busy = true;
   syncActions();
-  status.textContent = 'Gemini is looking for a second chart…';
+  status.textContent = 'Verifying this browser for cloud review…';
   try {
     const firebase = await connectFirebase();
     if (current !== revision) return;

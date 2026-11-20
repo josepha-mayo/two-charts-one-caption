@@ -71,10 +71,16 @@ export async function generateInCloud(prompt) {
       throw error;
     }
   }
+  let deadline;
   try {
-    await getToken(appCheck);
+    const timeout = new Promise((_, reject) => {
+      deadline = setTimeout(() => reject(Error('App Check timed out.')), 25_000);
+    });
+    await Promise.race([getToken(appCheck), timeout]);
   } catch {
-    throw Error('Firebase couldn’t verify this browser. Retry in Chrome or use the browser check.');
+    throw Error('Cloud review couldn’t verify this browser. You can still check the caption locally with Reveal without answering.');
+  } finally {
+    clearTimeout(deadline);
   }
   return generate(cloudModel, prompt, InferenceSource.IN_CLOUD);
 }

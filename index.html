@@ -148,8 +148,19 @@
   </main>
   <dialog id="dialog" aria-labelledby="preview-title" aria-describedby="preview-data">
     <h2 id="preview-title">What will be sent to Google</h2>
-    <p id="preview-data">This request includes the caption, category names, and question. Your private note and unpublished chart values stay in this tab.</p>
-    <pre id="prompt" tabindex="0"></pre>
+    <p id="preview-data">Your private note and unpublished chart values stay in this tab.</p>
+    <dl class="cloud-preview">
+      <dt>Question</dt>
+      <dd id="cloud-question"></dd>
+      <dt>Category names</dt>
+      <dd id="cloud-categories"></dd>
+      <dt>Caption</dt>
+      <dd id="cloud-caption" tabindex="0"></dd>
+    </dl>
+    <details id="cloud-exact" class="cloud-exact">
+      <summary>See the exact request</summary>
+      <pre id="prompt" tabindex="0"></pre>
+    </details>
     <form method="dialog" class="controls">
       <button type="submit" value="cancel">Cancel</button>
       <button type="submit" value="send" class="primary">Send to Gemini</button>

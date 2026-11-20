@@ -139,6 +139,12 @@ dialog { color: var(--text); background: var(--panel); width: min(680px, calc(10
 dialog::backdrop { background: #090d18c9; }
 dialog p { color: var(--muted); margin-top: 8px; }
 dialog p a { color: var(--cool); text-underline-offset: 3px; }
+.cloud-preview { display: grid; grid-template-columns: minmax(0, 1fr); gap: 4px; margin: 14px 0; }
+.cloud-preview dt { color: var(--muted); font-size: .85rem; font-weight: 650; }
+.cloud-preview dd { margin: 0 0 7px; overflow-wrap: anywhere; }
+#cloud-caption { max-height: min(29vh, 15rem); overflow: auto; white-space: pre-wrap; }
+.cloud-exact { margin: 0 0 14px; }
+.cloud-exact summary { color: var(--cool); font-size: .9rem; cursor: pointer; }
 #ai-setup-progress { width: 100%; margin-top: 12px; accent-color: var(--mint); }
 #ai-setup-dialog .controls { margin-top: 14px; }
 dialog pre { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 43vh; overflow: auto; background: var(--background); padding: 12px; border-radius: 5px; }
