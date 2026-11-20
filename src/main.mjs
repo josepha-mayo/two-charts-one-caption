@@ -159,6 +159,7 @@ function describeClaim(claim) {
   if (claim.type === 'range') return `Range ${claim.min}%–${claim.max}%`;
   if (claim.type === 'value') return `${rows[claim.id - 1].label} is ${claim.value}%`;
   if (claim.type === 'atLeast') return `At or above ${claim.cutoff}%: ${answerText(rows, claim.ids)}`;
+  if (claim.type === 'atLeastSome') return `${answerText(rows, claim.ids)} reached at least ${claim.cutoff}%`;
   const rate = claim.value === undefined ? '' : ` (${claim.value}%)`;
   return `${claim.type === 'lowest' ? 'Lowest' : 'Highest'}: ${answerText(rows, claim.ids)}${rate}`;
 }
@@ -450,15 +451,16 @@ dialog.addEventListener('close', async () => {
     const draft = await firebase.generateInCloud(request.prompt);
     if (current !== revision) return;
     if (draft?.supported !== true || !Array.isArray(draft.alternatives)) throw Error('Gemini could not interpret the caption using the supported checks.');
-    const {claims, excluded} = reviewCloudClaims(rows, caption.value, draft.claims);
+    const {claims, excluded, narrowed} = reviewCloudClaims(rows, caption.value, draft.claims);
     candidate = {claims, alternatives: draft.alternatives};
     const entries = claims.map(claim => {
       return make('li', `${describeClaim(claim)} · “${claim.evidence}”`);
     });
     el('claims').replaceChildren(...(entries.length ? entries : [make('li', 'Gemini found no supported quantitative claims.')]));
-    el('claim-rejections').textContent = excluded
-      ? `Excluded ${excluded} cutoff ${excluded === 1 ? 'claim' : 'claims'} without a supporting quote. Confirm the remaining facts cover the caption.`
-      : '';
+    const notes = [];
+    if (excluded) notes.push(`Excluded ${excluded} cutoff ${excluded === 1 ? 'claim' : 'claims'} without a supporting quote. Confirm the remaining facts cover the caption.`);
+    if (narrowed) notes.push('The quoted wording confirms who qualifies and leaves other categories open.');
+    el('claim-rejections').textContent = notes.join(' ');
     el('claim-review').hidden = false;
     el('confirm-facts').focus();
     status.textContent = 'Firebase reported in-cloud inference. Check the extracted facts.';

@@ -58,6 +58,24 @@ test('a legacy saved rank claim flags a changed rate when the ranking is unchang
   assert.deepEqual(result.failedFacts, [evidence]);
 });
 
+test('legacy cutoff checks preserve a partial quote and surface unsupported evidence', () => {
+  const rows = readChart('category,percent\nNorth,78\nCentral,64\nSouth,48');
+  const question = {type: 'atLeast', cutoff: 70};
+  const load = caption => readPublishCheck({
+    version: 1,
+    labels: rows.map(row => row.label),
+    question,
+    caption,
+    claims: [{...question, ids: [1], evidence: caption}],
+  });
+  const positive = 'North reached at least 70%.';
+  const recognized = load(positive);
+  assert.equal(recognized.claims[0].type, 'atLeastSome');
+  assert.equal(runPublishCheck(rows, positive, recognized).status, 'ambiguous');
+  const vague = 'North reached 70%.';
+  assert.equal(runPublishCheck(rows, vague, load(vague)).status, 'review_required');
+});
+
 test('CLI JSON reports a pass, a publish failure, and invalid inputs with distinct exit codes', () => {
   const path = fileURLToPath(new URL('../scripts/verify-caption.mjs', import.meta.url));
   const run = name => spawnSync(process.execPath, [

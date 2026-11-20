@@ -1,11 +1,14 @@
-import {answerText, readQuestion, validateClaims} from './check.mjs';
+import {answerText, isCutoffClaim, readQuestion, validateClaims} from './check.mjs';
 
 const MAX_CAPTION = 1800;
 const percent = String.raw`\d{1,3}(?:\.\d{1,2})?`;
 const rangePattern = new RegExp(`^(?:Median on-time rates|Rates) ranged from (${percent})% to (${percent})%(?: across three bus service types)?\\.(?=\\s|$)`);
 const rankPattern = new RegExp(`^(.+?) (had|shared) the (lowest|highest) rate, at (${percent})%\\.(?=\\s|$)`);
-const cutoffPattern = new RegExp(`^Only (.+?) reached at least (${percent})%\\.(?=\\s|$)`);
-const emptyCutoffPattern = new RegExp(`^No categories reached (${percent})%\\.(?=\\s|$)`);
+const cutoffVerb = '(?:reached at least|were at or above|met or exceeded)';
+const cutoffEnding = `(${percent})(?:%| percent)(?:\\.(?=\\s|$)|$)`;
+const cutoffPattern = new RegExp(`^(Only )?(.+?) ${cutoffVerb} ${cutoffEnding}`);
+const allCutoffPattern = new RegExp(`^All categories ${cutoffVerb} ${cutoffEnding}`);
+const emptyCutoffPattern = new RegExp(`^No categories reached (?:at least )?${cutoffEnding}`);
 const valuePattern = new RegExp(`^(.+?) had a rate of (${percent})%\\.(?=\\s|$)`);
 
 export const answerConstraint = {
@@ -26,8 +29,9 @@ export function cloudPrompt(rows, question, caption) {
     'Return JSON {supported:boolean,claims:array,alternatives:array}.',
     'Supported factual claims: {type:"range",min:number,max:number,evidence:string},',
     '{type:"value",id:number,value:number,evidence:string}, or',
-    '{type:"lowest"|"highest",ids:number[],value?:number,evidence:string}, or {type:"atLeast",cutoff:number,ids:number[],evidence:string}.',
-    'An extremum assertion names all tied categories. An atLeast assertion quotes wording that states the cutoff and names the complete qualifying set. Use an empty array only if the text explicitly says none meet it.',
+    '{type:"lowest"|"highest",ids:number[],value?:number,evidence:string}, or {type:"atLeast"|"atLeastSome",cutoff:number,ids:number[],evidence:string}.',
+    'Use atLeast for explicit complete cutoff answers, such as “Only North reached at least 70%.” Use atLeastSome for positive cutoff statements that do not exclude other categories, such as “North reached at least 70%.”',
+    'For cutoff evidence quote the whole sentence. Use an empty array only for an explicit no-category claim. An extremum assertion names all tied categories.',
     'When the extremum quote states an exact rate, include it in the rank claim as value. Do not duplicate it as a separate value claim.',
     'Evidence is an exact quote from the caption. The question is separate and cannot supply facts. Do not extract an answer by treating the question as caption text.',
     'Return supported:false if any caption claim is outside those forms. Include all quantitative and ranking facts.',
@@ -38,20 +42,19 @@ export function cloudPrompt(rows, question, caption) {
 }
 
 export function reviewCloudClaims(rows, caption, candidates) {
-  const claims = validateClaims(candidates, checkText(caption), rows.length);
-  const accepted = claims.filter(claim => {
-    if (claim.type !== 'atLeast') return true;
-    const figures = [...claim.evidence.matchAll(/(?<![\d.+-])(\d+(?:\.\d+)?)\s*(?:%|percent\b)/gi)];
-    const sameCutoff = figures.some(match => Number(match[1]) === claim.cutoff);
-    const includesComparison = /\b(?:at least|at or above|or more|or higher|no less than|reached|met)\b|≥/i.test(claim.evidence);
-    const words = claim.evidence.toLowerCase();
-    const namesMembers = claim.ids.length
-      ? claim.ids.every(id => words.includes(rows[id - 1].label.toLowerCase())) ||
-        (claim.ids.length === rows.length && /\b(?:all|every)\b/i.test(claim.evidence))
-      : /\b(?:none|no)\b/i.test(claim.evidence);
-    return sameCutoff && includesComparison && namesMembers;
-  });
-  return {claims: accepted.map(claim => withQuotedRankValue(rows, claim)), excluded: claims.length - accepted.length};
+  const clean = checkText(caption);
+  const claims = validateClaims(candidates, clean, rows.length);
+  const accepted = [];
+  let narrowed = 0;
+  for (const claim of claims) {
+    const supported = isCutoffClaim(claim)
+      ? readQuotedCutoff(rows, clean, claim)
+      : withQuotedRankValue(rows, claim);
+    if (!supported) continue;
+    if (claim.type === 'atLeast' && supported.type === 'atLeastSome') narrowed += 1;
+    accepted.push(supported);
+  }
+  return {claims: accepted, excluded: claims.length - accepted.length, narrowed};
 }
 
 export function withQuotedRankValue(rows, claim) {
@@ -88,6 +91,32 @@ function findIds(rows, subjects, single) {
   return result;
 }
 
+function readCutoffFact(rows, text) {
+  const none = emptyCutoffPattern.exec(text);
+  if (none) return {type: 'atLeast', cutoff: Number(none[1]), ids: [], evidence: none[0]};
+  const all = allCutoffPattern.exec(text);
+  if (all) return {type: 'atLeast', cutoff: Number(all[1]), ids: rows.map((_, index) => index + 1), evidence: all[0]};
+  const cutoff = cutoffPattern.exec(text);
+  if (!cutoff) return;
+  const [, only, subjects, figure] = cutoff;
+  const ids = findIds(rows, subjects);
+  if (ids) return {type: only ? 'atLeast' : 'atLeastSome', cutoff: Number(figure), ids, evidence: cutoff[0]};
+}
+
+export function readQuotedCutoff(rows, caption, claim) {
+  const quote = claim.evidence.trim();
+  if (!quote) return;
+  for (let start = caption.indexOf(quote); start !== -1; start = caption.indexOf(quote, start + quote.length)) {
+    if (start > 0 && !/[.!?]\s+$/.test(caption.slice(0, start))) continue;
+    const fact = readCutoffFact(rows, caption.slice(start));
+    if (fact && (quote === fact.evidence || quote === fact.evidence.replace(/\.$/, '')) &&
+        fact.cutoff === claim.cutoff && fact.ids.length === claim.ids.length &&
+        fact.ids.every((id, i) => id === claim.ids[i])) {
+      return {...fact, evidence: claim.evidence};
+    }
+  }
+}
+
 function readLocalFact(rows, text) {
   const range = rangePattern.exec(text);
   if (range) return {type: 'range', min: Number(range[1]), max: Number(range[2]), evidence: range[0]};
@@ -97,13 +126,8 @@ function readLocalFact(rows, text) {
     const ids = findIds(rows, subjects, verb === 'had');
     if (ids) return {type, ids, value: Number(amount), evidence: rank[0]};
   }
-  const cutoff = cutoffPattern.exec(text);
-  if (cutoff) {
-    const ids = findIds(rows, cutoff[1]);
-    if (ids) return {type: 'atLeast', cutoff: Number(cutoff[2]), ids, evidence: cutoff[0]};
-  }
-  const empty = emptyCutoffPattern.exec(text);
-  if (empty) return {type: 'atLeast', cutoff: Number(empty[1]), ids: [], evidence: empty[0]};
+  const cutoff = readCutoffFact(rows, text);
+  if (cutoff) return cutoff;
   const value = valuePattern.exec(text);
   if (value) {
     const id = rows.findIndex(row => row.label === value[1]) + 1;

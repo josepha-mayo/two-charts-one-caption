@@ -4,6 +4,10 @@ const validPercent = value =>
 
 const listFormat = new Intl.ListFormat('en', {style: 'long', type: 'conjunction'});
 
+export function isCutoffClaim(claim) {
+  return claim.type === 'atLeast' || claim.type === 'atLeastSome';
+}
+
 export function readChart(csv) {
   if (typeof csv !== 'string' || csv.length > 4000) throw Error('Use CSV under 4,000 characters.');
   const lines = csv.trim().split(/\r?\n/);
@@ -68,12 +72,12 @@ export function validateClaims(claims, caption, size) {
         claim.id <= size && validPercent(claim.value)) {
       return {type, id: claim.id, value: claim.value, evidence};
     }
-    const isCutoff = type === 'atLeast' && validPercent(claim.cutoff);
+    const isCutoff = isCutoffClaim(claim) && validPercent(claim.cutoff);
     const isRank = (type === 'lowest' || type === 'highest') &&
       (claim.value === undefined || validPercent(claim.value));
     if ((isRank || isCutoff) && Array.isArray(claim.ids)) {
       const ids = [...new Set(claim.ids)].sort((a, b) => a - b);
-      if ((ids.length || isCutoff) && ids.length === claim.ids.length &&
+      if ((ids.length || type === 'atLeast') && ids.length === claim.ids.length &&
           ids.every(id => Number.isInteger(id) && id >= 1 && id <= size)) {
         if (isCutoff) return {type, cutoff: claim.cutoff, ids, evidence};
         return claim.value === undefined ? {type, ids, evidence} : {type, ids, value: claim.value, evidence};
@@ -90,6 +94,7 @@ export function fits(values, claims) {
 export function fitsClaim(values, claim) {
   if (claim.type === 'range') return Math.min(...values) === claim.min && Math.max(...values) === claim.max;
   if (claim.type === 'value') return values[claim.id - 1] === claim.value;
+  if (claim.type === 'atLeastSome') return claim.ids.every(id => values[id - 1] >= claim.cutoff);
   const question = claim.type === 'atLeast' ? claim : claim.type;
   return sameAnswer(answer(values, question), claim.ids) &&
     (claim.value === undefined || values[claim.ids[0] - 1] === claim.value);
@@ -117,10 +122,11 @@ function intervalWitness(actual, claims, movable, acceptGroups, changedIndex, ch
     const pinned = points(claim.value);
     for (const id of claim.type === 'value' ? [claim.id] : claim.ids) bounds[id - 1] = [pinned, pinned];
   }
-  for (const claim of claims.filter(claim => claim.type === 'atLeast')) {
+  for (const claim of claims.filter(isCutoffClaim)) {
     const cutoff = points(claim.cutoff);
     bounds.forEach(([lower, upper], i) => {
-      bounds[i] = claim.ids.includes(i + 1) ? [Math.max(lower, cutoff), upper] : [lower, Math.min(upper, cutoff - 1)];
+      if (claim.ids.includes(i + 1)) bounds[i] = [Math.max(lower, cutoff), upper];
+      else if (claim.type === 'atLeast') bounds[i] = [lower, Math.min(upper, cutoff - 1)];
     });
   }
   for (const [i, value] of actual.entries()) {
@@ -199,7 +205,7 @@ function oneCategoryWitness(actual, claims, question, qualifies, best) {
   // With the other values fixed, facts and answers can only change at a
   // source value or a cutoff. Try those points and their immediate neighbors.
   const boundaries = [0, 10000, ...actual.map(points)];
-  for (const claim of claims) if (claim.type === 'atLeast') boundaries.push(points(claim.cutoff));
+  for (const claim of claims) if (isCutoffClaim(claim)) boundaries.push(points(claim.cutoff));
   if (typeof question !== 'string') boundaries.push(points(question.cutoff));
   const nearby = new Set(boundaries.flatMap(point => [point - 1, point, point + 1]));
   for (const [i, value] of actual.entries()) {

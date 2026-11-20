@@ -324,3 +324,30 @@ test('cloud cutoff claims cannot use the question in place of evidence from the 
   assert.equal(repaired.excluded, 0);
   assert.equal(checkCaption(sample, {type: 'atLeast', cutoff: 70}, repaired.claims).status, 'explicit');
 });
+
+test('positive cutoff evidence constrains named categories and leaves the other bars open', () => {
+  const rows = readChart('category,percent\nNorth,78\nCentral,64\nSouth,48');
+  const question = {type: 'atLeast', cutoff: 70};
+  const evidence = 'North reached at least 70%.';
+  const cloud = reviewCloudClaims(rows, evidence, [{...question, ids: [1], evidence}]);
+  assert.deepEqual(cloud, {claims: [{type: 'atLeastSome', cutoff: 70, ids: [1], evidence}], excluded: 0, narrowed: 1});
+  assert.deepEqual(localFacts(rows, evidence), cloud.claims);
+  const result = checkCaption(rows, question, cloud.claims, [[69, 70, 48]]);
+  assert.equal(result.status, 'ambiguous');
+  assert.deepEqual(result.alternate, [78, 70, 48]);
+  assert.deepEqual(result.alternateAnswer, [1, 2]);
+  const complete = 'Only North met or exceeded 70 percent.';
+  const reviewed = reviewCloudClaims(rows, complete, [{...question, ids: [1], evidence: complete}]);
+  assert.equal(checkCaption(rows, question, reviewed.claims).status, 'explicit');
+});
+
+test('cutoff evidence names the right categories and comes from a standalone sentence', () => {
+  const rows = readChart('category,percent\nNorth,65\nNorth East,74\nSouth,72');
+  const question = {type: 'atLeast', cutoff: 70};
+  const evidence = 'North East reached at least 70%.';
+  assert.equal(reviewCloudClaims(rows, evidence, [{...question, ids: [1], evidence}]).excluded, 1);
+  assert.equal(reviewCloudClaims(rows, 'Only ' + evidence, [{...question, ids: [2], evidence}]).excluded, 1);
+  const conditional = 'Only North East reached at least 70%, if the draft is correct.';
+  assert.equal(reviewCloudClaims(rows, conditional, [{...question, ids: [2], evidence: conditional}]).excluded, 1);
+  assert.equal(reviewCloudClaims(rows, evidence, [{...question, ids: [2], evidence: evidence.slice(0, -1)}]).narrowed, 1);
+});

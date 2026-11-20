@@ -1,5 +1,5 @@
-import {answerText, checkCaption, fitsClaim, questionText, readQuestion, validateClaims} from './check.mjs';
-import {checkText, withQuotedRankValue} from './draft.mjs';
+import {answerText, checkCaption, fitsClaim, isCutoffClaim, questionText, readQuestion, validateClaims} from './check.mjs';
+import {checkText, readQuotedCutoff, withQuotedRankValue} from './draft.mjs';
 
 function normalizeCaption(text) {
   if (typeof text !== 'string') throw Error('The check needs the reviewed caption text.');
@@ -25,7 +25,9 @@ export function readPublishCheck(check) {
   const claims = validateClaims(check.claims.map(claim => ({
     ...claim, evidence: typeof claim?.evidence === 'string' ? claim.evidence.replace(/\r\n/g, '\n') : claim?.evidence,
   })), caption, labels.length)
-    .map(claim => withQuotedRankValue(categories, claim))
+    .map(claim => isCutoffClaim(claim)
+      ? readQuotedCutoff(categories, caption, claim) ?? claim
+      : withQuotedRankValue(categories, claim))
     .sort((a, b) => caption.indexOf(a.evidence) - caption.indexOf(b.evidence));
   return {version: 1, labels, question, caption, claims};
 }
@@ -39,6 +41,10 @@ export function reviewPublishInputs(rows, caption, check) {
   const ordered = check.labels.map(label => byLabel.get(label));
   if (ordered.length !== rows.length || ordered.some(row => row === undefined)) {
     return {status: 'review_required', message: 'The category list changed. Review the chart and caption again.'};
+  }
+  const unsupported = check.claims.find(claim => isCutoffClaim(claim) && !readQuotedCutoff(ordered, draft, claim));
+  if (unsupported) {
+    return {status: 'review_required', message: `Review what this cutoff sentence establishes before publishing. “${unsupported.evidence}”`};
   }
   return {status: 'ready', rows: ordered};
 }
