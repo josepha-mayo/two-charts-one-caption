@@ -130,6 +130,12 @@ select { min-height: 32px; padding: 3px; }
 #detail-status:not(:empty) { color: var(--text); margin-top: 10px; }
 #example-refresh-panel { margin: 12px 0; }
 .csv-panel label { display: block; margin-block: 10px 6px; color: var(--muted); }
+.ai-activity { margin-bottom: 10px; }
+#ai-activity-list { list-style: none; padding: 0; margin: 12px 0; }
+#ai-activity-list li { padding-block: 9px; border-block-start: 1px solid var(--line); }
+#ai-activity-list strong, #ai-activity-list span { display: block; }
+#ai-activity-list span { color: var(--mint); font-size: .86rem; }
+#ai-activity-list p { color: var(--muted); font-size: .86rem; }
 #csv-file { max-width: 100%; font: inherit; }
 #csv-status:not(:empty) { color: var(--muted); margin-top: 8px; overflow-wrap: anywhere; }
 .recheck-panel { margin-top: 10px; }

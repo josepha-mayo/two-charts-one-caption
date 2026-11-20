@@ -34,6 +34,12 @@ const refreshedExample = {label: 'Simulated bus report refresh'};
 const pastedCsv = {label: 'Pasted CSV'};
 let chartSource = originalExample;
 let exampleReview;
+const aiOperations = {
+  question: {label: 'Question from private note', route: 'on_device', inputs: ['Private note']},
+  detail: {label: 'Caption detail from source chart', route: 'on_device', inputs: ['Source percentages', 'Category IDs', 'Selected question']},
+  review: {label: 'Cloud fact draft', route: 'in_cloud', inputs: ['Caption approved for cloud review', 'Category names', 'Selected question']},
+};
+const aiActivity = new Map();
 
 try { tabStorage = window.sessionStorage; } catch { /* Session storage can be disabled. */ }
 
@@ -42,6 +48,20 @@ function make(tag, text, className) {
   if (text !== undefined) node.textContent = text;
   if (className) node.className = className;
   return node;
+}
+
+function recordAIResponse(operation) {
+  const count = (aiActivity.get(operation)?.completed ?? 0) + 1;
+  aiActivity.set(operation, {operation, ...aiOperations[operation], completed: count, lastCompletedAt: new Date().toISOString()});
+  const entries = [...aiActivity.values()].map(entry => {
+    const item = make('li');
+    const route = entry.route === 'on_device' ? 'on-device inference' : 'in-cloud inference';
+    item.append(make('strong', entry.label), make('span', `Firebase reported ${route} · ${entry.completed} completed`),
+      make('p', entry.inputs.join(' · ')));
+    return item;
+  });
+  el('ai-activity-list').replaceChildren(...entries);
+  el('ai-activity').hidden = false;
 }
 
 function selectedQuestion() {
@@ -493,6 +513,7 @@ el('brief-submit').addEventListener('click', async () => {
     if (current !== briefRevision) return;
     const proposal = await firebase.generateOnDevice(questionPrompt(note), questionConstraint);
     if (current !== briefRevision) return;
+    recordAIResponse('question');
     questionDraft = readQuestionDraft(proposal, note);
     el('brief-question').textContent = questionText(questionDraft.question);
     el('brief-evidence').textContent = questionDraft.evidence;
@@ -556,6 +577,7 @@ dialog.addEventListener('close', async () => {
       },
     });
     if (!ownsReview()) return;
+    recordAIResponse('review');
     if (draft?.supported !== true || !Array.isArray(draft.alternatives)) throw Error('Gemini could not interpret the caption using the supported checks.');
     const {claims, excluded, narrowed, restored} = reviewCloudClaims(rows, caption.value, draft.claims);
     candidate = {claims, alternatives: draft.alternatives};
@@ -606,6 +628,7 @@ el('nano').addEventListener('click', async () => {
     const selected = selectedQuestion();
     const reply = await firebase.generateOnDevice(localPrompt(rows, selected), answerConstraint);
     if (current !== revision) return;
+    recordAIResponse('detail');
     try {
       if (!Array.isArray(reply?.ids)) throw Error('Chrome’s suggestion did not contain category IDs.');
       const ids = [...reply.ids].sort((a, b) => a - b);
@@ -658,6 +681,12 @@ function downloadFile(content, type, name) {
   link.click();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
+
+el('download-ai-activity').addEventListener('click', () => {
+  if (!aiActivity.size) return;
+  const record = {version: 1, source: 'Firebase AI Logic responses reported by this browser', entries: [...aiActivity.values()]};
+  downloadFile(JSON.stringify(record, null, 2) + '\n', 'application/json', 'two-charts-ai-activity.json');
+});
 
 el('save-recheck').addEventListener('click', () => {
   try {
