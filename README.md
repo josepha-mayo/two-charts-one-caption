@@ -30,7 +30,7 @@ To load another chart, choose or paste a UTF-8 CSV with the header `category,per
 
 ## Recheck before publishing
 
-In the 70% example, resolve the caption and choose **Try a simulated data refresh** to run the same saved check with the example’s updated CSV. **Restore original example data** switches back while keeping the caption.
+In the 70% example, resolve the caption and choose **Try a simulated data refresh** to run the same saved check with the example’s updated CSV. If exactly one supported answer sentence goes stale, the browser shows that sentence and a verified replacement. **Replace sentence and recheck** changes the quoted sentence. **Save recheck file** exports the newly checked wording. **Restore original example data** switches back while keeping the caption in the editor so it can be checked again.
 
 **Save recheck file** records the caption, question, category labels, and approved facts. To rerun it in the browser, load the newest CSV and open the file under **Rerun a saved check**. Paste the exact wording you plan to publish, or choose **Review saved caption** to inspect and restore the approved wording. You can run the loaded check again after editing or loading another CSV. Two Charts matches rows by category name, so reordering the CSV is safe. Changed caption text or category names need fresh review. The check file itself may include figures that were approved in the caption.
 

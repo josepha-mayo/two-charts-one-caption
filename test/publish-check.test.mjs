@@ -4,7 +4,7 @@ import {readFileSync} from 'node:fs';
 import {fileURLToPath} from 'node:url';
 import test from 'node:test';
 import {readChart} from '../src/check.mjs';
-import {createPublishCheck, readPublishCheck, runPublishCheck} from '../src/publish-check.mjs';
+import {createPublishCheck, readPublishCheck, runPublishCheck, suggestPublishRepair} from '../src/publish-check.mjs';
 
 const example = name => new URL(`../examples/bus-cutoff/${name}`, import.meta.url);
 const readExample = name => readFileSync(example(name), 'utf8');
@@ -74,6 +74,54 @@ test('legacy cutoff checks preserve a partial quote and surface unsupported evid
   assert.equal(runPublishCheck(rows, positive, recognized).status, 'ambiguous');
   const vague = 'North reached 70%.';
   assert.equal(runPublishCheck(rows, vague, load(vague)).status, 'review_required');
+});
+
+test('repair replaces one reviewed sentence and keeps the other caption text and facts', () => {
+  const refreshed = readChart(readExample('refreshed.csv')).reverse();
+  const source = `  ${caption}\nRates refer to the original reporting period.  `;
+  const archived = readPublishCheck({...check, caption: source});
+  const repair = suggestPublishRepair(refreshed, source, archived);
+  assert.equal(repair.before, 'Only Local and Select Bus Service reached at least 70%.');
+  assert.equal(repair.after, 'Only Local reached at least 70%.');
+  assert.equal(repair.caption, source.replace(repair.before, repair.after));
+  assert.deepEqual(repair.check.claims.slice(0, -1), archived.claims.slice(0, -1));
+  assert.deepEqual(runPublishCheck(refreshed, repair.caption, repair.check), {
+    status: 'explicit',
+    question: 'Which categories reached at least 70%?',
+    sourceAnswer: 'Local',
+  });
+  const original = readChart(readExample('current.csv'));
+  const reversed = suggestPublishRepair(original, repair.caption, repair.check);
+  assert.equal(reversed.caption, source);
+});
+
+test('repair does not guess when the stale quote is duplicated, partial, or accompanied by other conflicts', () => {
+  const refreshed = readChart(readExample('refreshed.csv'));
+  const duplicate = readPublishCheck({...check, caption: `${caption} ${check.claims.at(-1).evidence}`});
+  assert.equal(suggestPublishRepair(refreshed, duplicate.caption, duplicate), undefined);
+  const staleRange = refreshed.map(row => row.label === 'Express' ? {...row, value: 62} : row);
+  assert.equal(suggestPublishRepair(staleRange, caption, check), undefined);
+  assert.equal(suggestPublishRepair(refreshed, caption + ' Unreviewed text.', check), undefined);
+  const evidence = 'Local had the highest rate, at 71.5%.';
+  const fragment = readPublishCheck({...check, question: 'highest', caption: `The draft incorrectly stated that ${evidence}`,
+    claims: [{type: 'highest', ids: [1], value: 71.5, evidence}]});
+  const changedRank = refreshed.map(row => row.label === 'Local' ? {...row, value: 68} : row);
+  assert.equal(suggestPublishRepair(changedRank, fragment.caption, fragment), undefined);
+});
+
+test('repair verifies newly tied answers and a cutoff with no qualifying categories', () => {
+  const rows = readChart('category,percent\nNorth,65\nSouth,65');
+  const ranking = {type: 'highest', ids: [1], value: 70, evidence: 'North had the highest rate, at 70%.'};
+  const cutoff = {type: 'atLeast', cutoff: 70, ids: [1], evidence: 'Only North reached at least 70%.'};
+  for (const [claim, question, expected] of [
+    [ranking, 'highest', 'North and South shared the highest rate, at 65%.'],
+    [cutoff, {type: 'atLeast', cutoff: 70}, 'No categories reached 70%.'],
+  ]) {
+    const original = createPublishCheck(rows, question, claim.evidence, [claim]);
+    const repair = suggestPublishRepair(rows, original.caption, original);
+    assert.equal(repair.after, expected);
+    assert.equal(runPublishCheck(rows, repair.caption, repair.check).status, 'explicit');
+  }
 });
 
 test('CLI JSON reports a pass, a publish failure, and invalid inputs with distinct exit codes', () => {

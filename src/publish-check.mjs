@@ -1,5 +1,7 @@
-import {answerText, checkCaption, fitsClaim, isCutoffClaim, questionText, readQuestion, validateClaims} from './check.mjs';
-import {checkText, readQuotedCutoff, withQuotedRankValue} from './draft.mjs';
+import {
+  answer, answerText, checkCaption, fitsClaim, isCutoffClaim, questionText, readQuestion, sameAnswer, supportedDetail, validateClaims,
+} from './check.mjs';
+import {checkText, localFacts, readQuotedCutoff, readQuotedFact, withQuotedRankValue} from './draft.mjs';
 
 function normalizeCaption(text) {
   if (typeof text !== 'string') throw Error('The check needs the reviewed caption text.');
@@ -66,4 +68,40 @@ export function runPublishCheck(rows, caption, check) {
     report.changedCategories = result.changedCategories;
   }
   return report;
+}
+
+export function suggestPublishRepair(rows, caption, check) {
+  const input = reviewPublishInputs(rows, caption, check);
+  if (input.status !== 'ready') return;
+
+  const values = input.rows.map(row => row.value);
+  const stale = check.claims.filter(claim => !fitsClaim(values, claim));
+  if (stale.length !== 1) return;
+
+  const [claim] = stale;
+  const currentQuestion = check.question;
+  const sameQuestion = typeof currentQuestion === 'string'
+    ? claim.type === currentQuestion
+    : claim.type === 'atLeast' && claim.cutoff === currentQuestion.cutoff;
+  if (!sameQuestion) return;
+
+  const text = caption.replace(/\r\n/g, '\n');
+  try {
+    const parsed = readQuotedFact(input.rows, check.caption, claim.evidence.trim());
+    if (!parsed || parsed.type !== claim.type || !sameAnswer(parsed.ids, claim.ids) ||
+        parsed.value !== claim.value || parsed.cutoff !== claim.cutoff) return;
+    const before = parsed.evidence;
+    const start = text.indexOf(before);
+    if (text.indexOf(before, start + 1) !== -1) return;
+
+    const after = supportedDetail(input.rows, currentQuestion, answer(values, currentQuestion));
+    const [updatedFact] = localFacts(input.rows, after);
+    const nextCaption = text.slice(0, start) + after + text.slice(start + before.length);
+    const nextClaims = check.claims.map(fact => fact === claim ? updatedFact : fact);
+    const revised = createPublishCheck(input.rows, currentQuestion, nextCaption, nextClaims);
+    if (runPublishCheck(input.rows, nextCaption, revised).status !== 'explicit') return;
+    return {before, after, caption: nextCaption, check: revised};
+  } catch {
+    // An ambiguous category name or quote cannot safely be replaced here.
+  }
 }

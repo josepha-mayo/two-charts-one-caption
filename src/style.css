@@ -91,6 +91,12 @@ select { min-height: 32px; padding: 3px; }
 .proof q { color: var(--muted); overflow-wrap: anywhere; }
 .proof li span { color: var(--mint); font-size: .74rem; font-weight: 700; }
 .proof li span[data-verified="false"] { color: #ffbdba; }
+#stale-repair { margin-block-start: 16px; padding: 14px; border: 1px solid var(--line); border-radius: 6px; background: var(--background); }
+#stale-repair h3 { margin: 0; font-size: 1rem; }
+#stale-repair dl { margin-block: 10px 13px; }
+#stale-repair dt { color: var(--muted); font-size: .78rem; font-weight: 650; }
+#stale-repair dd { margin: 0 0 7px; overflow-wrap: anywhere; }
+#stale-after { color: var(--mint); }
 .revision p { margin: 6px 0 12px; color: var(--gold); font-size: 1.15rem; }
 #claim-review { margin-bottom: 14px; }
 #claims { padding-inline-start: 23px; overflow-wrap: anywhere; }

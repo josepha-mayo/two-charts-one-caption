@@ -57,7 +57,7 @@ export function reviewCloudClaims(rows, caption, candidates) {
     const quote = claim.evidence.trim();
     const parsed = local
       ? local.find(fact => matchesQuote(quote, fact))
-      : findQuotedFact(rows, clean, quote);
+      : readQuotedFact(rows, clean, quote);
     if (parsed) {
       if (!matchesFact(claim, parsed) || represented.has(parsed.evidence)) continue;
       represented.add(parsed.evidence);
@@ -133,7 +133,7 @@ function matchesQuote(quote, fact) {
   return quote === fact.evidence || quote === fact.evidence.replace(/\.$/, '');
 }
 
-function findQuotedFact(rows, caption, quote) {
+export function readQuotedFact(rows, caption, quote) {
   if (!quote) return;
   for (let start = caption.indexOf(quote); start !== -1; start = caption.indexOf(quote, start + quote.length)) {
     if (start > 0 && !/[.!?]\s+$/.test(caption.slice(0, start))) continue;
@@ -143,7 +143,7 @@ function findQuotedFact(rows, caption, quote) {
 }
 
 export function readQuotedCutoff(rows, caption, claim) {
-  const fact = findQuotedFact(rows, caption, claim.evidence.trim());
+  const fact = readQuotedFact(rows, caption, claim.evidence.trim());
   if (fact && isCutoffClaim(fact) && matchesFact(claim, fact)) return {...fact, evidence: claim.evidence};
 }
 

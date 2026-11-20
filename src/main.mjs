@@ -4,7 +4,7 @@ import {
 } from './check.mjs';
 import {localFacts, cloudPrompt, localPrompt, checkText, answerConstraint, reviewCloudClaims} from './draft.mjs';
 import {checkBrief, questionPrompt, questionConstraint, readQuestionDraft} from './brief.mjs';
-import {createPublishCheck, readPublishCheck, reviewPublishInputs} from './publish-check.mjs';
+import {createPublishCheck, readPublishCheck, reviewPublishInputs, suggestPublishRepair} from './publish-check.mjs';
 import {deviceAvailability} from './device.mjs';
 import {sampleCsv, sampleCaption, cutoffCaption, sampleSource} from './sample.mjs';
 import refreshedSampleCsv from '../examples/bus-cutoff/refreshed.csv?raw';
@@ -27,7 +27,7 @@ let revision = 0;
 let busy = false;
 let readerAnswer;
 let pendingReaderTest, readerTest, tabStorage;
-let savedCheck;
+let savedCheck, staleRepair;
 const originalExample = {label: 'Bus report example'};
 const refreshedExample = {label: 'Simulated bus report refresh'};
 const pastedCsv = {label: 'Pasted CSV'};
@@ -118,6 +118,8 @@ function invalidate() {
   candidate = null;
   reviewed = null;
   result = null;
+  staleRepair = null;
+  el('stale-repair').hidden = true;
   el('claim-review').hidden = true;
   el('revision').hidden = true;
   el('proof').hidden = true;
@@ -160,7 +162,7 @@ function invalidate() {
 function syncActions() {
   for (const id of ['check', 'cloud-preview', 'load', 'csv-file', 'example', 'nano', 'apply', 'confirm-facts',
     'brief-example', 'brief-submit', 'brief-apply', 'recheck-file', 'save-recheck', 'run-recheck',
-    'review-saved-caption', 'example-refresh']) el(id).disabled = busy;
+    'review-saved-caption', 'apply-stale-repair', 'example-refresh']) el(id).disabled = busy;
   for (const control of el('reader-choices').querySelectorAll('button, input')) control.disabled = busy;
 }
 
@@ -621,7 +623,17 @@ function runSavedCheck(check = savedCheck, feedback = recheckStatus) {
     setQuestion(check.question);
     invalidate();
     render(check.claims, [], 'Saved check');
-    if (result.status === 'conflict') status.textContent = 'Saved check failed. Review the marked excerpt before publishing.';
+    if (result.status === 'conflict') {
+      status.textContent = 'Saved check failed. Review the marked excerpt before publishing.';
+      const repair = suggestPublishRepair(rows, caption.value, check);
+      if (repair) {
+        staleRepair = {repair, original: check};
+        el('stale-before').textContent = repair.before;
+        el('stale-after').textContent = repair.after;
+        el('stale-repair').hidden = false;
+        status.textContent = 'One answer sentence no longer matches the data. Review the proposed replacement below.';
+      }
+    }
     if (result.status === 'explicit' || result.status === 'implied') {
       status.textContent = 'Saved check passed. The reviewed facts still resolve this question.';
     }
@@ -662,6 +674,17 @@ el('recheck-file').addEventListener('change', async event => {
 });
 
 el('run-recheck').addEventListener('click', () => runSavedCheck());
+el('apply-stale-repair').addEventListener('click', () => {
+  if (!staleRepair || busy) return;
+  const {repair, original} = staleRepair;
+  caption.value = repair.caption;
+  if (savedCheck === original) savedCheck = repair.check;
+  if (exampleReview?.check === original) exampleReview = {check: repair.check};
+  runSavedCheck(repair.check, status);
+  if (result?.status === 'explicit') {
+    status.textContent = 'Sentence updated. All reviewed facts match the current data. Save the recheck file to keep this wording.';
+  }
+});
 el('example-refresh').addEventListener('click', () => {
   const restoring = chartSource === refreshedExample;
   try {
