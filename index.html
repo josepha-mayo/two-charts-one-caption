@@ -58,6 +58,17 @@
       </div>
       <p id="status" role="status"></p>
     </section>
+    <section class="witness" id="witness" aria-labelledby="witness-title" hidden>
+      <h2 id="witness-title" tabindex="-1" aria-describedby="witness-question">The answer changes</h2>
+      <p id="witness-question"></p>
+      <dl class="witness-answers">
+        <div><dt>Source chart</dt><dd id="witness-source"></dd></div>
+        <div><dt>Hypothetical chart</dt><dd id="witness-alternate"></dd></div>
+      </dl>
+      <h3>Rates that changed</h3>
+      <ul id="witness-rates"></ul>
+      <button type="button" id="show-fix" class="small">Review the caption fix</button>
+    </section>
     <section aria-label="Chart comparison" class="charts" id="comparison" hidden>
       <article class="chart-panel"><h2 id="source-chart-title">Source chart</h2><div id="actual"></div></article>
       <article class="chart-panel alternate"><h2>Another possible chart</h2><div id="alternate"></div></article>
@@ -84,7 +95,7 @@
       <button type="button" id="example-refresh">Try a simulated data refresh</button>
     </div>
     <section id="revision" class="revision" aria-labelledby="revision-title" hidden>
-      <h2 id="revision-title">Make the answer clear</h2>
+      <h2 id="revision-title" tabindex="-1">Make the answer clear</h2>
       <p id="detail"></p>
       <div class="controls">
         <button type="button" class="primary" id="apply">Add this detail and recheck</button>

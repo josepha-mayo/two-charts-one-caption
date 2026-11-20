@@ -61,11 +61,37 @@ select { min-height: 32px; padding: 3px; }
 #brief-evidence { color: var(--muted); overflow-wrap: anywhere; }
 .challenge-option { display: inline-flex; align-items: center; gap: 5px; min-height: 42px; border: 1px solid var(--line); border-radius: 5px; padding: 6px 9px; cursor: pointer; }
 .challenge-option:focus-within { outline: 2px solid var(--cool); outline-offset: 2px; }
-#status { color: var(--muted); margin-top: 10px; font-size: .92rem; }
+#status { color: var(--muted); margin-top: 10px; font-size: .92rem; scroll-margin-block-start: 22px; }
 #status:empty { margin-top: 0; }
 #status[data-state="ambiguous"] { color: var(--gold); }
 #status[data-state="explicit"], #status[data-state="implied"] { color: var(--mint); }
 #status[data-state="conflict"] { color: #ffbdba; }
+.witness {
+  margin-block: 14px;
+  padding: clamp(14px, 2.3vw, 24px);
+  border: 1px solid var(--line);
+  border-block-start: 3px solid var(--gold);
+  border-radius: 10px;
+  background: var(--panel);
+}
+#revision-title { scroll-margin-block-start: 22px; }
+#witness-title { font: 500 clamp(1.65rem, 3vw, 2.45rem)/1.05 Georgia, serif; }
+#witness-title:focus-visible, #revision-title:focus-visible { outline: 2px solid var(--cool); outline-offset: 4px; }
+#witness-question { margin-top: 5px; color: var(--muted); font-size: .92rem; }
+.witness-answers {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin: 14px 0;
+}
+.witness-answers div { padding: 10px; border: 1px solid var(--line); border-radius: 5px; background: var(--background); }
+.witness-answers dt { color: var(--muted); font-size: .8rem; }
+.witness-answers dd { margin: 3px 0 0; font-weight: 750; line-height: 1.35; overflow-wrap: anywhere; }
+.witness-answers div + div dd { color: var(--gold); }
+.witness h3 { margin: 0; font-size: .8rem; color: var(--muted); }
+#witness-rates { margin: 6px 0 12px; padding: 0; list-style: none; }
+#witness-rates li { display: flex; align-items: baseline; flex-wrap: wrap; gap: 2px 14px; overflow-wrap: anywhere; }
+#witness-rates span { color: var(--gold); white-space: nowrap; font-variant-numeric: tabular-nums; }
 .charts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; margin: 14px 0; }
 .chart-panel h2 { margin-bottom: 15px; }
 .chart-panel.alternate h2 { color: var(--gold); }

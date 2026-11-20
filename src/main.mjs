@@ -126,6 +126,7 @@ function invalidate() {
   el('revision').hidden = true;
   el('proof').hidden = true;
   el('comparison').hidden = true;
+  el('witness').hidden = true;
   if (pendingReaderTest) {
     pendingReaderTest = null;
     renderReaderTest();
@@ -233,12 +234,38 @@ function renderProof(claims, alternate) {
   el('proof').hidden = false;
 }
 
+function renderWitness(selected, expected, alternate, alternateAnswer) {
+  el('witness').hidden = !alternate;
+  if (!alternate) return;
+  el('witness-question').textContent = questionText(selected);
+  el('witness-source').textContent = answerText(rows, expected);
+  el('witness-alternate').textContent = answerText(rows, alternateAnswer);
+  const changes = rows.flatMap(({label, value}, i) => {
+    if (value === alternate[i]) return [];
+    const item = make('li');
+    item.append(make('strong', label), make('span', `${value}% to ${alternate[i]}%`));
+    return [item];
+  });
+  el('witness-rates').replaceChildren(...changes);
+}
+
+function focusCheckResult() {
+  if (result?.status === 'ambiguous') {
+    el('witness-title').focus({preventScroll: true});
+    status.scrollIntoView({block: 'start'});
+    return;
+  }
+  status.setAttribute('tabindex', '-1');
+  status.focus();
+}
+
 function render(claims, alternatives = [], note = 'Browser check') {
   el('detail-status').textContent = '';
   reviewed = claims;
   const selected = selectedQuestion();
   result = checkCaption(rows, selected, claims, alternatives);
   const {expected, alternate, alternateAnswer} = result;
+  renderWitness(selected, expected, alternate, alternateAnswer);
   chart(el('actual'), rows.map(row => row.value), expected, selected);
   const names = answerText(rows, expected);
   const state = result.status;
@@ -292,12 +319,16 @@ function browserCheck(guess) {
     status.textContent = error.message;
     status.dataset.state = 'conflict';
   }
-  status.setAttribute('tabindex', '-1');
-  status.focus();
+  focusCheckResult();
 }
 
 el('example').addEventListener('click', () => loadSample());
 el('check').addEventListener('click', () => browserCheck());
+el('show-fix').addEventListener('click', () => {
+  const heading = el('revision-title');
+  heading.focus({preventScroll: true});
+  heading.scrollIntoView({block: 'start'});
+});
 const csvStatus = el('csv-status');
 function loadChart(input, source = pastedCsv) {
   try {
@@ -559,8 +590,7 @@ el('confirm-facts').addEventListener('click', () => {
   if (!candidate) return;
   render(candidate.claims, candidate.alternatives, 'Firebase cloud draft, verified in your browser');
   el('claim-review').hidden = true;
-  status.setAttribute('tabindex', '-1');
-  status.focus();
+  focusCheckResult();
 });
 
 el('nano').addEventListener('click', async () => {
@@ -674,8 +704,7 @@ function runSavedCheck(check = savedCheck, feedback = recheckStatus) {
     if (result.status === 'explicit' || result.status === 'implied') {
       status.textContent = 'Saved check passed. The reviewed facts still resolve this question.';
     }
-    status.setAttribute('tabindex', '-1');
-    status.focus();
+    focusCheckResult();
   } catch (error) {
     invalidate();
     feedback.textContent = error.message;
