@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {readChart, checkCaption, validateClaims, answer, answerText, readCategoryList, supportedDetail, fits} from '../src/check.mjs';
+import {readChart, chartForAnswer, checkCaption, validateClaims, answer, answerText, readCategoryList, supportedDetail, fits} from '../src/check.mjs';
 import {localFacts, cloudPrompt, localPrompt, readCloudReview, reviewCloudClaims} from '../src/draft.mjs';
 import {questionPrompt, readQuestionDraft} from '../src/brief.mjs';
 import {sampleCsv, sampleCaption, cutoffCaption, foodExample, foodNationalExample} from '../src/sample.mjs';
@@ -424,6 +424,26 @@ test('cutoff changes the eligible categories while both charts retain the stated
   const revised = sampleCaption + ' ' + evidence;
   const checked = validateClaims(localFacts(sample, revised), revised, sample.length);
   assert.equal(checkCaption(sample, question, checked).status, 'explicit');
+});
+
+test('specific reader answers yield a chart exactly when the checked facts allow them', () => {
+  const rows = readChart('category,percent\nNorth,20\nSouth,21\nEast,22');
+  const claims = localFacts(rows, 'Rates ranged from 20% to 22%.');
+  const grid = [20, 21, 22];
+  const candidates = grid.flatMap(a => grid.flatMap(b => grid.map(c => [a,b,c])));
+  const combinations = [[], [1], [2], [3], [1,2], [1,3], [2,3], [1,2,3]];
+  const questions = ['lowest', 'highest', {type:'pair',ids:[1,3]}, {type:'atLeast',cutoff:21}, {type:'below',cutoff:21.5}];
+  for (const question of questions) {
+    const choices = question.type === 'pair' ? [[1], [3], [1,3]]
+      : typeof question === 'string' ? combinations.slice(1) : combinations;
+    for (const ids of choices) {
+      const canGiveAnswer = values => fits(values, claims) && answer(values, question).join(',') === ids.join(',');
+      const chart = chartForAnswer(rows, question, claims, ids, 0);
+      assert.equal(Boolean(chart), candidates.some(canGiveAnswer));
+      if (chart) assert(canGiveAnswer(chart));
+    }
+  }
+  assert.throws(() => chartForAnswer(rows, {type:'pair',ids:[1,3]}, claims, [2], 0), /valid reader answer/);
 });
 
 test('empty cutoff answers differ from uncertainty, and reader links preserve the inclusive cutoff', () => {

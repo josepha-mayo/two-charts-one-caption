@@ -301,6 +301,26 @@ function alternateIntervals(actual, claims, expected, question, movable, grid, r
   return null;
 }
 
+export function chartForAnswer(rows, question, claims, ids, places = defaultDecimalPlaces) {
+  const grid = rateGrid(rows, places);
+  const actual = rows.map(row => row.value);
+  const selected = readQuestion(question, rows.length);
+  if (!Array.isArray(ids) || (!ids.length && !isCutoffClaim(selected)) ||
+      ids.some((id, index) => !Number.isInteger(id) || id <= (ids[index - 1] ?? 0) ||
+        id > rows.length || (selected.type === 'pair' && !selected.ids.includes(id)))) {
+    throw Error('Choose a valid reader answer.');
+  }
+  if (!fits(actual, claims)) throw Error('A fact in this caption conflicts with the current chart.');
+  const target = typeof selected === 'string' ? {type: selected, ids}
+    : selected.type === 'pair' ? {...selected, higher: ids.length === 2 ? 0 : ids[0]}
+      : {...selected, ids};
+  const alternate = intervalWitness(actual, [...claims, target], (1 << rows.length) - 1, grid);
+  if (alternate && (!fits(alternate, claims) || !sameAnswer(answerValues(alternate, selected), ids))) {
+    throw Error('The hypothetical chart could not be verified.');
+  }
+  return alternate;
+}
+
 export function smallestAnswerShift(rows, question, claims, witness, places = defaultDecimalPlaces) {
   const grid = rateGrid(rows, places);
   const actual = rows.map(row => row.value);

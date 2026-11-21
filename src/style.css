@@ -223,6 +223,9 @@ select { min-height: 32px; padding: 3px; }
 .reader-differences th[scope="row"] { font-weight: 550; }
 .reader-differences small { display: block; color: var(--muted); font-weight: 400; }
 .reader-differences td { font-variant-numeric: tabular-nums; }
+.reader-count-action { min-width: 36px; }
+#reader-answer-caption { margin: 12px 0; padding-inline-start: 12px; border-inline-start: 3px solid var(--cool); }
+#reader-answer-status { margin-block: 10px; font-weight: 650; }
 #reader-test-question { margin-top: 12px; font-weight: 650; }
 .test-versions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin: 12px 0 16px; }
 .test-version { display: flex; flex-direction: column; align-items: flex-start; gap: 9px; background: var(--background); border: 1px solid var(--line); border-block-start: 3px solid var(--gold); border-radius: 7px; padding: 14px; }

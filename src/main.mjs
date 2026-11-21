@@ -1,9 +1,9 @@
 import './style.css';
 import {
-  readChart, checkCaption, captionCoverage, answerSupport, smallestAnswerShift, validateClaims, answerText, isCutoffClaim, sameAnswer, supportedDetail, fitsClaim, questionText, readQuestion,
+  readChart, checkCaption, captionCoverage, answer, answerSupport, chartForAnswer, smallestAnswerShift, validateClaims, answerText, isCutoffClaim, sameAnswer, supportedDetail, fitsClaim, questionText, readQuestion,
   decimalPlaceIssue, ratePrecisionText, readDecimalPlaces,
 } from './check.mjs';
-import {localFacts, cloudPrompt, localPrompt, checkText, answerConstraint, readCloudReview, unverifiedCaptionExcerpts} from './draft.mjs';
+import {localFacts, cloudPrompt, localPrompt, checkText, answerConstraint, readCloudReview, reviewCloudClaims, unverifiedCaptionExcerpts} from './draft.mjs';
 import {defaultChartColumns, maxCsvBytes, readChartRows, readCsvTable, rowScope} from './csv.mjs';
 import {checkBrief, questionPrompt, questionConstraint, readQuestionDraft} from './brief.mjs';
 import {createPublishCheck, readPublishCheck, reviewPublishInputs, suggestPublishRepair} from './publish-check.mjs';
@@ -182,17 +182,17 @@ function sharedChartScale(source, alternate, selected) {
   return [1, 2, 5, 10, 20, 40, 60, 80, 100].find(limit => limit >= highest);
 }
 
-function chart(target, values, ids, selected, scale, compareToSource = false) {
+function chart(target, values, ids, selected, scale, compareToSource = false, sourceRows = rows) {
   const axis = make('div', undefined, 'axis');
   for (let tick = 0; tick <= 4; tick += 1) axis.append(make('span', `${tick * scale / 4}%`));
   axis.setAttribute('aria-hidden', 'true');
   const list = make('ul', undefined, 'bars');
-  rows.forEach(({label}, i) => {
+  sourceRows.forEach(({label, value: sourceRate}, i) => {
     const item = make('li', undefined, ids.includes(i + 1) ? 'selected' : '');
     const name = make('span', label, 'label');
-    if (compareToSource && values[i] !== rows[i].value) {
+    if (compareToSource && values[i] !== sourceRate) {
       item.classList.add('changed');
-      const delta = (Math.round(values[i] * 100) - Math.round(rows[i].value * 100)) / 100;
+      const delta = (Math.round(values[i] * 100) - Math.round(sourceRate * 100)) / 100;
       const change = make('small', `${deltaFormat.format(delta)} percentage points from source`, 'value-change');
       name.append(change);
     }
@@ -214,7 +214,7 @@ function chart(target, values, ids, selected, scale, compareToSource = false) {
   const summary = typeof selected === 'string'
     ? (selected === 'lowest' ? 'Lowest' : 'Highest')
     : selected.type === 'pair' ? (ids.length === 2 ? 'Tie' : 'Higher of the pair') : cutoffText(selected);
-  target.append(make('p', `${summary}: ${answerText(rows, ids)}`, 'answer'));
+  target.append(make('p', `${summary}: ${answerText(sourceRows, ids)}`, 'answer'));
 }
 
 function choiceButton(label, onClick, primary = false) {
@@ -1909,6 +1909,46 @@ function describeReaderDifference(labels, {selected, missing, extra}) {
   return {answer, changes};
 }
 
+function checkReaderAnswer(test, variant, selection, label, title) {
+  const dialog = el('reader-answer-dialog');
+  const status = el('reader-answer-status');
+  const hypothetical = el('reader-answer-chart');
+  const wording = el('reader-answer-wording');
+  const savedCaption = test[variant].caption;
+  el('reader-answer-version').textContent = `${title} · Reader chose ${label}`;
+  el('reader-answer-question').textContent = questionText(test.question, test.labels.map(name => ({label: name})));
+  el('reader-answer-caption').textContent = savedCaption;
+  hypothetical.hidden = true;
+  hypothetical.replaceChildren();
+  renderUncheckedWording(wording, [], false);
+  try {
+    const byLabel = new Map(rows.map(row => [row.label, row]));
+    const source = test.labels.map(name => byLabel.get(name));
+    if (source.length !== rows.length || source.some(row => !row)) {
+      throw Error('Load a chart with the same categories as the reader test.');
+    }
+    const rates = source.map(row => row.value);
+    if (!sameAnswer(answer(rates, test.question), test.expected)) {
+      throw Error('The current chart gives a different source answer. Load the data used for this test.');
+    }
+    const {claims} = reviewCloudClaims(source, savedCaption, []);
+    const unchecked = unverifiedCaptionExcerpts(source, savedCaption, claims);
+    renderUncheckedWording(wording, unchecked, true);
+    if (!claims.length) throw Error('The browser could not read a checkable fact in this caption.');
+    const alternate = chartForAnswer(source, test.question, claims, selection, selectedPrecision());
+    if (alternate) {
+      status.textContent = 'This hypothetical chart gives the reader’s answer and keeps every checked fact true.';
+      chart(hypothetical, alternate, selection, test.question, sharedChartScale(rates, alternate, test.question), true, source);
+      hypothetical.hidden = false;
+    } else {
+      status.textContent = 'The reader’s answer conflicts with the checked facts at the current chart precision.';
+    }
+  } catch (error) {
+    status.textContent = error.message;
+  }
+  dialog.showModal();
+}
+
 function renderReaderDifferences(test, labels) {
   const details = el('reader-differences');
   const differences = readerDifferences(test);
@@ -1917,12 +1957,24 @@ function renderReaderDifferences(test, labels) {
   const selected = test.expected.length ? answerText(labels, test.expected) : 'No categories';
   el('reader-differences-source').textContent = `Source answer · ${selected}`;
   el('reader-difference-rows').replaceChildren(...differences.map(difference => {
-    const {answer, changes} = describeReaderDifference(labels, difference);
+    const {answer: selected, changes} = describeReaderDifference(labels, difference);
     const row = make('tr');
-    const name = make('th', answer);
+    const name = make('th', selected);
     name.scope = 'row';
     name.append(make('small', changes));
-    row.append(name, make('td', String(difference.before)), make('td', String(difference.after)));
+    row.append(name);
+    for (const [key, title] of testVersions) {
+      const count = difference[key];
+      const cell = make('td', count ? undefined : '0');
+      if (count) {
+        const button = make('button', String(count), 'small reader-count-action');
+        button.type = 'button';
+        button.setAttribute('aria-label', `Check ${selected} against the ${title.toLowerCase()}`);
+        button.addEventListener('click', () => checkReaderAnswer(test, key, difference.selected, selected, title));
+        cell.append(button);
+      }
+      row.append(cell);
+    }
     return row;
   }));
 }

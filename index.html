@@ -216,6 +216,7 @@
         <details id="reader-differences" class="reader-differences" hidden>
           <summary>See differing answers</summary>
           <p id="reader-differences-source"></p>
+          <p>Select a response count to check that answer against the caption.</p>
           <table aria-label="Differing answer counts by caption version">
             <thead><tr><th scope="col">Selected answer</th><th scope="col">Original</th><th scope="col">Revised</th></tr></thead>
             <tbody id="reader-difference-rows"></tbody>
@@ -408,6 +409,23 @@
       <button type="submit">Close</button>
     </form>
     <p id="reader-link-status" role="status"></p>
+  </dialog>
+  <dialog id="reader-answer-dialog" aria-labelledby="reader-answer-title">
+    <h2 id="reader-answer-title">Could this answer fit the caption?</h2>
+    <p id="reader-answer-version"></p>
+    <p id="reader-answer-question"></p>
+    <blockquote id="reader-answer-caption"></blockquote>
+    <p>This check uses the chart and rate precision currently loaded.</p>
+    <p id="reader-answer-status" role="status"></p>
+    <div id="reader-answer-chart" role="region" aria-label="Hypothetical chart" hidden></div>
+    <details class="unchecked-wording" id="reader-answer-wording" hidden>
+      <summary>Wording to review</summary>
+      <p>The hypothetical chart uses the facts the browser could check.</p>
+      <ul></ul>
+    </details>
+    <form method="dialog" class="controls">
+      <button type="submit" autofocus>Close answer check</button>
+    </form>
   </dialog>
   <dialog id="replace-test-dialog" aria-labelledby="replace-test-title">
     <h2 id="replace-test-title">Replace this reader test?</h2>
