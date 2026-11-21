@@ -30,7 +30,9 @@ const pairInputs = [el('pair-first'), el('pair-second')];
 const csv = el('csv');
 const dialog = el('dialog');
 const status = el('status');
-const requestedExample = new URLSearchParams(location.search).get('example');
+const route = new URLSearchParams(location.search);
+const requestedExample = route.get('example');
+const openExampleReaderAnswer = route.get('demo') === 'reader-answer';
 let rows, result, reviewed, candidate, snapshot;
 let firebaseConnection;
 let cloudOperation;
@@ -76,7 +78,7 @@ const examples = new Map([
   ['bus', originalExample], ['cutoff', originalExample], ['food', foodExample],
   ['food-national', foodNationalExample], ['food-pair', foodPairExample], ['bls-revision', unemploymentExample],
 ]);
-const startingExample = examples.has(requestedExample) ? requestedExample : 'bus';
+const startingExample = openExampleReaderAnswer ? 'cutoff' : examples.has(requestedExample) ? requestedExample : 'bus';
 const exampleRefreshes = [
   {before: originalExample, after: refreshedExample, question: {type: 'atLeast', cutoff: 70},
     apply: 'Try a simulated data refresh', restore: 'Restore original example data'},
@@ -286,6 +288,7 @@ function invalidate() {
     : chartSource === revisedUnemployment ? 'Revised BLS rates'
     : group ? 'Source chart · ' + group : 'Source chart';
   el('published-example-actions').hidden = chartSource !== unemploymentExample && chartSource !== revisedUnemployment;
+  el('reader-answer-example-actions').hidden = chartSource !== originalExample;
   updateExampleRefresh();
   precisionIssue = decimalPlaceIssue(rows, selectedPrecision());
   el('rate-precision-status').textContent = precisionIssue ?? '';
@@ -1909,22 +1912,27 @@ function describeReaderDifference(labels, {selected, missing, extra}) {
   return {answer, changes};
 }
 
-function checkReaderAnswer(test, variant, selection, label, title) {
+function checkReaderAnswer(test, variant, selection, label, title, exampleRows) {
   const dialog = el('reader-answer-dialog');
   const status = el('reader-answer-status');
   const hypothetical = el('reader-answer-chart');
   const wording = el('reader-answer-wording');
   const savedCaption = test[variant].caption;
-  el('reader-answer-version').textContent = `${title} · Reader chose ${label}`;
+  el('reader-answer-example-choice').hidden = !exampleRows;
+  el('reader-answer-version').textContent = exampleRows ? `Example answer · ${label}` : `${title} · Reader chose ${label}`;
   el('reader-answer-question').textContent = questionText(test.question, test.labels.map(name => ({label: name})));
   el('reader-answer-caption').textContent = savedCaption;
+  el('reader-answer-context').textContent = exampleRows
+    ? 'This example uses the NYC bus report rates and a 70% cutoff.'
+    : 'This check uses the chart and rate precision currently loaded.';
   hypothetical.hidden = true;
   hypothetical.replaceChildren();
   renderUncheckedWording(wording, [], false);
   try {
-    const byLabel = new Map(rows.map(row => [row.label, row]));
+    const currentRows = exampleRows ?? rows;
+    const byLabel = new Map(currentRows.map(row => [row.label, row]));
     const source = test.labels.map(name => byLabel.get(name));
-    if (source.length !== rows.length || source.some(row => !row)) {
+    if (source.length !== currentRows.length || source.some(row => !row)) {
       throw Error('Load a chart with the same categories as the reader test.');
     }
     const rates = source.map(row => row.value);
@@ -1935,7 +1943,8 @@ function checkReaderAnswer(test, variant, selection, label, title) {
     const unchecked = unverifiedCaptionExcerpts(source, savedCaption, claims);
     renderUncheckedWording(wording, unchecked, true);
     if (!claims.length) throw Error('The browser could not read a checkable fact in this caption.');
-    const alternate = chartForAnswer(source, test.question, claims, selection, selectedPrecision());
+    const precision = exampleRows ? readDecimalPlaces() : selectedPrecision();
+    const alternate = chartForAnswer(source, test.question, claims, selection, precision);
     if (alternate) {
       status.textContent = 'This hypothetical chart gives the reader’s answer and keeps every checked fact true.';
       chart(hypothetical, alternate, selection, test.question, sharedChartScale(rates, alternate, test.question), true, source);
@@ -1946,8 +1955,37 @@ function checkReaderAnswer(test, variant, selection, label, title) {
   } catch (error) {
     status.textContent = error.message;
   }
-  dialog.showModal();
+  if (!dialog.open) dialog.showModal();
 }
+
+let readerAnswerExample;
+
+function showExampleReaderAnswer() {
+  const {source, test, selection} = readerAnswerExample;
+  const variant = el('reader-answer-example-after').checked ? 'after' : 'before';
+  checkReaderAnswer(test, variant, selection, 'Local only', undefined, source);
+}
+
+function startReaderAnswerExample() {
+  if (!readerAnswerExample) {
+    const source = readChart(sampleCsv);
+    const question = {type: 'atLeast', cutoff: 70};
+    const expected = answer(source.map(row => row.value), question);
+    const selection = [source.findIndex(row => row.label === 'Local') + 1];
+    readerAnswerExample = {source, selection, test: {
+      labels: source.map(row => row.label),
+      question,
+      expected,
+      before: {caption: cutoffCaption},
+      after: {caption: cutoffCaption + ' ' + supportedDetail(source, question, expected)},
+    }};
+  }
+  el('reader-answer-example-before').checked = true;
+  showExampleReaderAnswer();
+}
+
+el('open-reader-answer-example').addEventListener('click', startReaderAnswerExample);
+el('reader-answer-example-choice').addEventListener('change', showExampleReaderAnswer);
 
 function renderReaderDifferences(test, labels) {
   const details = el('reader-differences');
@@ -2202,6 +2240,10 @@ try {
     readerTest = restoreReaderTest(tabStorage);
     loadSample(startingExample);
     renderReaderTest();
+    if (openExampleReaderAnswer) {
+      el('open-reader-answer-example').focus();
+      startReaderAnswerExample();
+    }
   }
 } catch {
   loadSample(startingExample);

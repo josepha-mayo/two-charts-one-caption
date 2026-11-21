@@ -82,6 +82,9 @@
       <div id="published-example-actions" class="controls" hidden>
         <button type="button" id="open-published-example">Try the BLS publication check</button>
       </div>
+      <div id="reader-answer-example-actions" class="controls" hidden>
+        <button type="button" id="open-reader-answer-example">Try a reader’s answer</button>
+      </div>
       <p id="status" role="status"></p>
     </section>
     <section class="witness" id="witness" aria-labelledby="witness-title" hidden>
@@ -414,8 +417,13 @@
     <h2 id="reader-answer-title">Could this answer fit the caption?</h2>
     <p id="reader-answer-version"></p>
     <p id="reader-answer-question"></p>
+    <fieldset id="reader-answer-example-choice" hidden>
+      <legend>Caption to check</legend>
+      <label><input type="radio" name="example-reader-caption" id="reader-answer-example-before" checked> Original caption</label>
+      <label><input type="radio" name="example-reader-caption" id="reader-answer-example-after"> Revised caption</label>
+    </fieldset>
     <blockquote id="reader-answer-caption"></blockquote>
-    <p>This check uses the chart and rate precision currently loaded.</p>
+    <p id="reader-answer-context"></p>
     <p id="reader-answer-status" role="status"></p>
     <div id="reader-answer-chart" role="region" aria-label="Hypothetical chart" hidden></div>
     <details class="unchecked-wording" id="reader-answer-wording" hidden>

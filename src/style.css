@@ -198,8 +198,9 @@ select { min-height: 32px; padding: 3px; }
 .published-replacement > p:not(:empty) { margin-top: 6px; }
 .published-replacement .controls { margin-block: 8px 0; }
 #published-example-caption { margin: 14px 0; padding: 8px 12px; border-inline-start: 3px solid var(--cool); }
-#published-example-inputs { border: 1px solid var(--line); border-radius: 6px; padding: 4px 12px; margin: 0 0 12px; }
-#published-example-inputs label { display: flex; align-items: center; gap: 8px; min-height: 44px; cursor: pointer; }
+#published-example-inputs, #reader-answer-example-choice { border: 1px solid var(--line); border-radius: 6px; padding: 4px 12px; margin: 0 0 12px; }
+#published-example-inputs label, #reader-answer-example-choice label { display: flex; align-items: center; gap: 8px; min-height: 44px; cursor: pointer; }
+#reader-answer-example-choice { margin-top: 12px; }
 #published-example-status[data-state="explicit"] { color: var(--mint); }
 #published-example-status[data-state="conflict"] { color: #ffbdba; }
 .reader { max-width: 820px; }
