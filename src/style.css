@@ -219,6 +219,10 @@ dialog p a { color: var(--cool); text-underline-offset: 3px; }
 #publication-preview table { width: 100%; table-layout: fixed; border-collapse: collapse; }
 #publication-preview caption { text-align: start; margin-block: 6px; color: var(--muted); }
 #publication-preview th, #publication-preview td { padding: 6px; text-align: start; border-block-end: 1px solid var(--line); }
+.unchecked-wording { margin-block: 12px; padding-inline-start: 12px; border-inline-start: 3px solid var(--gold); }
+.unchecked-wording summary { color: var(--gold); cursor: pointer; font-weight: 650; }
+.unchecked-wording p { color: var(--muted); margin-block: 6px; }
+.unchecked-wording ul { padding-inline-start: 20px; overflow-wrap: anywhere; }
 .cloud-preview { display: grid; grid-template-columns: minmax(0, 1fr); gap: 4px; margin: 14px 0; }
 .cloud-preview dt { color: var(--muted); font-size: .85rem; font-weight: 650; }
 .cloud-preview dd { margin: 0 0 7px; overflow-wrap: anywhere; }

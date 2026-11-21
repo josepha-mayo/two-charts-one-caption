@@ -2,7 +2,7 @@ import './style.css';
 import {
   readChart, checkCaption, validateClaims, answerText, isCutoffClaim, sameAnswer, supportedDetail, fitsClaim, questionText, readQuestion,
 } from './check.mjs';
-import {localFacts, cloudPrompt, localPrompt, checkText, answerConstraint, reviewCloudClaims} from './draft.mjs';
+import {localFacts, cloudPrompt, localPrompt, checkText, answerConstraint, reviewCloudClaims, unverifiedCaptionExcerpts} from './draft.mjs';
 import {defaultChartColumns, readChartRows, readCsvTable} from './csv.mjs';
 import {checkBrief, questionPrompt, questionConstraint, readQuestionDraft} from './brief.mjs';
 import {createPublishCheck, readPublishCheck, reviewPublishInputs, suggestPublishRepair} from './publish-check.mjs';
@@ -482,6 +482,17 @@ function render(claims, alternatives = [], note = 'Browser check') {
     el('detail').textContent = supportedDetail(rows, selected, expected);
   }
   renderProof(claims, alternate);
+  const excerpts = unverifiedCaptionExcerpts(rows, caption.value, claims);
+  for (const id of ['proof-wording', 'publication-wording']) {
+    const review = el(id);
+    review.hidden = excerpts.length === 0;
+    review.open = id === 'publication-wording';
+    review.querySelector('ul').replaceChildren(...excerpts.map(text => {
+      const item = make('li');
+      item.append(make('q', text));
+      return item;
+    }));
+  }
   updateExampleRefresh();
 }
 

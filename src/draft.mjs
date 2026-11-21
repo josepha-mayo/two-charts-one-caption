@@ -246,19 +246,23 @@ function skipProse(text) {
 
 function scanCaptionFacts(rows, caption) {
   let remaining = caption.trim();
-  let complete = true;
-  const facts = [];
+  const fragments = [];
   while (remaining) {
     const fact = readLocalFact(rows, remaining);
-    if (!fact) {
-      complete = false;
-      remaining = skipProse(remaining);
-      continue;
-    }
-    facts.push(fact);
-    remaining = remaining.slice(fact.evidence.length).trimStart();
+    const next = fact ? remaining.slice(fact.evidence.length).trimStart() : skipProse(remaining);
+    fragments.push({text: fact?.evidence ?? remaining.slice(0, remaining.length - next.length).trim(), fact});
+    remaining = next;
   }
-  return {facts, complete};
+  const facts = fragments.flatMap(({fact}) => fact ? [fact] : []);
+  return {facts, complete: facts.length === fragments.length, fragments};
+}
+
+export function unverifiedCaptionExcerpts(rows, caption, claims) {
+  const clean = checkText(caption.replace(/\r\n/g, '\n'));
+  const {fragments} = scanCaptionFacts(rows, clean);
+  return fragments.filter(({fact}) => !fact || !claims.some(claim =>
+    claim.type === fact.type && claim.value === fact.value && matchesFact(claim, fact) &&
+    matchesQuote(claim.evidence.trim().replace(/\r\n/g, '\n'), fact))).map(({text}) => text);
 }
 
 export function localFacts(rows, caption) {

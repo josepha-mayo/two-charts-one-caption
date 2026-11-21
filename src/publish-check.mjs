@@ -1,7 +1,7 @@
 import {
   answer, answerText, checkCaption, fitsClaim, isCutoffClaim, questionText, readQuestion, sameAnswer, statesAnswer, supportedDetail, validateClaims,
 } from './check.mjs';
-import {checkText, localFacts, readQuotedCutoff, readQuotedFact, withQuotedRankValue} from './draft.mjs';
+import {checkText, localFacts, readQuotedCutoff, readQuotedFact, unverifiedCaptionExcerpts, withQuotedRankValue} from './draft.mjs';
 import {readColumnNames} from './csv.mjs';
 
 function normalizeCaption(text) {
@@ -79,6 +79,9 @@ export function runPublishCheck(rows, caption, check, columns) {
   } else if (result.status === 'ambiguous') {
     report.alternateAnswer = answerText(input.rows, result.alternateAnswer);
     report.changedCategories = result.changedCategories;
+  } else {
+    const unchecked = unverifiedCaptionExcerpts(input.rows, caption, check.claims).length;
+    if (unchecked) report.uncheckedWordingCount = unchecked;
   }
   return report;
 }

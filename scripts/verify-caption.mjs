@@ -3,7 +3,7 @@ import {parseArgs} from 'node:util';
 import {readChart} from '../src/check.mjs';
 import {readPublishCheck, runPublishCheck} from '../src/publish-check.mjs';
 
-const usage = 'Usage: node scripts/verify-caption.mjs check.json chart.csv caption.txt [--category-column HEADER --percent-column HEADER] [--json]';
+const usage = 'Usage: node scripts/verify-caption.mjs check.json chart.csv caption.txt [--category-column HEADER --percent-column HEADER] [--require-checked-wording] [--json]';
 
 async function readText(path, limit) {
   const handle = await open(path, 'r');
@@ -32,6 +32,7 @@ try {
       help: {type: 'boolean'},
       'category-column': {type: 'string'},
       'percent-column': {type: 'string'},
+      'require-checked-wording': {type: 'boolean'},
     },
     allowPositionals: true,
   });
@@ -52,6 +53,10 @@ try {
     const check = readPublishCheck(JSON.parse(recipeText));
     const columns = hasMapping ? {category, rate} : check.columns;
     const report = runPublishCheck(readChart(csv, columns), caption, check, columns);
+    if (values['require-checked-wording'] && report.uncheckedWordingCount) {
+      report.status = 'review_required';
+      report.message = 'Some caption wording needs editorial review.';
+    }
     const passed = report.status === 'explicit' || report.status === 'implied';
     process.exitCode = passed ? 0 : 1;
     if (json) console.log(JSON.stringify(report, null, 2));
@@ -65,6 +70,7 @@ try {
       if (report.alternateAnswer) console.log('Alternate answer:', JSON.stringify(report.alternateAnswer));
       for (const evidence of report.failedFacts ?? []) console.log('Stale excerpt:', JSON.stringify(evidence));
     }
+    if (!json && report.uncheckedWordingCount) console.log('Unchecked excerpts:', report.uncheckedWordingCount);
   }
 } catch (error) {
   process.exitCode = 2;

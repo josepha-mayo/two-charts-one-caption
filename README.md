@@ -62,6 +62,8 @@ npm run verify-caption -- examples/bus-cutoff/caption-recheck.json examples/bus-
 
 Try replacing `current.csv` with the simulated `refreshed.csv`. Select Bus Service drops below 70% while the range and named extrema stay the same. The command returns the exact stale excerpt. Exit code 0 means the approved facts still determine the answer, 1 requests editorial review, and 2 indicates invalid input. Call `node scripts/verify-caption.mjs … --json` for machine-readable output without an npm script banner.
 
+When the selected facts resolve the question, the browser still shows wording it could not match to a complete checked fact. The proof and publishing dialog display those excerpts locally. The CLI reports their count. Add `--require-checked-wording` to request editorial review when any such wording remains.
+
 New recheck files remember the selected CSV headers when both headings are unique and nonempty. The browser shows the columns in use and requires the saved pair for that recheck. Place the columns anywhere in the next export. The CLI selects them by exact name automatically. For older files and files saved without unique headings, pass the exact, case-sensitive names you selected in the browser.
 
 ```sh

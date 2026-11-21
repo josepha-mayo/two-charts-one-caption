@@ -6,7 +6,7 @@ import {join} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import test from 'node:test';
 import {readChart, supportedDetail} from '../src/check.mjs';
-import {localFacts} from '../src/draft.mjs';
+import {localFacts, unverifiedCaptionExcerpts} from '../src/draft.mjs';
 import {foodNationalExample} from '../src/sample.mjs';
 import {createPublishCheck, readPublishCheck, runPublishCheck, suggestPublishRepair} from '../src/publish-check.mjs';
 
@@ -125,6 +125,7 @@ test('repair replaces one reviewed sentence and keeps the other caption text and
     status: 'explicit',
     question: 'Which categories reached at least 70%?',
     sourceAnswer: 'Local',
+    uncheckedWordingCount: 1,
   });
   const original = readChart(readExample('current.csv'));
   const reversed = suggestPublishRepair(original, repair.caption, repair.check);
@@ -222,4 +223,42 @@ test('a saved rate column prevents CI from passing the caption against last week
   const repair = suggestPublishRepair(readChart(readExample('refreshed.csv')), caption, saved, selected);
   assert.deepEqual(repair.check.columns, selected);
   assert.equal(suggestPublishRepair(rows, caption, saved), undefined);
+});
+
+test('a resolved question can leave contextual prose for editorial review', t => {
+  const directory = mkdtempSync(join(tmpdir(), 'two-charts-wording-'));
+  const captionPath = join(directory, 'caption.txt');
+  const checkPath = join(directory, 'check.json');
+  const excerpt = 'Dr. North tentatively attributed the result to PRIVATE_CONTEXT.';
+  const text = excerpt + '\r\n' + caption;
+  const rows = readChart(readExample('current.csv'));
+  const saved = createPublishCheck(rows, check.question, text, check.claims);
+  assert.deepEqual(unverifiedCaptionExcerpts(rows, text, saved.claims), [excerpt]);
+  assert.deepEqual(unverifiedCaptionExcerpts(rows, caption, check.claims), []);
+  const interpretation = 'Express came in at 65.1% after five years of upgrades.';
+  assert.deepEqual(unverifiedCaptionExcerpts(rows, interpretation, [
+    {type: 'value', id: 3, value: 65.1, evidence: interpretation},
+  ]), [interpretation]);
+  writeFileSync(checkPath, JSON.stringify(saved));
+  writeFileSync(captionPath, text);
+  t.after(() => {
+    unlinkSync(checkPath);
+    unlinkSync(captionPath);
+    rmdirSync(directory);
+  });
+
+  const script = fileURLToPath(new URL('../scripts/verify-caption.mjs', import.meta.url));
+  const run = (...args) => spawnSync(process.execPath, [
+    script, checkPath, fileURLToPath(example('current.csv')), captionPath, '--json', ...args,
+  ], {encoding: 'utf8'});
+  const ordinary = run();
+  assert.equal(ordinary.status, 0, ordinary.stderr);
+  assert.equal(JSON.parse(ordinary.stdout).status, 'explicit');
+  const strict = run('--require-checked-wording');
+  assert.equal(strict.status, 1, strict.stderr);
+  assert.deepEqual(
+    [JSON.parse(strict.stdout).status, JSON.parse(strict.stdout).uncheckedWordingCount],
+    ['review_required', 1],
+  );
+  assert.doesNotMatch(ordinary.stdout + strict.stdout, /PRIVATE_CONTEXT/);
 });
