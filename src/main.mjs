@@ -6,6 +6,7 @@ import {localFacts, cloudPrompt, localPrompt, checkText, answerConstraint, revie
 import {defaultChartColumns, readChartRows, readCsvTable} from './csv.mjs';
 import {checkBrief, questionPrompt, questionConstraint, readQuestionDraft} from './brief.mjs';
 import {createPublishCheck, readPublishCheck, reviewPublishInputs, suggestPublishRepair} from './publish-check.mjs';
+import {maxEditorialDraftBytes, readEditorialDraft, writeEditorialDraft} from './editorial-draft.mjs';
 import {deviceAvailability} from './device.mjs';
 import {saveOfflineApp} from './offline.mjs';
 import {sampleCsv, sampleCaption, cutoffCaption, sampleSource, foodExample, foodNationalExample} from './sample.mjs';
@@ -219,6 +220,7 @@ function invalidate() {
 function syncActions() {
   for (const id of ['check', 'cloud-preview', 'load', 'csv-file', 'example', 'example-select', 'nano', 'apply', 'open-rewrite',
     'brief-example', 'brief-submit', 'brief-apply', 'recheck-file', 'save-recheck', 'run-recheck',
+    'save-editor-draft', 'editor-draft-file',
     'review-saved-caption', 'apply-stale-repair', 'example-refresh', 'csv-category', 'csv-percent',
     'use-csv-columns', 'check-rewrite', 'rewrite-cloud-preview']) el(id).disabled = busy;
   el('confirm-facts').disabled = busy || !candidate?.claims.length;
@@ -246,6 +248,9 @@ function cancelCloudReview() {
 
 function renderSource() {
   const link = el('source');
+  const note = el('draft-source-note');
+  note.hidden = Boolean(chartSource.sourceUrl) || !chartSource.sourceCitation;
+  note.textContent = note.hidden ? '' : chartSource.sourceCitation;
   link.hidden = !chartSource.sourceUrl;
   if (link.hidden) return;
   link.href = chartSource.sourceUrl;
@@ -999,6 +1004,69 @@ el('save-recheck').addEventListener('click', () => {
 const recheckStatus = el('recheck-status');
 const savedCaptionDialog = el('saved-caption-dialog');
 let previewedCheck;
+const editorialFileDialog = el('editor-draft-dialog');
+const editorialFileStatus = el('editor-draft-status');
+let editorialFileRevision = 0;
+let previewedEditorialFile;
+
+el('save-editor-draft').addEventListener('click', () => {
+  try {
+    const selected = selectedQuestion();
+    const review = reviewed?.length ? createPublishCheck(rows, selected, caption.value, reviewed) : null;
+    const draft = writeEditorialDraft({
+      rows, caption: caption.value, question: selected, sourceNote: chartSource.sourceCitation, review,
+    });
+    downloadFile(draft, 'application/json', 'two-charts-editorial-draft.json');
+    editorialFileStatus.textContent = 'Draft downloaded. It contains the selected chart values.';
+  } catch (error) {
+    editorialFileStatus.textContent = error.message;
+  }
+});
+el('editor-draft-file').addEventListener('change', async event => {
+  const picker = event.currentTarget;
+  const file = picker.files[0];
+  picker.value = '';
+  if (!file) return;
+  const intent = ++editorialFileRevision;
+  editorialFileStatus.textContent = '';
+  try {
+    if (file.size > maxEditorialDraftBytes) throw Error('Choose an editorial draft under 160 KB.');
+    const text = new TextDecoder('utf-8', {fatal: true}).decode(await file.arrayBuffer());
+    if (intent !== editorialFileRevision) return;
+    const draft = readEditorialDraft(text);
+    const chart = readChart(draft.csv);
+    if (busy || document.querySelector('dialog[open]')) throw Error('Finish the current action, then choose the draft again.');
+    previewedEditorialFile = {draft, chart, name: file.name};
+    el('editor-draft-question').textContent = `${questionText(draft.question)} · ${chart.length} categories`;
+    el('editor-draft-caption').textContent = draft.caption || 'Empty caption';
+    el('editor-draft-data').open = false;
+    el('editor-draft-categories').replaceChildren(...chart.map(({label, value}) => make('li', `${label} · ${value}%`)));
+    el('editor-draft-note').textContent = 'Opening the draft replaces the chart, caption, question, and saved review in this editor.' +
+      (draft.review ? ' The browser will rerun the saved review.' : '');
+    editorialFileDialog.returnValue = 'cancel';
+    editorialFileDialog.showModal();
+  } catch (error) {
+    if (intent !== editorialFileRevision) return;
+    editorialFileStatus.textContent = error instanceof SyntaxError || error instanceof TypeError
+      ? 'Choose an editorial draft in UTF-8 JSON format.' : error.message;
+  }
+});
+editorialFileDialog.addEventListener('close', () => {
+  const preview = previewedEditorialFile;
+  previewedEditorialFile = null;
+  el('editor-draft-caption').textContent = '';
+  el('editor-draft-categories').replaceChildren();
+  if (!preview || editorialFileDialog.returnValue !== 'open') return;
+  const {draft, chart, name} = preview;
+  setQuestion(draft.question);
+  applyChart(chart, draft.csv, {label: 'Editorial draft', sourceCitation: draft.sourceNote});
+  caption.value = draft.caption;
+  savedCheck = draft.review;
+  el('recheck-file-name').textContent = savedCheck ? name : '';
+  el('recheck-actions').hidden = !savedCheck;
+  editorialFileStatus.textContent = 'Editorial draft opened.';
+  if (savedCheck) runSavedCheck(savedCheck);
+});
 
 function runSavedCheck(check = savedCheck, feedback = recheckStatus) {
   if (!check) return;

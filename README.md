@@ -42,6 +42,8 @@ Select **Save reader test** to continue later or on another browser. Under **Ope
 
 To load another chart, choose or paste a UTF-8 CSV with a header and two to seven data rows. The two-column formats `category,percent` and `service,percent` load directly. For other layouts, choose a category column and a percentage column. Only the chosen columns enter the chart check. Use percentages such as `71.5` or `71.5%`, with up to two decimal places.
 
+Open **Save or open an editorial draft** to keep the loaded chart, wording, question, and any currently reviewed facts in one file. Reopen it in another browser or in a saved offline copy of Two Charts. The editor shows a preview and runs any saved review against the restored chart. The draft contains the selected chart values. Unused spreadsheet columns, private editor notes, and reader responses stay out of the file.
+
 ## Recheck before publishing
 
 In the 70% example, resolve the caption and choose **Try a simulated data refresh** to run the same saved check with the example’s updated CSV. If exactly one supported answer sentence goes stale, the browser shows that sentence and a verified replacement. **Replace sentence and recheck** changes the quoted sentence. **Save recheck file** exports the newly checked wording. **Restore original example data** switches back while keeping the caption in the editor so it can be checked again.
