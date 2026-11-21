@@ -6,7 +6,7 @@ import {questionPrompt, readQuestionDraft} from '../src/brief.mjs';
 import {sampleCsv, sampleCaption, cutoffCaption, foodExample, foodNationalExample} from '../src/sample.mjs';
 import {
   addReaderResponse, createReaderLink, createReaderTest, encodeResponse, readReaderLink,
-  readReaderTestFile, readerCounts, readerResponseId, restoreReaderTest, saveReaderTest, writeReaderTestFile,
+  readReaderTestFile, readerCounts, readerDifferences, readerResponseId, restoreReaderTest, saveReaderTest, writeReaderTestFile,
 } from '../src/reader.mjs';
 
 const sample = readChart(sampleCsv);
@@ -338,6 +338,32 @@ test('before and after links are independent, and their response codes round-tri
   const duplicate = addReaderResponse(check, unsure);
   assert.equal(duplicate.action, 'Updated');
   assert.deepEqual(readerCounts(duplicate.test, 'before'), readerCounts(check, 'before'));
+});
+
+test('differing selections keep their counts per caption and distinguish no categories from unsure', () => {
+  const question = {type: 'atLeast', cutoff: 70};
+  const after = cutoffCaption + ' Only Local and Select Bus Service reached at least 70%.';
+  let test = createReaderTest(sample, question, [1, 2], cutoffCaption, after);
+  const add = (variant, selected, id = crypto.randomUUID()) => {
+    test = addReaderResponse(test, encodeResponse(test[variant].invitation, id, selected)).test;
+  };
+  const id = crypto.randomUUID();
+  add('before', [1], id);
+  add('before', [1]);
+  add('before', []);
+  add('before', null);
+  add('after', [1]);
+  add('after', [1, 2, 3]);
+  add('after', [1, 2]);
+  assert.deepEqual(readerDifferences(test), [
+    {selected: [1], missing: [2], extra: [], before: 2, after: 1},
+    {selected: [], missing: [1, 2], extra: [], before: 1, after: 0},
+    {selected: [1, 2, 3], missing: [], extra: [3], before: 0, after: 1},
+  ]);
+  add('before', [1, 2], id);
+  const restored = readReaderTestFile(writeReaderTestFile(test));
+  assert.equal(readerDifferences(restored)[0].before, 1);
+  assert.equal(readerCounts(restored, 'before').uncertain, 1);
 });
 
 test('a reader can revise a tied answer without adding another response, and the test survives reload', () => {

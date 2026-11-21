@@ -50,6 +50,8 @@ Each link contains its own caption, category names, question, and random invitat
 
 Select **Save reader test** to continue later or on another browser. Under **Open a saved reader test**, choose the JSON file and review both captions before opening it. The original links and their collected responses carry over. Keep the JSON with the editor because it includes both captions, the answer, and individual selections. **Download results** gives a text summary for sharing.
 
+**See differing answers** groups incorrect selections by caption version and shows which categories readers missed or added. The text summary includes the same counts.
+
 To load another chart, choose or paste a UTF-8 CSV up to 64 KB with a header. The two-column formats `category,percent` and `service,percent` load directly. For other layouts, choose the category and percentage columns. If the sheet contains several reporting periods or series, choose a separate row group column and one value. That group supplies the 2 to 12 chart rows. Values match exactly after trimming surrounding whitespace. Use percentages such as `71.5` or `71.5%`, with up to two decimal places.
 
 Set **Rate precision** to match the published values. With one decimal place, hypothetical rates and the smallest answer shift are calculated in tenths of a percentage point. You can still ask about a cutoff between grid values, such as 3.85%. The BLS example starts at one decimal place. Imported charts can use whole percentages, tenths, or hundredths. A value that falls outside the selected precision needs review before checking.

@@ -17,7 +17,7 @@ import firstUnemploymentCsv from '../examples/bls-unemployment/first-published.c
 import revisedUnemploymentCsv from '../examples/bls-unemployment/revised.csv?raw';
 import {
   addReaderResponse, createReaderLink, createReaderTest, encodeResponse, readReaderLink,
-  maxReaderTestFileBytes, readReaderTestFile, readerCounts, readerResponseId, restoreReaderTest, saveReaderTest, writeReaderTestFile,
+  maxReaderTestFileBytes, readReaderTestFile, readerCounts, readerDifferences, readerResponseId, restoreReaderTest, saveReaderTest, writeReaderTestFile,
 } from './reader.mjs';
 
 const el = id => document.getElementById(id);
@@ -1900,6 +1900,33 @@ function readerVersionCard(test, key, title) {
   return card;
 }
 
+function describeReaderDifference(labels, {selected, missing, extra}) {
+  const answer = selected.length ? answerText(labels, selected) : 'No categories';
+  const changes = [
+    ...(missing.length ? [`Missed ${answerText(labels, missing)}`] : []),
+    ...(extra.length ? [`Added ${answerText(labels, extra)}`] : []),
+  ].join(' · ');
+  return {answer, changes};
+}
+
+function renderReaderDifferences(test, labels) {
+  const details = el('reader-differences');
+  const differences = readerDifferences(test);
+  details.hidden = !differences.length;
+  if (details.hidden) details.open = false;
+  const selected = test.expected.length ? answerText(labels, test.expected) : 'No categories';
+  el('reader-differences-source').textContent = `Source answer · ${selected}`;
+  el('reader-difference-rows').replaceChildren(...differences.map(difference => {
+    const {answer, changes} = describeReaderDifference(labels, difference);
+    const row = make('tr');
+    const name = make('th', answer);
+    name.scope = 'row';
+    name.append(make('small', changes));
+    row.append(name, make('td', String(difference.before)), make('td', String(difference.after)));
+    return row;
+  }));
+}
+
 function renderReaderTest() {
   el('reader-test').hidden = !readerTest && !pendingReaderTest;
   const start = el('start-reader-test');
@@ -1908,7 +1935,7 @@ function renderReaderTest() {
   el('reader-test-run').hidden = !readerTest;
   if (!readerTest) return;
   const labels = readerTest.labels.map(label => ({label}));
-  el('reader-test-question').textContent = `Question: ${questionText(readerTest.question, readerTest.labels.map(label => ({label})))}`;
+  el('reader-test-question').textContent = `Question: ${questionText(readerTest.question, labels)}`;
   el('reader-test-versions').replaceChildren(...testVersions.map(([key, title]) => {
     const {caption, invitation} = readerTest[key];
     const card = readerVersionCard(readerTest, key, title);
@@ -1935,6 +1962,7 @@ function renderReaderTest() {
     return card;
   }));
   el('download-reader-results').hidden = testVersions.every(([key]) => !readerTest[key].responses.length);
+  renderReaderDifferences(readerTest, labels);
 }
 
 function persistReaderTest() {
@@ -2038,11 +2066,21 @@ el('reader-response-form').addEventListener('submit', event => {
 
 el('download-reader-results').addEventListener('click', () => {
   if (!readerTest) return;
+  const labels = readerTest.labels.map(label => ({label}));
   const lines = ['# Two Charts, One Caption — reader test', '',
     el('reader-test-question').textContent,
-    `Source answer: ${answerText(readerTest.labels.map(label => ({label})), readerTest.expected)}`, ''];
+    `Source answer: ${answerText(labels, readerTest.expected)}`, ''];
   for (const [key, title] of testVersions) {
     lines.push(title, readerTest[key].caption, countText(readerCounts(readerTest, key)), '');
+  }
+  const differences = readerDifferences(readerTest);
+  if (differences.length) {
+    lines.push('Selected answers that differed from the source');
+    for (const difference of differences) {
+      const {answer, changes} = describeReaderDifference(labels, difference);
+      lines.push(`- ${answer} · ${difference.before} original · ${difference.after} revised · ${changes}`);
+    }
+    lines.push('');
   }
   lines.push('Counts reflect response codes returned by readers. Each code is counted once per caption version.', '');
   downloadFile(lines.join('\n'), 'text/plain;charset=utf-8', 'caption-reader-results.txt');

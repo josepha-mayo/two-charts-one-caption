@@ -188,3 +188,24 @@ export function readerCounts(test, variant) {
   }
   return result;
 }
+
+export function readerDifferences(test) {
+  const groups = new Map();
+  for (const variant of VARIANTS) {
+    for (const {selected} of test[variant].responses) {
+      if (selected === null || sameAnswer(selected, test.expected)) continue;
+      const key = selected.join(',');
+      if (!groups.has(key)) {
+        groups.set(key, {
+          selected: [...selected],
+          missing: test.expected.filter(id => !selected.includes(id)),
+          extra: selected.filter(id => !test.expected.includes(id)),
+          before: 0, after: 0,
+        });
+      }
+      groups.get(key)[variant]++;
+    }
+  }
+  return [...groups.values()].sort((a, b) =>
+    b.before + b.after - a.before - a.after || a.selected.join(',').localeCompare(b.selected.join(','), 'en', {numeric: true}));
+}

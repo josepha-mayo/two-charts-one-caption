@@ -215,6 +215,14 @@ select { min-height: 32px; padding: 3px; }
 .reader-test { margin: 14px 0; }
 .reader-test h2 { font-size: clamp(1.1rem, 2vw, 1.35rem); }
 .reader-test p { color: var(--muted); }
+.reader-differences { margin-block: 12px; }
+.reader-differences summary { cursor: pointer; font-weight: 650; }
+.reader-differences p { margin-block: 8px; }
+.reader-differences table { border-collapse: collapse; width: 100%; overflow-wrap: anywhere; }
+.reader-differences th, .reader-differences td { padding: 6px 8px; border-bottom: 1px solid var(--line); text-align: start; }
+.reader-differences th[scope="row"] { font-weight: 550; }
+.reader-differences small { display: block; color: var(--muted); font-weight: 400; }
+.reader-differences td { font-variant-numeric: tabular-nums; }
 #reader-test-question { margin-top: 12px; font-weight: 650; }
 .test-versions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin: 12px 0 16px; }
 .test-version { display: flex; flex-direction: column; align-items: flex-start; gap: 9px; background: var(--background); border: 1px solid var(--line); border-block-start: 3px solid var(--gold); border-radius: 7px; padding: 14px; }
