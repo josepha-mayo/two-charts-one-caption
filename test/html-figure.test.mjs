@@ -59,6 +59,13 @@ test('read the exported table shape and report changed or missing rows by label'
   assert.throws(() => readFigures(span).read({checkTable:true}), /two-column data table/);
   const hidden = checkedPage.replace('<table>','<table aria-hidden="true">');
   assert.throws(() => readFigures(hidden).read({checkTable:true}), /exactly one data table/);
+  assert.deepEqual(read({captionId:'unemployment-rates',forAudit:true}), {...selected,decimalPlaces:1});
+  const normalized = readFigures('<figure><figcaption>Two groups.</figcaption><table>' +
+    '<thead><tr><th>Group</th><th>Rate</th></tr></thead>' +
+    '<tbody><tr><th>A</th><td>40.00%</td></tr><tr><th>B</th><td>50%</td></tr></tbody></table></figure>');
+  assert.deepEqual(normalized.read({forAudit:true}), {
+    text:'Two groups.', rows:[{label:'A',value:40},{label:'B',value:50}], decimalPlaces:2,
+  });
 });
 
 test('a checked replacement closes the publication check after the caption and table are updated', () => {

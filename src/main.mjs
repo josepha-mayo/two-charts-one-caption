@@ -4,7 +4,7 @@ import {
   decimalPlaceIssue, ratePrecisionText, readDecimalPlaces,
 } from './check.mjs';
 import {localFacts, cloudPrompt, localPrompt, checkText, answerConstraint, readCloudReview, reviewCloudClaims, unverifiedCaptionExcerpts} from './draft.mjs';
-import {defaultChartColumns, maxCsvBytes, readChartRows, readCsvTable, rowScope} from './csv.mjs';
+import {defaultChartColumns, maxCsvBytes, readChartRows, readCsvTable, rowScope, writeChartCsv} from './csv.mjs';
 import {checkBrief, questionPrompt, questionConstraint, readQuestionDraft} from './brief.mjs';
 import {createPublishCheck, readPublishCheck, reviewedAnswerChange, reviewPublishInputs, suggestPublishRepair} from './publish-check.mjs';
 import {maxEditorialDraftBytes, readEditorialDraft, writeEditorialDraft} from './editorial-draft.mjs';
@@ -336,7 +336,10 @@ function syncActions() {
     'review-saved-caption', 'apply-stale-repair', 'example-refresh', 'csv-category', 'csv-percent', 'csv-group', 'csv-group-value',
     'use-csv-columns', 'check-rewrite', 'rewrite-cloud-preview', 'publication', 'export']) el(id).disabled = busy;
   el('confirm-facts').disabled = busy || !candidate?.claims.length;
-  el('check-published-page').disabled = busy || !publishedPage || !savedCheck || el('published-figure').value === '';
+  const figureReady = !busy && Boolean(publishedPage) && el('published-figure').value !== '';
+  el('open-published-figure').disabled = !figureReady;
+  el('check-published-page').disabled = !figureReady || !savedCheck;
+  el('check-published-page').hidden = el('published-table-choice').hidden = !savedCheck;
   el('confirm-rewrite-facts').disabled = busy || !rewriteCandidate?.claims.length;
   const checkDisabled = busy || Boolean(precisionIssue);
   el('check').disabled = el('cloud-preview').disabled = checkDisabled;
@@ -1419,6 +1422,23 @@ const editorialFileStatus = el('editor-draft-status');
 let editorialFileRevision = 0;
 let previewedEditorialFile;
 
+function previewEditorialFile(draft, chart, {name, fromFigure = false} = {}) {
+  if (busy || document.querySelector('dialog[open]')) throw Error('Finish the current action first.');
+  previewedEditorialFile = {draft, chart, name, fromFigure};
+  el('editor-draft-title').textContent = fromFigure ? 'Review the figure for a new audit' : 'Open editorial draft';
+  el('open-previewed-editorial-file').textContent = fromFigure ? 'Open figure in editor' : 'Open draft';
+  el('editor-draft-question').textContent = `${questionText(draft.question, chart)} · ${chart.length} categories · ${ratePrecisionText(draft.decimalPlaces)}`;
+  el('editor-draft-caption').textContent = draft.caption || 'Empty caption';
+  el('editor-draft-data').open = false;
+  el('editor-draft-categories').replaceChildren(...chart.map(({label, value}) => make('li', `${label} · ${value}%`)));
+  el('editor-draft-note').textContent = fromFigure
+    ? 'Opening the figure replaces the chart, caption, and question in the editor. The audit starts with fresh checks.'
+    : 'Opening the draft replaces the chart, caption, question, and saved review in this editor.' +
+      (draft.review ? ' The browser will rerun the saved review.' : '');
+  editorialFileDialog.returnValue = 'cancel';
+  editorialFileDialog.showModal();
+}
+
 el('save-editor-draft').addEventListener('click', () => {
   try {
     const selected = selectedQuestion();
@@ -1446,17 +1466,7 @@ el('editor-draft-file').addEventListener('change', async event => {
     const text = new TextDecoder('utf-8', {fatal: true}).decode(await file.arrayBuffer());
     if (intent !== editorialFileRevision) return;
     const draft = readEditorialDraft(text);
-    const chart = readChart(draft.csv);
-    if (busy || document.querySelector('dialog[open]')) throw Error('Finish the current action, then choose the draft again.');
-    previewedEditorialFile = {draft, chart, name: file.name};
-    el('editor-draft-question').textContent = `${questionText(draft.question, chart)} · ${chart.length} categories · ${ratePrecisionText(draft.decimalPlaces)}`;
-    el('editor-draft-caption').textContent = draft.caption || 'Empty caption';
-    el('editor-draft-data').open = false;
-    el('editor-draft-categories').replaceChildren(...chart.map(({label, value}) => make('li', `${label} · ${value}%`)));
-    el('editor-draft-note').textContent = 'Opening the draft replaces the chart, caption, question, and saved review in this editor.' +
-      (draft.review ? ' The browser will rerun the saved review.' : '');
-    editorialFileDialog.returnValue = 'cancel';
-    editorialFileDialog.showModal();
+    previewEditorialFile(draft, readChart(draft.csv), {name:file.name});
   } catch (error) {
     if (intent !== editorialFileRevision) return;
     editorialFileStatus.textContent = error instanceof SyntaxError || error instanceof TypeError
@@ -1469,16 +1479,21 @@ editorialFileDialog.addEventListener('close', () => {
   el('editor-draft-caption').textContent = '';
   el('editor-draft-categories').replaceChildren();
   if (!preview || editorialFileDialog.returnValue !== 'open') return;
-  const {draft, chart, name} = preview;
+  const {draft, chart, name, fromFigure} = preview;
   ratePrecision.value = String(readDecimalPlaces(draft.decimalPlaces));
   setQuestion(draft.question, chart);
-  applyChart(chart, draft.csv, {label: 'Editorial draft', sourceCitation: draft.sourceNote}, draft.columns);
+  applyChart(chart, draft.csv, {label: fromFigure ? 'HTML figure' : 'Editorial draft', sourceCitation: draft.sourceNote}, draft.columns);
   caption.value = draft.caption;
+  if (fromFigure) {
+    status.textContent = 'HTML figure opened. Choose a question and check the caption.';
+    return;
+  }
   savedCheck = draft.review;
   el('recheck-file-name').textContent = savedCheck ? name : '';
   el('recheck-actions').hidden = !savedCheck;
   editorialFileStatus.textContent = 'Editorial draft opened.';
   if (savedCheck) runSavedCheck(savedCheck);
+  syncActions();
 });
 
 function runSavedCheck(check = savedCheck, feedback = recheckStatus) {
@@ -1597,7 +1612,7 @@ el('published-page-file').addEventListener('change', async event => {
     publishedPage = {figures, runPublishedFigureCheck};
     fileName.textContent = file.name;
     fileName.hidden = false;
-    feedback.textContent = figures.count === 1 ? 'One figure found.' : `${figures.count} figures found. Choose one to check.`;
+    feedback.textContent = figures.count === 1 ? 'One figure found.' : `${figures.count} figures found. Choose a figure.`;
   } catch (error) {
     if (intent === publishedFileRevision) feedback.textContent = error.message;
   } finally {
@@ -1612,8 +1627,25 @@ for (const id of ['published-figure', 'published-table']) {
   });
 }
 
+function previewFigure({text, rows:chart, decimalPlaces}, sourceNote, selected = 'highest') {
+  const draft = {caption:checkText(text), question:selected, csv:writeChartCsv(chart), decimalPlaces, sourceNote};
+  previewEditorialFile(draft, chart, {fromFigure:true});
+}
+
+el('open-published-figure').addEventListener('click', () => {
+  if (el('open-published-figure').disabled) return;
+  const {figures} = publishedPage;
+  try {
+    const figure = figures.read({captionIndex:Number(el('published-figure').value), forAudit:true});
+    clearPublishedPageResult();
+    previewFigure(figure, 'Imported from a saved HTML figure.');
+  } catch (error) {
+    el('published-page-status').textContent = error.message;
+  }
+});
+
 el('check-published-page').addEventListener('click', () => {
-  if (busy || !savedCheck || !publishedPage) return;
+  if (el('check-published-page').disabled) return;
   clearPublishedPageResult();
   const feedback = el('published-page-status');
   try {
@@ -1719,6 +1751,7 @@ const publishedExampleStatus = el('published-example-status');
 const publishedExampleInputs = el('published-example-inputs');
 const publishedExampleCaption = el('published-example-caption');
 const publishedExampleResult = el('published-example-result');
+const openBlsFigure = el('open-bls-figure');
 
 async function showPublishedExampleResult() {
   try {
@@ -1730,6 +1763,7 @@ async function showPublishedExampleResult() {
     publishedExampleInputs.hidden = false;
     renderPublishedReport(report, publishedExampleStatus, publishedExampleResult);
     publishedExampleStatus.dataset.state = report.status;
+    openBlsFigure.hidden = false;
   } catch {
     if (publishedExampleDialog.open) publishedExampleStatus.textContent = 'The example could not load. Reconnect and try again.';
   }
@@ -1737,13 +1771,24 @@ async function showPublishedExampleResult() {
 
 el('open-published-example').addEventListener('click', () => {
   el('published-example-original').checked = true;
-  publishedExampleInputs.hidden = publishedExampleCaption.hidden = publishedExampleResult.hidden = true;
+  publishedExampleInputs.hidden = publishedExampleCaption.hidden = publishedExampleResult.hidden = openBlsFigure.hidden = true;
   publishedExampleStatus.removeAttribute('data-state');
   publishedExampleStatus.textContent = 'Reading the original example page…';
   publishedExampleDialog.showModal();
   void showPublishedExampleResult();
 });
 publishedExampleInputs.addEventListener('change', showPublishedExampleResult);
+openBlsFigure.addEventListener('click', async () => {
+  try {
+    const {readBlsFigure} = await import('./published-example.mjs');
+    if (!publishedExampleDialog.open) return;
+    if (busy) throw Error('Finish the current action first.');
+    publishedExampleDialog.close();
+    previewFigure(readBlsFigure(), unemploymentExample.sourceCitation, unemploymentExample.question);
+  } catch (error) {
+    (publishedExampleDialog.open ? publishedExampleStatus : status).textContent = error.message;
+  }
+});
 
 el('apply-stale-repair').addEventListener('click', () => {
   if (!staleRepair || busy) return;

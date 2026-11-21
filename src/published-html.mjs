@@ -63,7 +63,7 @@ function cellsOf(row) {
   return cells;
 }
 
-function tableRows(figure) {
+function readFigureTable(figure) {
   const tables = directChildren(figure, 'table').filter(node => !skip(node));
   if (tables.length !== 1) throw Error('The selected figure needs exactly one data table.');
   const [table] = tables;
@@ -78,7 +78,10 @@ function tableRows(figure) {
   const records = directChildren(table, 'tbody').filter(node => !skip(node))
     .flatMap(body => directChildren(body, 'tr').filter(node => !skip(node)))
     .map((row, index) => ({cells: cellsOf(row).map(staticText), line: index + 1}));
-  return readChartRows({headers, records}, {category: 0, rate: 1});
+  const rows = readChartRows({headers, records}, {category: 0, rate: 1});
+  // Keep the precision printed in the table, including trailing zeros.
+  const decimalPlaces = Math.max(...records.map(({cells}) => cells[1].match(/\.(\d+)/)?.[1].length ?? 0));
+  return {rows, decimalPlaces};
 }
 
 export function readFigures(html) {
@@ -90,7 +93,7 @@ export function readFigures(html) {
     if (id) byId.set(id, byId.has(id) ? null : node);
     if (element(node, 'figcaption') && element(node.parentNode, 'figure') && visible(node)) captions.push(node);
   }
-  function read({captionId, captionIndex, checkTable} = {}) {
+  function read({captionId, captionIndex, checkTable, forAudit} = {}) {
     let caption;
     if (captionId !== undefined) {
       const target = byId.get(captionId);
@@ -111,7 +114,9 @@ export function readFigures(html) {
     }
     const text = staticText(caption);
     if (!text) throw Error('The selected figcaption needs text.');
-    return {text, ...(checkTable && {rows: tableRows(figure)})};
+    if (!checkTable && !forAudit) return {text};
+    const {rows, decimalPlaces} = readFigureTable(figure);
+    return {text, rows, ...(forAudit && {decimalPlaces})};
   }
   return {
     read,

@@ -190,7 +190,8 @@ select { min-height: 32px; padding: 3px; }
 #recheck-actions .controls { margin-top: 12px; }
 #recheck-actions p { overflow-wrap: anywhere; }
 #recheck-file, #editor-draft-file, #published-page-file { max-width: 100%; font: inherit; }
-#published-page-panel { margin-top: 16px; padding-top: 12px; border-top: 1px solid var(--line); }
+#published-page-panel .controls { margin-top: 12px; }
+#published-page-name, #published-page-status { overflow-wrap: anywhere; }
 #published-figure { max-width: 100%; min-height: 42px; }
 #published-page-status, #published-example-status { font-weight: 650; }
 .published-report ul { margin: 6px 0 8px; padding-inline-start: 24px; overflow-wrap: anywhere; }

@@ -7,7 +7,11 @@ import revised from '../examples/bls-unemployment/revised.csv?raw';
 import html from '../examples/bls-unemployment/published-page.html?raw';
 
 const check = readPublishCheck(savedReview);
-const figure = readFigures(html).read({captionId: 'unemployment-rates', checkTable: true});
+const figure = readFigures(html).read({captionId: 'unemployment-rates', forAudit:true});
+
+export function readBlsFigure() {
+  return figure;
+}
 
 export function checkBlsPage(useRevision) {
   const rows = readChart(useRevision ? revised : firstPublished);

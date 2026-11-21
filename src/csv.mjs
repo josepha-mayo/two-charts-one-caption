@@ -4,6 +4,13 @@ export const maxChartRows = 12;
 const validFilterValue = value => typeof value === 'string' && value.trim() === value && value.length > 0 &&
   value.length <= 128 && !/[\r\n]/.test(value);
 
+export function writeChartCsv(rows) {
+  return ['category,percent', ...rows.map(({label, value}) => {
+    const quoted = '"' + label.replaceAll('"', '""') + '"';
+    return `${quoted},${value}`;
+  })].join('\n');
+}
+
 export function readCsvTable(csv) {
   if (typeof csv !== 'string' || csv.length > maxCsvBytes || new TextEncoder().encode(csv).byteLength > maxCsvBytes) {
     throw Error('Use CSV up to 64 KB.');

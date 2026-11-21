@@ -98,9 +98,12 @@ npm run verify-caption -- check.json latest.csv caption.txt --category-column "B
 
 ### Check the generated page
 
-To check generated HTML in the browser, open the saved check under **Rerun a saved check**, load the current CSV, and expand **Check a generated HTML page**. Choose the HTML file, then pick the figure if the file contains several. For figures without a data table, clear **Compare the figure’s data table with the CSV** before running the check. The file stays in the browser.
+Open **Open or check a generated HTML page** and select a saved HTML file. If the page contains several figures, pick the one you want. **Review figure for a new audit** previews its caption and two-column percentage table. Confirm the import to put both in the editor. The app starts with the precision printed in the table, including trailing zeros. Choose the question you want readers to answer, then run a fresh check.
+
+To verify an existing review, load the saved check under **Rerun a saved check**, load the current CSV, then choose **Check generated page**. For figures without a data table, clear **Compare the figure’s data table with the CSV** before running the check. Two Charts reads the static file locally.
 
 In the [BLS example](https://two-charts-caption-2026.web.app/?example=bls-revision), choose **Try the BLS publication check** and switch from **First-published rates** to **January 2025 revision**. The same example page goes from passing to review required. The check points to the outdated sentence and the two table rows that changed.
+Choose **Open original figure in editor** to start a fresh audit from the example page and try a different question.
 
 When exactly one reviewed answer sentence goes stale and a replacement passes the current chart check, Two Charts offers that sentence and a recheck file for the revised caption. Update the publishing source and table, then use the new file to check the rebuilt page.
 
