@@ -5,6 +5,7 @@ const validPercent = value =>
   value === Number(value.toFixed(2));
 
 const listFormat = new Intl.ListFormat('en', {style: 'long', type: 'conjunction'});
+const categoryLists = new WeakMap();
 
 export function isCutoffClaim(claim) {
   return claim.type === 'atLeast' || claim.type === 'atLeastSome';
@@ -96,6 +97,7 @@ function intervalWitness(actual, claims, movable, acceptGroups, changedIndex, ch
   const range = claims.find(claim => claim.type === 'range');
   const minBound = range ? points(range.min) : 0;
   const maxBound = range ? points(range.max) : 10000;
+  const sourcePoints = actual.map(points);
   const bounds = actual.map(() => [minBound, maxBound]);
   for (const claim of claims) {
     if (claim.value === undefined) continue;
@@ -109,8 +111,8 @@ function intervalWitness(actual, claims, movable, acceptGroups, changedIndex, ch
       else if (claim.type === 'atLeast') bounds[i] = [lower, Math.min(upper, cutoff - 1)];
     });
   }
-  for (const [i, value] of actual.entries()) {
-    if (!(movable & (1 << i))) bounds[i] = [points(value), points(value)];
+  for (const [i, value] of sourcePoints.entries()) {
+    if (!(movable & (1 << i))) bounds[i] = [value, value];
   }
   if (changedBound) {
     const [lower, upper] = bounds[changedIndex];
@@ -119,7 +121,11 @@ function intervalWitness(actual, claims, movable, acceptGroups, changedIndex, ch
   if (bounds.some(([lower, upper]) => lower > upper)) return null;
 
   for (let low = requiredLow || 1; low <= (requiredLow || full); low += 1) {
-    for (let high = requiredHigh || 1; high <= (requiredHigh || full); high += 1) {
+    // A non-flat chart needs disjoint extrema. Visit only subsets of the
+    // available categories, in ascending order to keep witness selection stable.
+    const available = full ^ low;
+    const firstHigh = requiredHigh || (available & -available) || full;
+    for (let high = firstHigh; high; high = requiredHigh || !available ? 0 : (high - available) & available) {
       const flat = low === full && high === full;
       if (((low & high) && !flat) || !acceptGroups(low, high)) continue;
       let min = minBound;
@@ -143,7 +149,7 @@ function intervalWitness(actual, claims, movable, acceptGroups, changedIndex, ch
         const from = Math.max(floor, lower);
         const to = Math.min(ceiling, upper);
         if (from > to) break;
-        candidate.push(Math.max(from, Math.min(to, points(actual[i]))) / 100);
+        candidate.push(Math.max(from, Math.min(to, sourcePoints[i])) / 100);
       }
       if (candidate.length === actual.length) return candidate;
     }
@@ -228,6 +234,8 @@ export function checkCaption(rows, question, claims, proposed = []) {
   if (!fits(actual, claims)) return {status: 'conflict', expected};
   if (claims.some(claim => typeof selected === 'string' ? claim.type === selected :
       claim.type === selected.type && claim.cutoff === selected.cutoff)) return {status: 'explicit', expected};
+  // An exact, flat range fixes every category at the same value.
+  if (claims.some(claim => claim.type === 'range' && claim.min === claim.max)) return {status: 'implied', expected};
   const qualifies = values => fits(values, claims) && !sameAnswer(answerValues(values, selected), expected);
   let best;
   for (const values of proposed.slice(0, 12)) {
@@ -251,13 +259,27 @@ function formatLabels(rows, ids, quoted = false) {
 }
 
 function matchingLists(rows, subjects, single, quoted) {
-  const matches = [];
-  for (let mask = 1; mask < (1 << rows.length); mask++) {
-    const ids = rows.flatMap((_, index) => mask & (1 << index) ? [index + 1] : []);
-    if ((single === undefined || (ids.length === 1) === single) &&
-        formatLabels(rows, ids, quoted) === subjects) matches.push(ids);
+  if (single === true) {
+    return rows.flatMap(({label}, index) => (quoted ? JSON.stringify(label) : label) === subjects ? [[index + 1]] : []);
   }
-  return matches;
+  let saved = categoryLists.get(rows);
+  if (!saved || saved.labels.length !== rows.length || rows.some(({label}, index) => label !== saved.labels[index])) {
+    saved = {labels: rows.map(({label}) => label)};
+    categoryLists.set(rows, saved);
+  }
+  const mode = quoted ? 'quoted' : 'plain';
+  if (!saved[mode]) {
+    const lists = new Map();
+    for (let mask = 1; mask < (1 << rows.length); mask++) {
+      const ids = rows.flatMap((_, index) => mask & (1 << index) ? [index + 1] : []);
+      const text = formatLabels(rows, ids, quoted);
+      if (!lists.has(text)) lists.set(text, []);
+      lists.get(text).push(ids);
+    }
+    saved[mode] = lists;
+  }
+  const matches = saved[mode].get(subjects) ?? [];
+  return single === false ? matches.filter(ids => ids.length > 1) : matches;
 }
 
 export function readCategoryList(rows, subjects, single) {
@@ -265,11 +287,11 @@ export function readCategoryList(rows, subjects, single) {
   const names = named ? subjects.slice(named[0].length) : subjects;
   if (names.startsWith('"')) {
     const [quoted] = matchingLists(rows, names, single, true);
-    if (quoted && (!named || quoted.length === Number(named[1] ?? 1))) return quoted;
+    if (quoted && (!named || quoted.length === Number(named[1] ?? 1))) return quoted.slice();
   }
   const matches = matchingLists(rows, subjects, single, false);
   if (matches.length > 1) throw Error('The caption’s names could refer to different category lists. Put each name in double quotes.');
-  return matches[0];
+  return matches[0]?.slice();
 }
 
 export function answerText(rows, ids) {

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {readChart, checkCaption, validateClaims, answer, answerText, supportedDetail, fits} from '../src/check.mjs';
+import {readChart, checkCaption, validateClaims, answer, answerText, readCategoryList, supportedDetail, fits} from '../src/check.mjs';
 import {localFacts, cloudPrompt, localPrompt, reviewCloudClaims} from '../src/draft.mjs';
 import {questionPrompt, readQuestionDraft} from '../src/brief.mjs';
 import {sampleCsv, sampleCaption, cutoffCaption, foodExample} from '../src/sample.mjs';
@@ -11,6 +11,30 @@ import {
 
 const sample = readChart(sampleCsv);
 const sampleFacts = validateClaims(localFacts(sample, sampleCaption), sampleCaption, sample.length);
+
+test('category lists reflect edits and callers own the matched IDs', () => {
+  const rows = readChart('category,percent\nNorth,20\nSouth,30\nEast,40');
+  const matched = readCategoryList(rows, 'North and South');
+  assert.deepEqual(matched, [1, 2]);
+  matched.pop();
+  assert.deepEqual(readCategoryList(rows, 'North and South'), [1, 2]);
+  rows[2].label = 'North and South';
+  assert.throws(() => readCategoryList(rows, 'North and South'), /different category lists/);
+  assert.deepEqual(readCategoryList(rows, '"North" and "South"'), [1, 2]);
+  rows.reverse();
+  assert.deepEqual(readCategoryList(rows, '"South" and "North"'), [2, 3]);
+});
+
+test('a seven-category chart can require six coupled changes to alter a cutoff answer', () => {
+  const rows = [20, 20, 20, 20, 20, 20, 10].map((value, index) => ({label: String(index + 1), value}));
+  const claims = [{type:'highest', ids:[1, 2, 3, 4, 5, 6]}];
+  const result = checkCaption(rows, {type:'atLeast', cutoff:30}, claims);
+  assert.equal(result.status, 'ambiguous');
+  assert.equal(result.changedCategories, 6);
+  assert.equal(result.alternate[6], 10);
+  assert.deepEqual(result.alternateAnswer, [1, 2, 3, 4, 5, 6]);
+  assert.ok(fits(result.alternate, claims));
+});
 
 test('the USDA example preserves both caption facts while changing the highest-rate answer', () => {
   const {csv, caption, question} = foodExample;
