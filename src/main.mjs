@@ -447,7 +447,7 @@ function renderProof(claims, alternate) {
     return item;
   });
   el('proof-facts').replaceChildren(...entries);
-  el('save-recheck').hidden = !claims.length;
+  el('save-recheck').hidden = !claims.length || result.status === 'conflict';
   const count = result.changedCategories;
   el('proof-summary').textContent = alternate
     ? `Every checked fact holds in both charts. ${count === 1 ? 'One category is' : `${count} categories are`} the fewest that must change to get a different answer.`
@@ -1360,6 +1360,7 @@ el('download-ai-activity').addEventListener('click', () => {
 });
 
 el('save-recheck').addEventListener('click', () => {
+  if (!result || result.status === 'conflict' || !reviewed?.length) return;
   try {
     const saved = createPublishCheck(rows, selectedQuestion(), caption.value, reviewed, chartSource.columns);
     downloadFile(JSON.stringify(saved, null, 2) + '\n', 'application/json', 'caption-recheck.json');
