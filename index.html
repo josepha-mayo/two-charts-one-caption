@@ -133,7 +133,10 @@
         <p id="reader-test-status" role="status"></p>
         <div class="test-footer">
           <p id="reader-test-storage">This test is saved in this tab. Each link shows one caption and the question.</p>
-          <button type="button" class="small" id="download-reader-results" hidden>Download results</button>
+          <div class="controls">
+            <button type="button" class="small" id="save-reader-test-file">Save reader test</button>
+            <button type="button" class="small" id="download-reader-results" hidden>Download results</button>
+          </div>
         </div>
       </div>
     </section>
@@ -182,6 +185,13 @@
         </div>
       </div>
       <p id="recheck-status" role="status"></p>
+    </details>
+    <details class="csv-panel recheck-panel" id="reader-file-panel">
+      <summary>Open a saved reader test</summary>
+      <p id="reader-file-help">Resume collecting responses with the same reader links. The file contains both captions, the answer, and the response history.</p>
+      <label for="reader-test-file">Reader test file (.json)</label>
+      <input id="reader-test-file" type="file" accept=".json,application/json" aria-describedby="reader-file-help">
+      <p id="reader-file-status" role="status"></p>
     </details>
     <footer><a id="source" hidden></a><p>Compare one question at a time. Suggested charts are hypothetical. Your CSV stays in this tab.</p></footer>
   </main>
@@ -256,10 +266,20 @@
   </dialog>
   <dialog id="replace-test-dialog" aria-labelledby="replace-test-title">
     <h2 id="replace-test-title">Replace this reader test?</h2>
-    <p>The current test and its responses will be removed from this tab. Download its results first if you need them.</p>
+    <p>Save a reader test file first if you want to resume the current test later.</p>
     <form method="dialog" class="controls">
       <button type="submit" value="cancel">Keep current test</button>
       <button type="submit" value="replace">Replace test</button>
+    </form>
+  </dialog>
+  <dialog id="open-reader-file-dialog" aria-labelledby="open-reader-file-title" aria-describedby="open-reader-file-note">
+    <h2 id="open-reader-file-title">Open saved reader test</h2>
+    <p id="reader-file-question"></p>
+    <div id="reader-file-versions" class="test-versions"></div>
+    <p id="open-reader-file-note"></p>
+    <form method="dialog" class="controls">
+      <button type="submit" value="cancel" autofocus>Cancel</button>
+      <button type="submit" value="open" class="primary">Open test</button>
     </form>
   </dialog>
   <dialog id="saved-caption-dialog" aria-labelledby="saved-caption-title" aria-describedby="saved-caption-note">

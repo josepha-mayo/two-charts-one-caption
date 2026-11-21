@@ -6,7 +6,7 @@ import {questionPrompt, readQuestionDraft} from '../src/brief.mjs';
 import {sampleCsv, sampleCaption, cutoffCaption, foodExample} from '../src/sample.mjs';
 import {
   addReaderResponse, createReaderLink, createReaderTest, encodeResponse, readReaderLink,
-  readerCounts, readerResponseId, restoreReaderTest, saveReaderTest,
+  readReaderTestFile, readerCounts, readerResponseId, restoreReaderTest, saveReaderTest, writeReaderTestFile,
 } from '../src/reader.mjs';
 
 const sample = readChart(sampleCsv);
@@ -287,6 +287,29 @@ test('a reader can revise a tied answer without adding another response, and the
   assert.deepEqual(restoreReaderTest(storage), check);
   assert.equal(saveReaderTest(undefined, check), false);
   assert.equal(restoreReaderTest(undefined), null);
+});
+
+test('a saved test carries forward old invitations and deduplicates replies in a new editor', () => {
+  const question = {type: 'atLeast', cutoff: 70};
+  const after = cutoffCaption + ' Only Local and Select Bus Service reached at least 70%.';
+  let test = createReaderTest(sample, question, [1, 2], cutoffCaption, after);
+  const id = crypto.randomUUID();
+  const oldReply = encodeResponse(test.before.invitation, id, null);
+  const pendingReply = encodeResponse(test.after.invitation, crypto.randomUUID(), [1, 2]);
+  test = addReaderResponse(test, oldReply).test;
+
+  const restored = readReaderTestFile(writeReaderTestFile(test));
+  assert.deepEqual(restored, test);
+  assert.equal(addReaderResponse(restored, oldReply).action, 'Updated');
+  const later = addReaderResponse(restored, pendingReply).test;
+  assert.deepEqual(readerCounts(later, 'before'), {correct: 0, uncertain: 1, different: 0});
+  assert.deepEqual(readerCounts(later, 'after'), {correct: 1, uncertain: 0, different: 0});
+
+  const file = JSON.parse(writeReaderTestFile(test));
+  file.test.before.responses[0].invitation = file.test.after.invitation;
+  assert.throws(() => readReaderTestFile(JSON.stringify(file)), /invalid captions, invitations, or responses/);
+  assert.throws(() => readReaderTestFile('{"version":1}'), /Save reader test/);
+  assert.throws(() => readReaderTestFile('é'.repeat(32_001)), /64 KB/);
 });
 
 test('cutoff changes the eligible categories while both charts retain the stated range and endpoints', () => {

@@ -4,6 +4,8 @@ import {readQuestion, sameAnswer} from './check.mjs';
 const PREFIX = '#reader=';
 const RESPONSE_PREFIX = 'two-charts-v1.';
 const STUDY_KEY = 'two-charts.reader-test.v1';
+const STUDY_SCHEMA = 'two-charts/reader-test/v1';
+export const maxReaderTestFileBytes = 64_000;
 const VARIANTS = ['before', 'after'];
 const idPattern = /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/;
 
@@ -105,6 +107,29 @@ function readVariant(variant, caption, size, allowNone) {
     throw Error('Invalid response history.');
   }
   return {caption, invitation, responses};
+}
+
+export function writeReaderTestFile(test) {
+  return JSON.stringify({schema: STUDY_SCHEMA, test: readTest(test)}) + '\n';
+}
+
+export function readReaderTestFile(text) {
+  if (typeof text !== 'string' || text.length > maxReaderTestFileBytes ||
+      new TextEncoder().encode(text).byteLength > maxReaderTestFileBytes) {
+    throw Error('Choose a reader test file under 64 KB.');
+  }
+  let file;
+  try {
+    file = JSON.parse(text);
+  } catch {
+    throw Error('This reader test file is not valid JSON.');
+  }
+  if (file?.schema !== STUDY_SCHEMA) throw Error('Choose a file saved with Save reader test.');
+  try {
+    return readTest(file.test);
+  } catch {
+    throw Error('This reader test file has invalid captions, invitations, or responses.');
+  }
 }
 
 export function restoreReaderTest(storage) {

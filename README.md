@@ -32,6 +32,8 @@ After revealing a gap, choose **Download proof with chart data**. The HTML file 
 
 Each link contains its own caption, category names, question, and random invitation ID. The reader view does not receive the chart, the source answer, or the other caption. The test and imported responses survive a reload in the editor tab. Each reader tab generates an anonymous response ID so re-importing a code or updating an answer from that tab does not add another response. Counts are descriptive, and the links do not authenticate readers.
 
+Select **Save reader test** to continue later or on another browser. Under **Open a saved reader test**, choose the JSON file and review both captions before opening it. The original links and their collected responses carry over. Keep the JSON with the editor because it includes both captions, the answer, and individual selections. **Download results** gives a text summary for sharing.
+
 To load another chart, choose or paste a UTF-8 CSV with a header and two to seven data rows. The two-column formats `category,percent` and `service,percent` load directly. For other layouts, choose a category column and a percentage column. Only the chosen columns enter the chart check. Use percentages such as `71.5` or `71.5%`, with up to two decimal places.
 
 ## Recheck before publishing

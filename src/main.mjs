@@ -13,7 +13,7 @@ import {comparisonReport, reviewedDescription} from './report.mjs';
 import refreshedSampleCsv from '../examples/bus-cutoff/refreshed.csv?raw';
 import {
   addReaderResponse, createReaderLink, createReaderTest, encodeResponse, readReaderLink,
-  readerCounts, readerResponseId, restoreReaderTest, saveReaderTest,
+  maxReaderTestFileBytes, readReaderTestFile, readerCounts, readerResponseId, restoreReaderTest, saveReaderTest, writeReaderTestFile,
 } from './reader.mjs';
 
 const el = id => document.getElementById(id);
@@ -963,6 +963,19 @@ function countText(counts) {
     : 'Waiting for reader responses';
 }
 
+function readerVersionCard(test, key, title) {
+  const caption = test[key].caption;
+  const card = make('article', undefined, 'test-version');
+  card.setAttribute('aria-label', title);
+  const captionText = make('p', caption, 'test-caption');
+  if (key === 'after' && caption.startsWith(test.before.caption + ' ')) {
+    captionText.textContent = test.before.caption + ' ';
+    captionText.append(make('mark', caption.slice(test.before.caption.length + 1)));
+  }
+  card.append(make('h3', title), captionText, make('p', countText(readerCounts(test, key)), 'test-count'));
+  return card;
+}
+
 function renderReaderTest() {
   el('reader-test').hidden = !readerTest && !pendingReaderTest;
   const start = el('start-reader-test');
@@ -974,9 +987,7 @@ function renderReaderTest() {
   el('reader-test-question').textContent = `Question: ${questionText(readerTest.question)}`;
   el('reader-test-versions').replaceChildren(...testVersions.map(([key, title]) => {
     const {caption, invitation} = readerTest[key];
-    const counts = readerCounts(readerTest, key);
-    const card = make('article', undefined, 'test-version');
-    card.setAttribute('aria-label', title);
+    const card = readerVersionCard(readerTest, key, title);
     const url = createReaderLink(location.href, labels, readerTest.question, caption, invitation);
     const open = make('a', 'Open');
     open.href = url;
@@ -996,12 +1007,7 @@ function renderReaderTest() {
     });
     const actions = make('div', undefined, 'controls');
     actions.append(copy, open);
-    const captionText = make('p', caption, 'test-caption');
-    if (key === 'after' && caption.startsWith(readerTest.before.caption + ' ')) {
-      captionText.textContent = readerTest.before.caption + ' ';
-      captionText.append(make('mark', caption.slice(readerTest.before.caption.length + 1)));
-    }
-    card.append(make('h3', title), captionText, make('p', countText(counts), 'test-count'), actions);
+    card.append(actions);
     return card;
   }));
   el('download-reader-results').hidden = testVersions.every(([key]) => !readerTest[key].responses.length);
@@ -1010,21 +1016,26 @@ function renderReaderTest() {
 function persistReaderTest() {
   const saved = saveReaderTest(tabStorage, readerTest);
   el('reader-test-storage').textContent = saved
-    ? 'Saved in this tab. Each link shows one caption and the question.'
-    : 'Browser storage is unavailable. Keep this page open while collecting responses.';
+    ? 'Saved in this tab. Save a test file to continue in another tab.'
+    : 'Browser storage is unavailable. Save a test file to keep your responses.';
+}
+
+function openReaderTest(test, message) {
+  readerTest = test;
+  el('reader-response').value = '';
+  renderReaderTest();
+  persistReaderTest();
+  testStatus.textContent = message;
+  el('reader-test-versions').querySelector('button').focus();
 }
 
 function startReaderTest() {
   if (!pendingReaderTest) return;
   const {rows, question, expected, before, after} = pendingReaderTest;
   try {
-    readerTest = createReaderTest(rows, question, expected, before, after);
+    const test = createReaderTest(rows, question, expected, before, after);
     pendingReaderTest = null;
-    el('reader-response').value = '';
-    renderReaderTest();
-    persistReaderTest();
-    testStatus.textContent = 'Reader links are ready.';
-    el('reader-test-versions').querySelector('button').focus();
+    openReaderTest(test, 'Reader links are ready.');
   } catch (error) {
     testStatus.textContent = error.message;
   }
@@ -1040,6 +1051,49 @@ el('start-reader-test').addEventListener('click', () => {
 });
 replaceDialog.addEventListener('close', () => {
   if (replaceDialog.returnValue === 'replace') startReaderTest();
+});
+
+el('save-reader-test-file').addEventListener('click', () => {
+  if (!readerTest) return;
+  downloadFile(writeReaderTestFile(readerTest), 'application/json', 'caption-reader-test.json');
+  testStatus.textContent = 'Reader test downloaded. Keep this file with the editor.';
+});
+
+const readerFileDialog = el('open-reader-file-dialog');
+let readerFileRevision = 0;
+let previewedReaderFile;
+el('reader-test-file').addEventListener('change', async event => {
+  const picker = event.currentTarget;
+  const file = picker.files[0];
+  picker.value = '';
+  if (!file) return;
+  const revision = ++readerFileRevision;
+  const feedback = el('reader-file-status');
+  feedback.textContent = '';
+  try {
+    if (file.size > maxReaderTestFileBytes) throw Error('Choose a reader test file under 64 KB.');
+    const text = new TextDecoder('utf-8', {fatal: true}).decode(await file.arrayBuffer());
+    if (revision !== readerFileRevision) return;
+    const test = readReaderTestFile(text);
+    previewedReaderFile = test;
+    el('reader-file-question').textContent = questionText(test.question);
+    el('reader-file-versions').replaceChildren(...testVersions.map(([key, title]) => readerVersionCard(test, key, title)));
+    el('open-reader-file-note').textContent = readerTest
+      ? 'Opening this file replaces the test in this tab. Save the current test first if you need to resume it later.'
+      : 'Open this file to continue collecting replies to the original reader links.';
+    readerFileDialog.returnValue = 'cancel';
+    readerFileDialog.showModal();
+  } catch (error) {
+    if (revision === readerFileRevision) {
+      feedback.textContent = error instanceof TypeError ? 'Choose a UTF-8 reader test file.' : error.message;
+    }
+  }
+});
+readerFileDialog.addEventListener('close', () => {
+  const test = previewedReaderFile;
+  previewedReaderFile = null;
+  el('reader-file-versions').replaceChildren();
+  if (test && readerFileDialog.returnValue === 'open') openReaderTest(test, 'Reader test opened. The original links still accept responses.');
 });
 
 el('reader-response-form').addEventListener('submit', event => {

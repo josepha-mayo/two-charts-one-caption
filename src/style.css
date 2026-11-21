@@ -175,6 +175,9 @@ select { min-height: 32px; padding: 3px; }
 .test-count { font-weight: 700; font-variant-numeric: tabular-nums; }
 .test-version a { color: var(--cool); text-underline-offset: 3px; }
 .test-footer { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; margin-top: 12px; }
+#reader-test-file { max-width: 100%; font: inherit; }
+#reader-file-status:not(:empty) { color: var(--muted); margin-top: 8px; overflow-wrap: anywhere; }
+#open-reader-file-dialog .controls { margin-top: 12px; }
 #reader-response-form label { display: block; font-weight: 650; margin-bottom: 6px; }
 #reader-response { flex: 1 1 13rem; min-width: 0; }
 #reader-test-status:not(:empty) { color: var(--mint); margin-top: 8px; overflow-wrap: anywhere; }
