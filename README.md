@@ -92,7 +92,9 @@ npm run verify-caption -- check.json latest.csv caption.txt --category-column "B
 
 ### Check the generated page
 
-Pass the HTML built by your publishing system with `--html`. The verifier checks the text in its semantic `<figcaption>` against the saved wording, then rechecks the caption against the current CSV. It reads HTML entities and inline formatting and allows layout whitespace to change. Changed wording requests editorial review and lists any reviewed excerpts missing from the page. If the page has several figures, use `--caption-id` with the exact HTML ID of the figure or its caption.
+To check generated HTML in the browser, open the saved check under **Rerun a saved check**, load the current CSV, and expand **Check a generated HTML page**. Choose the HTML file, then pick the figure if the file contains several. For figures without a data table, clear **Compare the figure’s data table with the CSV** before running the check. The file stays in the browser.
+
+In CI, pass the HTML built by your publishing system with `--html`. Both workflows check the text in its semantic `<figcaption>` against the saved wording, then recheck the caption against the current CSV. They read static HTML entities and inline formatting and allow layout whitespace to change. Changed wording requests editorial review and lists any reviewed excerpts missing from the page. If the page has several figures, use `--caption-id` with the exact HTML ID of the figure or its caption.
 
 Add `--check-table` to check a two-column data table in the same figure against the CSV. Use a header row, category names in the first column, and percentage values in the second, as in **HTML with data table**. The CLI reports changed, missing, and extra rates by category. The check reads the generated markup. For content created by script or hidden by CSS, verify the rendered page in a browser.
 

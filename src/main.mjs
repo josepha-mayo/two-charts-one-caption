@@ -41,6 +41,7 @@ let precisionIssue;
 let readerAnswer;
 let pendingReaderTest, readerTest, tabStorage;
 let savedCheck, staleRepair;
+let publishedPage, publishedFileRevision = 0;
 const originalExample = {
   label: 'Bus report example',
   csv: sampleCsv,
@@ -274,6 +275,7 @@ function invalidate() {
   status.textContent = '';
   status.removeAttribute('data-state');
   el('recheck-status').textContent = '';
+  clearPublishedPageResult();
   const columns = chartSource.columns;
   const group = columns?.filter ? rowScope(columns.filter) : '';
   el('recheck-source').textContent = 'Data in use · ' + chartSource.label +
@@ -322,10 +324,11 @@ function invalidate() {
 function syncActions() {
   for (const id of ['load', 'csv-file', 'example', 'example-select', 'nano', 'apply', 'open-rewrite',
     'brief-example', 'brief-submit', 'brief-apply', 'recheck-file', 'save-recheck', 'run-recheck',
-    'save-editor-draft', 'editor-draft-file',
+    'save-editor-draft', 'editor-draft-file', 'published-page-file', 'published-figure', 'published-table',
     'review-saved-caption', 'apply-stale-repair', 'example-refresh', 'csv-category', 'csv-percent', 'csv-group', 'csv-group-value',
     'use-csv-columns', 'check-rewrite', 'rewrite-cloud-preview', 'publication', 'export']) el(id).disabled = busy;
   el('confirm-facts').disabled = busy || !candidate?.claims.length;
+  el('check-published-page').disabled = busy || !publishedPage || !savedCheck || el('published-figure').value === '';
   el('confirm-rewrite-facts').disabled = busy || !rewriteCandidate?.claims.length;
   const checkDisabled = busy || Boolean(precisionIssue);
   el('check').disabled = el('cloud-preview').disabled = checkDisabled;
@@ -1523,6 +1526,103 @@ el('recheck-file').addEventListener('change', async event => {
 });
 
 el('run-recheck').addEventListener('click', () => runSavedCheck());
+
+function clearPublishedPageResult() {
+  el('published-page-status').textContent = '';
+  el('published-page-result').replaceChildren();
+  el('published-page-result').hidden = true;
+}
+
+el('published-page-file').addEventListener('change', async event => {
+  const picker = event.currentTarget;
+  const file = picker.files[0];
+  picker.value = '';
+  if (!file) return;
+  const intent = ++publishedFileRevision;
+  publishedPage = null;
+  el('published-figure-choice').hidden = true;
+  const fileName = el('published-page-name');
+  fileName.hidden = true;
+  fileName.textContent = '';
+  clearPublishedPageResult();
+  syncActions();
+  const feedback = el('published-page-status');
+  feedback.textContent = 'Reading generated HTML…';
+  try {
+    const {maxHtmlBytes, readFigures, runPublishedFigureCheck} = await import('./published-html.mjs');
+    if (file.size > maxHtmlBytes) throw Error('Choose a generated HTML file no larger than 1 MB.');
+    const html = new TextDecoder('utf-8', {fatal: true}).decode(await file.arrayBuffer());
+    if (intent !== publishedFileRevision) return;
+    const figures = readFigures(html);
+    if (!figures.count) throw Error('The generated page needs a visible figcaption inside a figure.');
+    if (figures.count > 100) throw Error('Choose a page with at most 100 figure captions.');
+    const select = el('published-figure');
+    const options = Array.from({length: figures.count}, (_, index) => new Option(figures.label(index), index));
+    select.replaceChildren(...options);
+    if (figures.count > 1) {
+      select.prepend(new Option('Choose a figure', '', true, true));
+      select.options[0].disabled = true;
+    }
+    el('published-figure-choice').hidden = figures.count === 1;
+    publishedPage = {figures, runPublishedFigureCheck};
+    fileName.textContent = file.name;
+    fileName.hidden = false;
+    feedback.textContent = figures.count === 1 ? 'One figure found.' : `${figures.count} figures found. Choose one to check.`;
+  } catch (error) {
+    if (intent === publishedFileRevision) feedback.textContent = error.message;
+  } finally {
+    if (intent === publishedFileRevision) syncActions();
+  }
+});
+
+for (const id of ['published-figure', 'published-table']) {
+  el(id).addEventListener('change', () => {
+    clearPublishedPageResult();
+    syncActions();
+  });
+}
+
+el('check-published-page').addEventListener('click', () => {
+  if (busy || !savedCheck || !publishedPage) return;
+  clearPublishedPageResult();
+  const feedback = el('published-page-status');
+  try {
+    const selected = el('published-figure').value;
+    const checkTable = el('published-table').checked;
+    const figure = publishedPage.figures.read({captionIndex: Number(selected), checkTable});
+    const report = publishedPage.runPublishedFigureCheck(figure, rows, savedCheck, chartSource.columns);
+    feedback.textContent = report.message ?? {
+      explicit: 'Pass. The reviewed facts still answer the question.',
+      implied: 'Pass. The reviewed facts still imply the answer.',
+      conflict: 'Review required. The published caption conflicts with the current CSV.',
+      ambiguous: 'Review required. The caption leaves a different answer possible.',
+    }[report.status];
+    const details = el('published-page-result');
+    if (report.sourceAnswer) details.append(make('p', 'Current CSV answer · ' + report.sourceAnswer));
+    if (report.alternateAnswer) details.append(make('p', 'Alternate answer from the caption · ' + report.alternateAnswer));
+    if (report.uncheckedWordingCount) details.append(make('p', 'Excerpts still needing editorial review · ' + report.uncheckedWordingCount));
+    const excerpts = report.failedFacts ?? report.missingReviewedExcerpts;
+    if (excerpts?.length) {
+      details.append(make('p', report.failedFacts ? 'Outdated excerpts' : 'Reviewed excerpts missing from the page'));
+      const list = make('ul');
+      list.append(...excerpts.map(text => make('li', text)));
+      details.append(list);
+    }
+    if (report.table?.matches) details.append(make('p', 'All published table values match the current CSV.'));
+    if (report.table?.mismatches.length) {
+      details.append(make('p', 'Rows with different values'));
+      const format = rate => rate === null ? 'missing' : `${rate}%`;
+      const list = make('ul');
+      list.append(...report.table.mismatches.map(({label, sourceRate, tableRate}) =>
+        make('li', `${label} · CSV ${format(sourceRate)} · HTML ${format(tableRate)}`)));
+      details.append(list);
+    }
+    details.hidden = !details.childElementCount;
+  } catch (error) {
+    feedback.textContent = error.message;
+  }
+});
+
 el('apply-stale-repair').addEventListener('click', () => {
   if (!staleRepair || busy) return;
   const {repair, original} = staleRepair;

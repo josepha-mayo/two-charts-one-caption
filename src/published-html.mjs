@@ -1,5 +1,6 @@
 import {parse} from 'parse5';
-import {readChartRows} from '../src/csv.mjs';
+import {readChartRows} from './csv.mjs';
+import {runPublishCheck} from './publish-check.mjs';
 
 export const maxHtmlBytes = 1_000_000;
 const htmlNamespace = 'http://www.w3.org/1999/xhtml';
@@ -89,12 +90,14 @@ export function readFigures(html) {
     if (id) byId.set(id, byId.has(id) ? null : node);
     if (element(node, 'figcaption') && element(node.parentNode, 'figure') && visible(node)) captions.push(node);
   }
-  return function readFigure({captionId, checkTable} = {}) {
+  function read({captionId, captionIndex, checkTable} = {}) {
     let caption;
     if (captionId !== undefined) {
       const target = byId.get(captionId);
       if (!target) throw Error('The requested HTML ID must exist and be unique.');
       caption = element(target, 'figure') ? directChildren(target, 'figcaption')[0] : target;
+    } else if (captionIndex !== undefined) {
+      caption = captions[captionIndex];
     } else {
       if (captions.length > 1) throw Error('This HTML has several figure captions. Select a figure or caption by ID.');
       [caption] = captions;
@@ -109,6 +112,17 @@ export function readFigures(html) {
     const text = staticText(caption);
     if (!text) throw Error('The selected figcaption needs text.');
     return {text, ...(checkTable && {rows: tableRows(figure)})};
+  }
+  return {
+    read,
+    count: captions.length,
+    label(index) {
+      const caption = captions[index];
+      const id = attribute(caption, 'id') || attribute(caption.parentNode, 'id');
+      const prefix = id ? id.slice(0, 60) : `Figure ${index + 1}`;
+      const preview = staticText(caption);
+      return `${prefix} · ${preview.slice(0, 100)}${preview.length > 100 ? '…' : ''}`;
+    },
   };
 }
 
@@ -121,4 +135,26 @@ export function compareFigureRows(source, published) {
     const tableRate = actual.get(label) ?? null;
     return sourceRate === tableRate ? [] : [{label, sourceRate, tableRate}];
   });
+}
+
+export function runPublishedFigureCheck(figure, rows, check, columns) {
+  const caption = normalizeCaptionSpacing(check.caption);
+  const report = figure.text === caption
+    ? runPublishCheck(rows, check.caption, check, columns)
+    : {
+        status: 'review_required',
+        message: 'The HTML figcaption differs from the reviewed caption. Review the wording in the generated page.',
+        missingReviewedExcerpts: [...new Set(check.claims.map(({evidence}) => evidence)
+          .filter(evidence => !figure.text.includes(normalizeCaptionSpacing(evidence))))],
+      };
+  report.captionSource = 'html_figcaption';
+  if (figure.rows) {
+    const mismatches = compareFigureRows(rows, figure.rows);
+    report.table = {matches: mismatches.length === 0, mismatches};
+    if (mismatches.length && ['explicit', 'implied'].includes(report.status)) {
+      report.status = 'review_required';
+      report.message = 'The figure’s HTML data table differs from the current CSV.';
+    }
+  }
+  return report;
 }

@@ -280,6 +280,23 @@
           <button type="button" id="run-recheck">Run saved check</button>
           <button type="button" id="review-saved-caption">Review saved caption</button>
         </div>
+        <details id="published-page-panel">
+          <summary>Check a generated HTML page</summary>
+          <p id="published-page-help">Compare the page’s figure caption with the reviewed wording and the CSV in use. The file stays in this browser. The check reads static HTML.</p>
+          <label for="published-page-file">Generated page (.html)</label>
+          <input id="published-page-file" type="file" accept=".html,.htm,text/html" aria-describedby="published-page-help">
+          <p id="published-page-name" hidden></p>
+          <div id="published-figure-choice" hidden>
+            <label for="published-figure">Figure to check</label>
+            <select id="published-figure"></select>
+          </div>
+          <label><input id="published-table" type="checkbox" checked> Compare the figure’s data table with the CSV</label>
+          <div class="controls">
+            <button type="button" id="check-published-page" disabled>Check generated page</button>
+          </div>
+          <p id="published-page-status" role="status"></p>
+          <div id="published-page-result" hidden></div>
+        </details>
       </div>
       <p id="recheck-status" role="status"></p>
     </details>

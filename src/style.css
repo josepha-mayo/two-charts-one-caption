@@ -184,7 +184,11 @@ select { min-height: 32px; padding: 3px; }
 .recheck-panel p { margin-top: 8px; color: var(--muted); }
 #recheck-actions .controls { margin-top: 12px; }
 #recheck-actions p { overflow-wrap: anywhere; }
-#recheck-file, #editor-draft-file { max-width: 100%; font: inherit; }
+#recheck-file, #editor-draft-file, #published-page-file { max-width: 100%; font: inherit; }
+#published-page-panel { margin-top: 16px; padding-top: 12px; border-top: 1px solid var(--line); }
+#published-figure { max-width: 100%; min-height: 42px; }
+#published-page-status { font-weight: 650; }
+#published-page-result ul { margin: 6px 0 8px; padding-inline-start: 24px; overflow-wrap: anywhere; }
 .reader { max-width: 820px; }
 #reader-caption { font-size: 1.2rem; padding: 12px 0 16px; }
 #reader-form { border: 1px solid var(--line); border-radius: 5px; margin: 0 0 16px; }

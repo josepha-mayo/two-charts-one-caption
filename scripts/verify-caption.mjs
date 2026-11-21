@@ -4,7 +4,7 @@ import {parseArgs} from 'node:util';
 import {ratePrecisionText, readChart} from '../src/check.mjs';
 import {maxCsvBytes} from '../src/csv.mjs';
 import {readPublishCheck, runPublishCheck} from '../src/publish-check.mjs';
-import {compareFigureRows, maxHtmlBytes, normalizeCaptionSpacing, readFigures} from './read-figure.mjs';
+import {maxHtmlBytes, readFigures, runPublishedFigureCheck} from '../src/published-html.mjs';
 
 const usage = [
   'Usage: node scripts/verify-caption.mjs check.json chart.csv caption.txt [--category-column HEADER --percent-column HEADER] [--require-checked-wording] [--json]',
@@ -66,31 +66,14 @@ async function loadFigures(path) {
 async function checkFiles(paths, {mapping, strict, figure, read = readText, readPage = loadFigures}) {
   const [recipeText, csv, captionInput] = await Promise.all([
     read(paths[0], 40000), read(paths[1], maxCsvBytes),
-    figure ? readPage(paths[2]).then(readFigure => readFigure(figure)) : read(paths[2], 8000),
+    figure ? readPage(paths[2]).then(page => page.read(figure)) : read(paths[2], 8000),
   ]);
   const check = readPublishCheck(JSON.parse(recipeText));
   const columns = mapping ? {...mapping, ...(check.columns?.filter && {filter:check.columns.filter})} : check.columns;
   const rows = readChart(csv, columns);
-  let report;
-  if (figure && captionInput.text !== normalizeCaptionSpacing(check.caption)) {
-    const missing = check.claims.filter(({evidence}) => !captionInput.text.includes(normalizeCaptionSpacing(evidence)));
-    report = {
-      status: 'review_required',
-      message: 'The HTML figcaption differs from the reviewed caption. Review the wording in the generated page.',
-      missingReviewedExcerpts: [...new Set(missing.map(({evidence}) => evidence))],
-    };
-  } else {
-    report = runPublishCheck(rows, figure ? check.caption : captionInput, check, columns);
-  }
-  if (figure) report.captionSource = 'html_figcaption';
-  if (figure && captionInput.rows) {
-    const mismatches = compareFigureRows(rows, captionInput.rows);
-    report.table = {matches: mismatches.length === 0, mismatches};
-    if (mismatches.length && passed(report)) {
-      report.status = 'review_required';
-      report.message = 'The figure’s HTML data table differs from the current CSV.';
-    }
-  }
+  const report = figure
+    ? runPublishedFigureCheck(captionInput, rows, check, columns)
+    : runPublishCheck(rows, captionInput, check, columns);
   if (strict && report.uncheckedWordingCount && passed(report)) {
     report.status = 'review_required';
     report.message = 'Some caption wording needs editorial review.';

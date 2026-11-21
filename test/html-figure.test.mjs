@@ -5,7 +5,7 @@ import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import test from 'node:test';
 import {fileURLToPath} from 'node:url';
-import {compareFigureRows, readFigures} from '../scripts/read-figure.mjs';
+import {compareFigureRows, readFigures} from '../src/published-html.mjs';
 
 const example = name => fileURLToPath(new URL('../examples/bls-unemployment/' + name, import.meta.url));
 const script = fileURLToPath(new URL('../scripts/verify-caption.mjs', import.meta.url));
@@ -13,7 +13,7 @@ const checkedPage = readFileSync(example('published-page.html'), 'utf8');
 const reviewedCaption = 'January had the lowest rate, at 3.7%. Only January and March fell below 3.9%.';
 
 test('read the selected semantic caption with HTML entities, line breaks and inline formatting', () => {
-  const read = readFigures([
+  const {read} = readFigures([
     '<figure id="selected"><figcaption id="caption"><p>Fabric <strong>&amp;</strong> Paper.</p>',
     '<p>Rate was&nbsp;<strong>4</strong>.2%.<br>Second line.</p><span aria-hidden="true">Decorative</span>',
     '<script>throw Error("The publisher has scripts");</script></figcaption></figure>',
@@ -29,16 +29,20 @@ test('read the selected semantic caption with HTML entities, line breaks and inl
 test('ambiguous, hidden, and duplicate targets fail closed', () => {
   const figure = '<figure id="chart"><figcaption>Actual caption</figcaption></figure>';
   const multi = readFigures(figure + '<figure><figcaption>Separate caption.</figcaption></figure>');
-  assert.throws(() => multi(), /several figure captions/);
-  assert.equal(multi({captionId:'chart'}).text,'Actual caption');
-  assert.throws(() => readFigures('<section inert>' + figure + '</section>')({captionId:'chart'}), /visible figcaption/);
-  assert.throws(() => readFigures(figure + '<span hidden id="chart"></span>')({captionId:'chart'}), /must exist and be unique/);
-  assert.throws(() => readFigures('<figcaption>Orphaned</figcaption>')(), /inside its figure/);
-  assert.throws(() => readFigures('<figure><figcaption>One</figcaption><figcaption>Two</figcaption></figure>')(), /several figure captions/);
+  assert.throws(() => multi.read(), /several figure captions/);
+  assert.equal(multi.read({captionId:'chart'}).text,'Actual caption');
+  assert.equal(multi.count, 2);
+  assert.equal(multi.label(1), 'Figure 2 · Separate caption.');
+  assert.equal(multi.read({captionIndex:1}).text, 'Separate caption.');
+  assert.throws(() => multi.read({captionIndex:2}), /visible figcaption/);
+  assert.throws(() => readFigures('<section inert>' + figure + '</section>').read({captionId:'chart'}), /visible figcaption/);
+  assert.throws(() => readFigures(figure + '<span hidden id="chart"></span>').read({captionId:'chart'}), /must exist and be unique/);
+  assert.throws(() => readFigures('<figcaption>Orphaned</figcaption>').read(), /inside its figure/);
+  assert.throws(() => readFigures('<figure><figcaption>One</figcaption><figcaption>Two</figcaption></figure>').read(), /several figure captions/);
 });
 
 test('read the exported table shape and report changed or missing rows by label', () => {
-  const read = readFigures(checkedPage);
+  const {read} = readFigures(checkedPage);
   const selected = read({captionId:'unemployment-rates', checkTable:true});
   assert.equal(selected.text, reviewedCaption);
   assert.equal(selected.rows.length,12);
@@ -50,9 +54,9 @@ test('read the exported table shape and report changed or missing rows by label'
     {label:'Unknown',sourceRate:null,tableRate:99},
   ]);
   const span = checkedPage.replace('<td>3.8%</td>','<td colspan="2">3.8%</td>');
-  assert.throws(() => readFigures(span)({checkTable:true}), /two-column data table/);
+  assert.throws(() => readFigures(span).read({checkTable:true}), /two-column data table/);
   const hidden = checkedPage.replace('<table>','<table aria-hidden="true">');
-  assert.throws(() => readFigures(hidden)({checkTable:true}), /exactly one data table/);
+  assert.throws(() => readFigures(hidden).read({checkTable:true}), /exactly one data table/);
 });
 
 test('a generated page can fail for changed wording, stale numbers, or an invalid target', t => {
