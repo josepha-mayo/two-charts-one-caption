@@ -2,7 +2,7 @@
 
 Check whether a chart description answers the question a reader needs to ask. The browser finds an alternative that changes the answer while preserving the checked facts and changing as few categories as possible. The revised description and an HTML data table can be downloaded once the selected answer is explicit.
 
-[Try the 70% bus cutoff](https://two-charts-caption-2026--judge-preview-nh1ldqbu.web.app/?example=cutoff) · [Compare food insecurity with the national rate](https://two-charts-caption-2026--judge-preview-nh1ldqbu.web.app/?example=food-national)
+[Try the 70% bus cutoff](https://two-charts-caption-2026.web.app/?example=cutoff) · [Compare food insecurity with the national rate](https://two-charts-caption-2026.web.app/?example=food-national)
 
 ## Run locally
 
@@ -22,7 +22,7 @@ Open `/?example=food` to ask which regions had the highest reported household fo
 
 Open `/?example=food-national` to ask which regional estimates fell below the national estimate of 13.7%. Northeast, Midwest, and West do in the published data. In the hypothetical chart, Midwest moves from 13.3% to 13.7%, so it drops out of the answer while the caption’s range and lowest region still hold. **Below** excludes an exact match. **At or above** includes it. [USDA national and regional estimates](https://www.ers.usda.gov/media/9161/err-358.pdf?v=35619)
 
-Open [the Midwest and West comparison](https://two-charts-caption-2026--judge-preview-nh1ldqbu.web.app/?example=food-pair) to test two categories directly. Midwest’s reported estimate is 13.3%, compared with West’s 12.9%. A hypothetical tie keeps the stated range and lowest region intact. Adding “Midwest had a higher rate than West.” resolves this question without publishing either figure. In the reader view, select both categories for a tie. [USDA regional estimates, Table 2](https://www.ers.usda.gov/media/9161/err-358.pdf?v=35619)
+Open [the Midwest and West comparison](https://two-charts-caption-2026.web.app/?example=food-pair) to test two categories directly. Midwest’s reported estimate is 13.3%, compared with West’s 12.9%. A hypothetical tie keeps the stated range and lowest region intact. Adding “Midwest had a higher rate than West.” resolves this question without publishing either figure. In the reader view, select both categories for a tie. [USDA regional estimates, Table 2](https://www.ers.usda.gov/media/9161/err-358.pdf?v=35619)
 
 ## Share the comparison
 
