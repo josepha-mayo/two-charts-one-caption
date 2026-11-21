@@ -85,7 +85,7 @@ export async function generateInCloud(prompt, {signal, onSend} = {}) {
     });
     await Promise.race([getToken(appCheck), timeout]);
   } catch {
-    throw Error('Cloud review couldn’t verify this browser. You can still check the caption locally with Reveal without answering.');
+    throw Error('Cloud review couldn’t verify this browser.');
   } finally {
     clearTimeout(deadline);
   }
@@ -101,9 +101,9 @@ async function generate(model, prompt, source, signal) {
   } catch (error) {
     if (source === InferenceSource.ON_DEVICE) throw Error('On-device inference is unavailable in this Chrome session.');
     if (error?.customErrorData?.status === 429) {
-      throw Error('Cloud Gemini has reached its request limit. Try again later or use the browser check.');
+      throw Error('Cloud Gemini has reached its request limit. Try again later.');
     }
-    throw Error('Cloud Gemini couldn’t complete the request. Retry or use the browser check.');
+    throw Error('Cloud Gemini couldn’t complete the request.');
   }
   if (response.inferenceSource !== source) {
     throw Error('Firebase returned an unexpected inference source.');
@@ -111,6 +111,6 @@ async function generate(model, prompt, source, signal) {
   try {
     return JSON.parse(response.text());
   } catch {
-    throw Error('The model returned an invalid draft. Try again or use the browser check.');
+    throw Error('The model returned an invalid draft.');
   }
 }

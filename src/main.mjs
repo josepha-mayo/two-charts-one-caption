@@ -64,10 +64,12 @@ const aiActivity = new Map();
 const cloudReviewControls = {
   editor: {feedback: 'status', panel: 'claim-review', list: 'claims', notes: 'claim-rejections',
     exclusions: 'claim-exclusions', excludedList: 'claim-exclusion-list',
-    start: 'cloud-preview', cancel: 'cloud-cancel', heading: 'facts-title'},
+    cancel: 'cloud-cancel', heading: 'facts-title', local: 'check',
+    fallback: 'Choose Reveal without answering to check the caption in this browser.'},
   rewrite: {feedback: 'rewrite-status', panel: 'rewrite-claim-review', list: 'rewrite-claims', notes: 'rewrite-claim-notes',
     exclusions: 'rewrite-exclusions', excludedList: 'rewrite-exclusion-list',
-    start: 'rewrite-cloud-preview', cancel: 'rewrite-cloud-cancel', heading: 'rewrite-facts-title'},
+    cancel: 'rewrite-cloud-cancel', heading: 'rewrite-facts-title', local: 'check-rewrite',
+    fallback: 'Choose Check rewrite to check the draft in this browser.'},
 };
 const deviceControls = {
   question: {feedback: 'brief-status', cancel: 'brief-cancel', start: 'brief-submit',
@@ -850,7 +852,8 @@ dialog.addEventListener('close', async () => {
   const controls = cloudReviewControls[request.target];
   const feedback = el(controls.feedback);
   if (navigator.onLine === false) {
-    feedback.textContent = 'Reconnect to send the cloud request. You can check the caption in this browser while offline.';
+    feedback.textContent = `Reconnect to send the cloud request. ${controls.fallback}`;
+    el(controls.local).focus();
     return;
   }
   if (request.target === 'editor') candidate = null;
@@ -880,10 +883,16 @@ dialog.addEventListener('close', async () => {
     draftReady = true;
     feedback.textContent = 'Firebase reported in-cloud inference. Check the extracted facts.';
   } catch (error) {
-    if (ownsReview()) feedback.textContent = error.message;
+    if (ownsReview()) feedback.textContent = `${error.message} ${controls.fallback}`;
   } finally {
     if (finishCloudReview(operation)) {
-      el(draftReady ? controls.heading : controls.start).focus();
+      if (draftReady) {
+        const heading = el(controls.heading);
+        heading.scrollIntoView({block: 'start'});
+        heading.focus({preventScroll: true});
+      } else {
+        el(controls.local).focus();
+      }
     }
   }
 });
@@ -893,7 +902,7 @@ for (const [target, controls] of Object.entries(cloudReviewControls)) {
     if (cloudOperation?.target !== target) return;
     cancelCloudReview();
     el(controls.feedback).textContent = 'Cloud review canceled. A request already sent may still finish at Google.';
-    el(target === 'editor' ? 'check' : controls.start).focus();
+    el(controls.local).focus();
   });
 }
 

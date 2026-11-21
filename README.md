@@ -89,6 +89,8 @@ The review shows each fact beside its quotation and whether it matches the sourc
 
 **Cancel cloud review** returns control to the editor and local verifier immediately. Editing the caption or question also cancels the current review. A request that already reached Google may finish there. Review the current prompt before sending a new one.
 
+If App Check rejects the session or the cloud request fails, the editor moves focus to the browser check for the current caption or rewrite. The draft stays in the editor for that check.
+
 After Firebase returns an AI response, open **AI activity in this tab** to see its inference route and the kinds of inputs used. The downloadable JSON records the action, route, input categories, response count, and last response time. Chrome manages the installed model version separately.
 
 The hosted test used Chrome 157.0.8103.79 with Prompt API v4 and the `gemma4-2b-it` asset (component version `2026.8.7.929`). Firebase reported on-device inference. The exact Gemini Nano 4 designation for the Web track is awaiting organizer confirmation. [Firebase Web setup](https://firebase.google.com/docs/ai-logic/hybrid/web/get-started) · [Web track rules](https://firebasehybridaihackathon.devpost.com/rules)
