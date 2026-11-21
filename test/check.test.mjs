@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readChart, checkCaption, validateClaims, answer, answerText, readCategoryList, supportedDetail, fits} from '../src/check.mjs';
-import {localFacts, cloudPrompt, localPrompt, reviewCloudClaims} from '../src/draft.mjs';
+import {localFacts, cloudPrompt, localPrompt, readCloudReview, reviewCloudClaims} from '../src/draft.mjs';
 import {questionPrompt, readQuestionDraft} from '../src/brief.mjs';
 import {sampleCsv, sampleCaption, cutoffCaption, foodExample, foodNationalExample} from '../src/sample.mjs';
 import {
@@ -573,6 +573,22 @@ test('cloud review restores an omitted exact answer or contradiction from mixed 
   assert.equal(checkCaption(sample, question, recovered.claims).status, 'explicit');
   const contradictory = reviewCloudClaims(sample, prefix + 'Only ' + excerpt, []);
   assert.equal(checkCaption(sample, question, contradictory.claims).status, 'conflict');
+});
+
+test('an incomplete cloud draft preserves directly checkable facts and surfaces unchecked wording', () => {
+  const prose = 'The schedule changed after this report.';
+  const known = 'Only Local and Select Bus Service reached at least 70%.';
+  const quote = `${prose} ${known}`;
+  const value = {type: 'value', id: 3, value: 100, evidence: prose};
+  const review = readCloudReview(sample, quote, {supported: false, claims: [value], alternatives: [[70,70,70]]});
+  assert.equal(review.partial, true);
+  assert.deepEqual(review.claims, [{type:'atLeast', cutoff:70, ids:[1,2], evidence:known}]);
+  assert.deepEqual(review.unchecked, [prose]);
+  assert.deepEqual(review.alternatives, []);
+  assert.equal(review.discarded.length, 1);
+  assert.deepEqual(readCloudReview(sample, quote, {supported: false}).claims, review.claims);
+  assert.deepEqual(readCloudReview(sample, known, {supported: true, claims: []}).alternatives, []);
+  assert.throws(() => readCloudReview(sample, quote, {claims: []}), /usable fact draft/);
 });
 
 test('quoted examples, asides, abbreviations and qualifications do not establish standalone facts', () => {

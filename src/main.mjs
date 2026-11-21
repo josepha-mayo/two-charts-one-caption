@@ -3,7 +3,7 @@ import {
   readChart, checkCaption, captionCoverage, answerSupport, smallestAnswerShift, validateClaims, answerText, isCutoffClaim, sameAnswer, supportedDetail, fitsClaim, questionText, readQuestion,
   decimalPlaceIssue, ratePrecisionText, readDecimalPlaces,
 } from './check.mjs';
-import {localFacts, cloudPrompt, localPrompt, checkText, answerConstraint, reviewCloudClaims, unverifiedCaptionExcerpts} from './draft.mjs';
+import {localFacts, cloudPrompt, localPrompt, checkText, answerConstraint, readCloudReview, unverifiedCaptionExcerpts} from './draft.mjs';
 import {defaultChartColumns, maxCsvBytes, readChartRows, readCsvTable, rowScope} from './csv.mjs';
 import {checkBrief, questionPrompt, questionConstraint, readQuestionDraft} from './brief.mjs';
 import {createPublishCheck, readPublishCheck, reviewPublishInputs, suggestPublishRepair} from './publish-check.mjs';
@@ -98,10 +98,12 @@ const aiActivity = new Map();
 const cloudReviewControls = {
   editor: {feedback: 'status', panel: 'claim-review', list: 'claims', notes: 'claim-rejections',
     exclusions: 'claim-exclusions', excludedList: 'claim-exclusion-list',
+    wording: 'claim-wording', confirm: 'confirm-facts', subject: 'caption',
     cancel: 'cloud-cancel', heading: 'facts-title', local: 'check',
     fallback: 'Choose Reveal without answering to check the caption in this browser.'},
   rewrite: {feedback: 'rewrite-status', panel: 'rewrite-claim-review', list: 'rewrite-claims', notes: 'rewrite-claim-notes',
     exclusions: 'rewrite-exclusions', excludedList: 'rewrite-exclusion-list',
+    wording: 'rewrite-checked-wording', confirm: 'confirm-rewrite-facts', subject: 'rewrite',
     cancel: 'rewrite-cloud-cancel', heading: 'rewrite-facts-title', local: 'check-rewrite',
     fallback: 'Choose Check rewrite to check the draft in this browser.'},
 };
@@ -689,24 +691,18 @@ function render(claims, alternatives = [], note = 'Browser check') {
       ? 'Your selection matches the checked answer. '
       : 'Your selection differs from the checked answer. ';
   }
-  status.textContent = feedback + text[state];
+  const excerpts = unverifiedCaptionExcerpts(rows, caption.value, claims);
+  status.textContent = feedback + text[state] +
+    (resolved && excerpts.length ? ' Review the remaining wording before publishing.' : '');
   if (alternate) chart(el('alternate'), alternate, alternateAnswer, selected, scale, true);
   else el('alternate').replaceChildren(make('p', state === 'explicit' || state === 'implied'
-    ? 'The caption decides this question.' : 'No alternate is shown for this check.', 'empty'));
+    ? 'The checked facts decide this question.' : 'No alternate is shown for this check.', 'empty'));
   if (state !== 'conflict') {
     el('detail').textContent = detailFor(selected, expected);
   }
   renderProof(claims, alternate);
-  const excerpts = unverifiedCaptionExcerpts(rows, caption.value, claims);
   for (const id of ['proof-wording', 'publication-wording']) {
-    const review = el(id);
-    review.hidden = excerpts.length === 0;
-    review.open = id === 'publication-wording';
-    review.querySelector('ul').replaceChildren(...excerpts.map(text => {
-      const item = make('li');
-      item.append(make('q', text));
-      return item;
-    }));
+    renderUncheckedWording(el(id), excerpts, id === 'publication-wording');
   }
   updateExampleRefresh();
 }
@@ -1094,9 +1090,19 @@ function renderExcludedFacts(discarded, controls) {
   }));
 }
 
+function renderUncheckedWording(details, excerpts, open) {
+  details.hidden = excerpts.length === 0;
+  details.open = open && excerpts.length > 0;
+  details.querySelector('ul').replaceChildren(...excerpts.map(text => {
+    const item = make('li');
+    item.append(make('q', text));
+    return item;
+  }));
+}
+
 function showCloudClaims(draft, request, controls) {
-  const {claims, factReviews, discarded, restored} = reviewCloudClaims(rows, request.text, draft.claims);
-  const reviewedDraft = {claims, alternatives: draft.alternatives};
+  const {claims, factReviews, discarded, restored, alternatives, unchecked, partial} = readCloudReview(rows, request.text, draft);
+  const reviewedDraft = {claims, alternatives, unchecked};
   if (request.target === 'editor') candidate = reviewedDraft;
   else rewriteCandidate = {...reviewedDraft, request};
   const values = rows.map(row => row.value);
@@ -1109,12 +1115,17 @@ function showCloudClaims(draft, request, controls) {
       make('p', cloudFactOrigins[origin]), result);
     return item;
   });
-  el(controls.list).replaceChildren(...(entries.length ? entries : [make('li', 'Gemini found no supported quantitative claims.')]));
+  el(controls.list).replaceChildren(...(entries.length ? entries : [make('li', 'No usable facts were found in this wording.')]));
   el(controls.notes).textContent = restored
     ? `Recovered ${restored} ${restored === 1 ? 'fact' : 'facts'} directly from the caption.`
     : '';
   renderExcludedFacts(discarded, controls);
+  renderUncheckedWording(el(controls.wording), unchecked, true);
+  el(controls.confirm).textContent = unchecked.length
+    ? 'Check with these reviewed facts'
+    : `These facts capture the ${controls.subject}`;
   el(controls.panel).hidden = false;
+  return {partial, hasFacts: claims.length > 0};
 }
 
 el('cloud-preview').addEventListener('click', () => {
@@ -1158,10 +1169,11 @@ dialog.addEventListener('close', async () => {
     });
     if (!ownsReview()) return;
     recordAIResponse(request.target === 'editor' ? 'review' : 'rewrite');
-    if (draft?.supported !== true || !Array.isArray(draft.alternatives)) throw Error('Gemini could not interpret the caption using the supported checks.');
-    showCloudClaims(draft, request, controls);
+    const {partial, hasFacts} = showCloudClaims(draft, request, controls);
     draftReady = true;
-    feedback.textContent = 'Firebase reported in-cloud inference. Check the extracted facts.';
+    feedback.textContent = !hasFacts ? 'Firebase reported in-cloud inference. Edit the wording to recover a checkable fact.'
+      : partial ? 'Firebase reported in-cloud inference. The browser recovered a partial fact review.'
+        : 'Firebase reported in-cloud inference. Check the extracted facts.';
   } catch (error) {
     if (ownsReview()) feedback.textContent = `${error.message} ${controls.fallback}`;
   } finally {
@@ -1190,6 +1202,7 @@ el('confirm-facts').addEventListener('click', () => {
   if (!candidate?.claims.length) return;
   render(candidate.claims, candidate.alternatives, 'Firebase cloud draft, verified in your browser');
   el('claim-review').hidden = true;
+  if (candidate.unchecked.length) el('proof-wording').open = true;
   focusCheckResult();
 });
 
@@ -1272,6 +1285,7 @@ function clearRewriteCheck() {
   rewriteCandidate = null;
   if (cloudOperation?.target === 'rewrite') cancelCloudReview();
   el('rewrite-claim-review').hidden = true;
+  renderUncheckedWording(el('rewrite-checked-wording'), [], false);
   el('confirm-rewrite-facts').disabled = true;
   rewriteStatus.textContent = '';
   rewriteStatus.removeAttribute('data-state');
@@ -1343,10 +1357,11 @@ el('rewrite-cloud-preview').addEventListener('click', () => {
 
 el('confirm-rewrite-facts').addEventListener('click', () => {
   if (!rewriteCandidate?.claims.length || !currentCloudRequest(rewriteCandidate.request)) return;
-  const {request, claims, alternatives} = rewriteCandidate;
+  const {request, claims, alternatives, unchecked} = rewriteCandidate;
   clearRewriteCheck();
   try {
     checkRewrite(request.text, claims, alternatives);
+    renderUncheckedWording(el('rewrite-checked-wording'), unchecked, true);
     (checkedRewrite ? el('use-rewrite') : el('rewrite-cloud-preview')).focus();
   } catch (error) {
     rewriteStatus.textContent = error.message;
