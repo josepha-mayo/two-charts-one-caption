@@ -18,23 +18,36 @@ export function isCutoffClaim(claim) {
   return cutoffDirections.has(claim?.type);
 }
 
-export function readQuestion(question) {
+function readPairIds(ids, size) {
+  if (!Array.isArray(ids) || ids.length !== 2 || ids[0] === ids[1] ||
+      ![ids[0], ids[1]].every(id => Number.isInteger(id) && id >= 1 && id <= size)) {
+    throw Error('Choose two different chart categories.');
+  }
+  return [...ids].sort((a, b) => a - b);
+}
+
+export function readQuestion(question, size = 7) {
   if (question === 'lowest' || question === 'highest') return question;
+  if (question?.type === 'pair') return {type: 'pair', ids: readPairIds(question.ids, size)};
   if ((question?.type === 'atLeast' || question?.type === 'below') && validPercent(question.cutoff)) {
     return {type: question.type, cutoff: question.cutoff};
   }
   throw Error('Choose a ranking or enter a cutoff from 0% to 100%, with up to two decimal places.');
 }
 
-export function questionText(question) {
+export function questionText(question, rows) {
   if (typeof question === 'string') return `Which categories had the ${question} rate?`;
+  if (question.type === 'pair') {
+    const [first, second] = question.ids.map(id => rows[id - 1].label);
+    return `Which had the higher rate, ${first} or ${second}?`;
+  }
   return question.type === 'below'
     ? `Which categories fell below ${question.cutoff}%?`
     : `Which categories reached at least ${question.cutoff}%?`;
 }
 
 export function answer(values, question) {
-  const selected = readQuestion(question);
+  const selected = readQuestion(question, values.length);
   return answerValues(values, selected);
 }
 
@@ -43,6 +56,11 @@ function meetsCutoff(value, {type, cutoff}) {
 }
 
 function answerValues(values, question) {
+  if (question?.type === 'pair') {
+    const [first, second] = question.ids;
+    const difference = values[first - 1] - values[second - 1];
+    return difference === 0 ? question.ids : [difference > 0 ? first : second];
+  }
   if (typeof question !== 'string') {
     return values.flatMap((value, index) => meetsCutoff(value, question) ? [index + 1] : []);
   }
@@ -52,6 +70,12 @@ function answerValues(values, question) {
 
 export function sameAnswer(a, b) {
   return a.length === b.length && a.every((index, position) => index === b[position]);
+}
+
+export function statesAnswer(claim, question) {
+  if (typeof question === 'string') return claim.type === question;
+  if (claim.type !== question.type) return false;
+  return question.type === 'pair' ? sameAnswer(claim.ids, question.ids) : claim.cutoff === question.cutoff;
 }
 
 export function validateClaims(claims, caption, size) {
@@ -66,6 +90,11 @@ export function validateClaims(claims, caption, size) {
     if (type === 'value' && Number.isInteger(claim.id) && claim.id >= 1 &&
         claim.id <= size && validPercent(claim.value)) {
       return {type, id: claim.id, value: claim.value, evidence};
+    }
+    if (type === 'pair') {
+      const ids = readPairIds(claim.ids, size);
+      if (claim.higher === 0 || ids.includes(claim.higher)) return {type, ids, higher: claim.higher, evidence};
+      throw Error('A comparison must name the higher category or record a tie.');
     }
     const isCutoff = isCutoffClaim(claim) && validPercent(claim.cutoff);
     const isRank = (type === 'lowest' || type === 'highest') &&
@@ -89,6 +118,10 @@ export function fits(values, claims) {
 export function fitsClaim(values, claim) {
   if (claim.type === 'range') return Math.min(...values) === claim.min && Math.max(...values) === claim.max;
   if (claim.type === 'value') return values[claim.id - 1] === claim.value;
+  if (claim.type === 'pair') {
+    const ids = answerValues(values, claim);
+    return (ids.length === 2 ? 0 : ids[0]) === claim.higher;
+  }
   const direction = cutoffDirection(claim);
   if (direction) {
     const question = {type: direction, cutoff: claim.cutoff};
@@ -106,10 +139,35 @@ function maskOf(ids) {
 
 const points = percent => Math.round(percent * 100);
 
+// Each edge means that "to" is at least "from" plus this many hundredths.
+function pairEdges({ids: [first, second], higher}) {
+  if (higher === 0) return [[first - 1, second - 1, 0], [second - 1, first - 1, 0]];
+  const lower = higher === first ? second : first;
+  return [[lower - 1, higher - 1, 1]];
+}
+
+function fitPairs(candidate, intervals, edges) {
+  if (edges.every(([from, to, delta]) => candidate[to] >= candidate[from] + delta)) return candidate;
+  const minimum = intervals.map(([lower]) => lower);
+  // Propagate lower bounds. An update after n-1 passes would require a positive cycle.
+  for (let pass = 0; pass < minimum.length; pass += 1) {
+    let changed = false;
+    for (const [from, to, delta] of edges) {
+      const next = minimum[from] + delta;
+      if (minimum[to] >= next) continue;
+      if (next > intervals[to][1]) return null;
+      minimum[to] = next;
+      changed = true;
+    }
+    if (!changed) return minimum;
+  }
+  return null;
+}
+
 // Each named value or cutoff narrows a category's integer interval. For a
 // pair of extremum groups, the smallest permitted minimum and the largest
 // permitted maximum give every interior category the most room.
-function intervalWitness(actual, claims, movable, acceptGroups, changedIndex, changedBound) {
+function intervalWitness(actual, claims, movable, acceptGroups = () => true, {index, bound, extraEdges = []} = {}) {
   const full = (1 << actual.length) - 1;
   const requiredLow = maskOf(claims.find(claim => claim.type === 'lowest')?.ids ?? []);
   const requiredHigh = maskOf(claims.find(claim => claim.type === 'highest')?.ids ?? []);
@@ -118,6 +176,7 @@ function intervalWitness(actual, claims, movable, acceptGroups, changedIndex, ch
   const maxBound = range ? points(range.max) : 10000;
   const sourcePoints = actual.map(points);
   const bounds = actual.map(() => [minBound, maxBound]);
+  const edges = [...claims.filter(claim => claim.type === 'pair').flatMap(pairEdges), ...extraEdges];
   for (const claim of claims) {
     if (claim.value === undefined) continue;
     const pinned = points(claim.value);
@@ -138,9 +197,9 @@ function intervalWitness(actual, claims, movable, acceptGroups, changedIndex, ch
   for (const [i, value] of sourcePoints.entries()) {
     if (!(movable & (1 << i))) bounds[i] = [value, value];
   }
-  if (changedBound) {
-    const [lower, upper] = bounds[changedIndex];
-    bounds[changedIndex] = [Math.max(lower, changedBound[0]), Math.min(upper, changedBound[1])];
+  if (bound) {
+    const [lower, upper] = bounds[index];
+    bounds[index] = [Math.max(lower, bound[0]), Math.min(upper, bound[1])];
   }
   if (bounds.some(([lower, upper]) => lower > upper)) return null;
 
@@ -161,11 +220,14 @@ function intervalWitness(actual, claims, movable, acceptGroups, changedIndex, ch
       }
       if (range && (min !== minBound || max !== maxBound)) continue;
       if (flat) {
-        if (min <= max && (!range || min === max)) return actual.map(() => min / 100);
+        if (min <= max && (!range || min === max) && edges.every(([, , delta]) => delta === 0)) {
+          return actual.map(() => min / 100);
+        }
         continue;
       }
       if (min >= max) continue;
       const candidate = [];
+      const intervals = [];
       for (const [i, [lower, upper]] of bounds.entries()) {
         const bit = 1 << i;
         const floor = low & bit ? min : high & bit ? max : min + 1;
@@ -173,9 +235,12 @@ function intervalWitness(actual, claims, movable, acceptGroups, changedIndex, ch
         const from = Math.max(floor, lower);
         const to = Math.min(ceiling, upper);
         if (from > to) break;
-        candidate.push(Math.max(from, Math.min(to, sourcePoints[i])) / 100);
+        candidate.push(Math.max(from, Math.min(to, sourcePoints[i])));
+        if (edges.length) intervals.push([from, to]);
       }
-      if (candidate.length === actual.length) return candidate;
+      if (candidate.length !== actual.length) continue;
+      const checked = edges.length ? fitPairs(candidate, intervals, edges) : candidate;
+      if (checked) return checked.map(value => value / 100);
     }
   }
   return null;
@@ -186,12 +251,22 @@ function alternateIntervals(actual, claims, expected, question, movable) {
     const expectedMask = maskOf(expected);
     return intervalWitness(actual, claims, movable, (low, high) => (question === 'lowest' ? low : high) !== expectedMask);
   }
+  if (question.type === 'pair') {
+    const [first, second] = question.ids;
+    if (expected.length === 2) {
+      return intervalWitness(actual, claims, movable, undefined, {extraEdges: [[first - 1, second - 1, 1]]}) ??
+        intervalWitness(actual, claims, movable, undefined, {extraEdges: [[second - 1, first - 1, 1]]});
+    }
+    const winner = expected[0];
+    const other = winner === first ? second : first;
+    return intervalWitness(actual, claims, movable, undefined, {extraEdges: [[winner - 1, other - 1, 0]]});
+  }
   const cutoff = points(question.cutoff);
   // A different answer must change the membership of at least one category.
   for (const [i, value] of actual.entries()) {
     if (!(movable & (1 << i))) continue;
     const opposite = value >= question.cutoff ? [0, cutoff - 1] : [cutoff, 10000];
-    const candidate = intervalWitness(actual, claims, movable, () => true, i, opposite);
+    const candidate = intervalWitness(actual, claims, movable, undefined, {index: i, bound: opposite});
     if (candidate) return candidate;
   }
   return null;
@@ -216,7 +291,7 @@ function oneCategoryWitness(actual, claims, question, qualifies, best) {
   // source value or a cutoff. Try those points and their immediate neighbors.
   const boundaries = [0, 10000, ...actual.map(points)];
   for (const claim of claims) if (isCutoffClaim(claim)) boundaries.push(points(claim.cutoff));
-  if (typeof question !== 'string') boundaries.push(points(question.cutoff));
+  if (isCutoffClaim(question)) boundaries.push(points(question.cutoff));
   const nearby = new Set(boundaries.flatMap(point => [point - 1, point, point + 1]));
   for (const [i, value] of actual.entries()) {
     for (const point of nearby) {
@@ -253,11 +328,10 @@ function fewestChanges(actual, claims, expected, question, best) {
 
 export function checkCaption(rows, question, claims, proposed = []) {
   const actual = rows.map(row => row.value);
-  const selected = readQuestion(question);
+  const selected = readQuestion(question, rows.length);
   const expected = answerValues(actual, selected);
   if (!fits(actual, claims)) return {status: 'conflict', expected};
-  if (claims.some(claim => typeof selected === 'string' ? claim.type === selected :
-      claim.type === selected.type && claim.cutoff === selected.cutoff)) return {status: 'explicit', expected};
+  if (claims.some(claim => statesAnswer(claim, selected))) return {status: 'explicit', expected};
   // An exact, flat range fixes every category at the same value.
   if (claims.some(claim => claim.type === 'range' && claim.min === claim.max)) return {status: 'implied', expected};
   const qualifies = values => fits(values, claims) && !sameAnswer(answerValues(values, selected), expected);
@@ -335,6 +409,16 @@ export function supportedDetail(rows, question, ids) {
     throw Error('The proposed detail disagrees with the source chart.');
   }
   const subjects = answerText(rows, ids);
+  if (question?.type === 'pair') {
+    if (ids.length === 2) return `${subjects} had the same rate.`;
+    const [winner] = ids;
+    const other = question.ids.find(id => id !== winner);
+    const name = id => {
+      const label = rows[id - 1].label;
+      return /["%]|[.!?]\s| had a (?:higher|lower) rate than /.test(label) ? JSON.stringify(label) : label;
+    };
+    return `${name(winner)} had a higher rate than ${name(other)}.`;
+  }
   if (typeof question !== 'string') {
     const cutoff = `${question.cutoff}%`;
     if (question.type === 'below') {

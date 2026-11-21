@@ -1,5 +1,5 @@
 import {checkText} from './draft.mjs';
-import {readQuestion, sameAnswer} from './check.mjs';
+import {isCutoffClaim, readQuestion, sameAnswer} from './check.mjs';
 
 const PREFIX = '#reader=';
 const RESPONSE_PREFIX = 'two-charts-v1.';
@@ -10,7 +10,7 @@ const VARIANTS = ['before', 'after'];
 const idPattern = /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/;
 
 export function createReaderLink(url, rows, question, caption, invitation) {
-  const packet = {caption: checkText(caption), question: readQuestion(question), labels: rows.map(row => row.label)};
+  const packet = {caption: checkText(caption), question: readQuestion(question, rows.length), labels: rows.map(row => row.label)};
   if (invitation !== undefined) packet.invitation = readId(invitation);
   const link = new URL(url);
   link.search = '';
@@ -31,7 +31,7 @@ function readPacket(packet) {
       new Set(packet.labels.map(label => label.normalize('NFKC').toLowerCase())).size !== packet.labels.length) {
     throw Error('This reader link has an invalid question or category list.');
   }
-  const clean = {caption: checkText(packet.caption), question: readQuestion(packet.question), labels: packet.labels};
+  const clean = {caption: checkText(packet.caption), question: readQuestion(packet.question, packet.labels.length), labels: packet.labels};
   if (packet.invitation !== undefined) clean.invitation = readId(packet.invitation);
   return clean;
 }
@@ -41,21 +41,25 @@ function readId(id) {
   return id;
 }
 
-function readSelection(ids, size, allowUnknown, allowNone) {
+function selectionRules(question, size) {
+  return {size, allowNone: isCutoffClaim(question), pair: question?.type === 'pair' ? question.ids : null};
+}
+
+function readSelection(ids, {size, allowNone, pair}, allowUnknown) {
   if (ids === null && allowUnknown) return null;
   if (!Array.isArray(ids) || (!ids.length && !allowNone) || ids.length > size ||
-      !ids.every((id, i) => Number.isInteger(id) && id > (ids[i - 1] ?? 0) && id <= size)) {
+      !ids.every((id, i) => Number.isInteger(id) && id > (ids[i - 1] ?? 0) && id <= size && (!pair || pair.includes(id)))) {
     throw Error('The reader response has an invalid category selection.');
   }
   return ids;
 }
 
-function readResponse(response, size = 7, allowNone = true) {
+function readResponse(response, rules = {size: 7, allowNone: true}) {
   if (!response || typeof response !== 'object') throw Error('Invalid reader response.');
   return {
     invitation: readId(response.invitation),
     responseId: readId(response.responseId),
-    selected: readSelection(response.selected, size, true, allowNone),
+    selected: readSelection(response.selected, rules, true),
   };
 }
 
@@ -88,20 +92,20 @@ function readTest(test) {
   const {caption, question, labels} = readPacket({
     caption: test.before?.caption, question: test.question, labels: test.labels,
   });
-  const allowNone = typeof question !== 'string';
-  const expected = readSelection(test.expected, labels.length, false, allowNone);
-  const before = readVariant(test.before, caption, labels.length, allowNone);
-  const after = readVariant(test.after, checkText(test.after.caption), labels.length, allowNone);
+  const rules = selectionRules(question, labels.length);
+  const expected = readSelection(test.expected, rules, false);
+  const before = readVariant(test.before, caption, rules);
+  const after = readVariant(test.after, checkText(test.after.caption), rules);
   if (before.invitation === after.invitation || before.caption === after.caption) {
     throw Error('The reader test needs two different caption versions.');
   }
   return {question, labels, expected, before, after};
 }
 
-function readVariant(variant, caption, size, allowNone) {
+function readVariant(variant, caption, rules) {
   const invitation = readId(variant.invitation);
   if (!Array.isArray(variant.responses) || variant.responses.length > 100) throw Error('Invalid response history.');
-  const responses = variant.responses.map(response => readResponse(response, size, allowNone));
+  const responses = variant.responses.map(response => readResponse(response, rules));
   if (responses.some(response => response.invitation !== invitation) ||
       new Set(responses.map(response => response.responseId)).size !== responses.length) {
     throw Error('Invalid response history.');
@@ -157,8 +161,7 @@ export function addReaderResponse(test, code) {
   try {
     response = readResponse(
       JSON.parse(decodeURIComponent(value.slice(RESPONSE_PREFIX.length))),
-      test.labels.length,
-      typeof test.question !== 'string',
+      selectionRules(test.question, test.labels.length),
     );
   } catch {
     throw Error('That response code is invalid. Ask the reader to copy it again.');

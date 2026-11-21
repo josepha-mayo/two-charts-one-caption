@@ -26,6 +26,7 @@
             <option value="cutoff">Bus service cutoff</option>
             <option value="food">Food insecurity by region</option>
             <option value="food-national">Food insecurity vs. U.S. rate</option>
+            <option value="food-pair">Midwest vs. West food insecurity</option>
           </select>
           <button type="button" id="example">Load example</button>
         </div>
@@ -38,8 +39,11 @@
           <option value="highest">Highest rate</option>
           <option value="atLeast">Rates at or above a cutoff</option>
           <option value="below">Rates below a cutoff</option>
+          <option value="pair">Higher rate between two categories</option>
         </select>
         <label id="cutoff-label" for="cutoff" hidden>Cutoff (%) <input type="number" id="cutoff" min="0" max="100" step="0.01" value="70" inputmode="decimal"></label>
+        <label id="pair-first-label" for="pair-first" hidden>First category <select id="pair-first"></select></label>
+        <label id="pair-second-label" for="pair-second" hidden>Second category <select id="pair-second"></select></label>
       </div>
       <p id="studio-question"></p>
       <details class="brief-panel" id="brief-panel">

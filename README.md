@@ -22,6 +22,8 @@ Open `/?example=food` to ask which regions had the highest reported household fo
 
 Open `/?example=food-national` to ask which regional estimates fell below the national estimate of 13.7%. Northeast, Midwest, and West do in the published data. In the hypothetical chart, Midwest moves from 13.3% to 13.7%, so it drops out of the answer while the caption’s range and lowest region still hold. **Below** excludes an exact match. **At or above** includes it. [USDA national and regional estimates](https://www.ers.usda.gov/media/9161/err-358.pdf?v=35619)
 
+Open [the Midwest and West comparison](https://two-charts-caption-2026--judge-preview-nh1ldqbu.web.app/?example=food-pair) to test two categories directly. Midwest’s reported estimate is 13.3%, compared with West’s 12.9%. A hypothetical tie keeps the stated range and lowest region intact. Adding “Midwest had a higher rate than West.” resolves this question without publishing either figure. In the reader view, select both categories for a tie. [USDA regional estimates, Table 2](https://www.ers.usda.gov/media/9161/err-358.pdf?v=35619)
+
 ## Share the comparison
 
 After revealing a gap, choose **Download proof with chart data**. The HTML file opens offline with both answers, the exact percentages, the checked caption facts, and a suggested sentence. Share it with an editor who can see the source data, or use a reader link for a caption-only test.
@@ -105,7 +107,7 @@ Local development on `127.0.0.1` supports the official App Check debug provider 
 
 ## Current scope
 
-Two to seven categories with percentage values and one question about a rank or a cutoff. The verifier supports ranges, individual values, extrema, and complete cutoff lists. It treats percentages as exact within the app’s two-decimal domain. Gemini’s interpretation of free-form text requires review. The browser checks the approved claims and selected question.
+Two to seven categories with percentage values and one question about rank, a cutoff, or the order of two named categories. The verifier supports ranges, individual values, extrema, cutoff lists, and pair comparisons. It treats percentages as exact within the app’s two-decimal domain. Gemini’s interpretation of free-form text requires review. The browser checks the approved claims and selected question.
 
 ## License
 

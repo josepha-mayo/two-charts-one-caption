@@ -143,7 +143,7 @@ export function comparisonReport(document, {caption, rows, question, result, cla
     facts.append(item);
   }
   const changed = result.changedCategories === 1 ? '1 category' : `${result.changedCategories} categories`;
-  main.append(header, element(doc, 'h2', 'Question checked'), element(doc, 'p', questionText(question)), answers,
+  main.append(header, element(doc, 'h2', 'Question checked'), element(doc, 'p', questionText(question, rows)), answers,
     element(doc, 'p', `Changing ${changed} is enough to change the answer. The second chart is hypothetical.`), table,
     element(doc, 'h2', 'Caption under review'), element(doc, 'blockquote', caption),
     element(doc, 'h2', 'Checked caption facts'), claims.length ? facts : element(doc, 'p', '0 quantitative facts were approved.'),

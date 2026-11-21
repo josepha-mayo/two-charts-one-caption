@@ -1,6 +1,6 @@
 import './style.css';
 import {
-  readChart, checkCaption, validateClaims, answerText, cutoffDirection, sameAnswer, supportedDetail, fitsClaim, questionText, readQuestion,
+  readChart, checkCaption, validateClaims, answerText, isCutoffClaim, sameAnswer, supportedDetail, fitsClaim, questionText, readQuestion,
 } from './check.mjs';
 import {localFacts, cloudPrompt, localPrompt, checkText, answerConstraint, reviewCloudClaims} from './draft.mjs';
 import {defaultChartColumns, readChartRows, readCsvTable} from './csv.mjs';
@@ -9,7 +9,7 @@ import {createPublishCheck, readPublishCheck, reviewPublishInputs, suggestPublis
 import {maxEditorialDraftBytes, readEditorialDraft, writeEditorialDraft} from './editorial-draft.mjs';
 import {deviceAvailability} from './device.mjs';
 import {saveOfflineApp} from './offline.mjs';
-import {sampleCsv, sampleCaption, cutoffCaption, sampleSource, foodExample, foodNationalExample} from './sample.mjs';
+import {sampleCsv, sampleCaption, cutoffCaption, sampleSource, foodExample, foodNationalExample, foodPairExample} from './sample.mjs';
 import {comparisonReport, reviewedDescription, reviewedFragment} from './report.mjs';
 import refreshedSampleCsv from '../examples/bus-cutoff/refreshed.csv?raw';
 import {
@@ -21,11 +21,12 @@ const el = id => document.getElementById(id);
 const caption = el('caption');
 const question = el('question');
 const cutoff = el('cutoff');
+const pairInputs = [el('pair-first'), el('pair-second')];
 const csv = el('csv');
 const dialog = el('dialog');
 const status = el('status');
 const requestedExample = new URLSearchParams(location.search).get('example');
-const startingExample = ['cutoff', 'food', 'food-national'].includes(requestedExample) ? requestedExample : 'bus';
+const startingExample = ['cutoff', 'food', 'food-national', 'food-pair'].includes(requestedExample) ? requestedExample : 'bus';
 let rows, result, reviewed, candidate, snapshot;
 let firebaseConnection;
 let cloudOperation;
@@ -52,6 +53,7 @@ const pastedCsv = {label: 'Pasted CSV'};
 let chartSource = originalExample;
 let exampleReview;
 let pendingImport;
+let pairSource;
 const aiOperations = {
   question: {label: 'Question from private note', route: 'on_device', inputs: ['Private note']},
   detail: {label: 'Caption detail from source chart', route: 'on_device', inputs: ['Source percentages', 'Category IDs', 'Selected question']},
@@ -99,12 +101,32 @@ function recordAIResponse(operation) {
 
 function selectedQuestion() {
   const type = question.value;
-  return readQuestion(cutoffDirection({type}) ? {type, cutoff: cutoff.valueAsNumber} : type);
+  if (type === 'pair') return readQuestion({type, ids: pairInputs.map(input => Number(input.value))}, rows.length);
+  return readQuestion(isCutoffClaim({type}) ? {type, cutoff: cutoff.valueAsNumber} : type);
 }
 
-function setQuestion(selected) {
+function refreshPairOptions(chartRows, ids) {
+  if (chartRows !== pairSource) {
+    const previous = pairInputs.map(input => pairSource?.[Number(input.value) - 1]?.label);
+    const matching = previous.map(label => chartRows.findIndex(row => row.label === label) + 1);
+    if (!ids) ids = matching.every(Boolean) ? matching : [1, 2];
+    for (const input of pairInputs) {
+      input.replaceChildren(...chartRows.map(({label}, index) => new Option(label, index + 1)));
+    }
+    pairSource = chartRows;
+  }
+  if (ids) pairInputs.forEach((input, i) => { input.value = String(ids[i]); });
+}
+
+function setQuestion(selected, chartRows = rows) {
   question.value = typeof selected === 'string' ? selected : selected.type;
-  if (typeof selected !== 'string') cutoff.value = String(selected.cutoff);
+  if (selected?.type === 'pair') refreshPairOptions(chartRows, selected.ids);
+  if (isCutoffClaim(selected)) cutoff.value = String(selected.cutoff);
+}
+
+function questionPromptText(selected, chartRows) {
+  const instruction = selected?.type === 'pair' ? 'Select both for a tie.' : 'Select all that apply.';
+  return `${questionText(selected, chartRows)} ${instruction}`;
 }
 
 const deltaFormat = new Intl.NumberFormat('en', {signDisplay: 'always', maximumFractionDigits: 2});
@@ -136,7 +158,7 @@ function chart(target, values, ids, selected, compareToSource = false) {
     const bar = make('span', undefined, 'bar');
     bar.style.inlineSize = `${values[i]}%`;
     track.append(bar);
-    if (typeof selected !== 'string') {
+    if (isCutoffClaim(selected)) {
       const rule = make('span', undefined, 'cutoff-line');
       rule.style.insetInlineStart = `${selected.cutoff}%`;
       track.append(rule);
@@ -148,7 +170,7 @@ function chart(target, values, ids, selected, compareToSource = false) {
   target.replaceChildren(axis, list);
   const summary = typeof selected === 'string'
     ? (selected === 'lowest' ? 'Lowest' : 'Highest')
-    : cutoffText(selected);
+    : selected.type === 'pair' ? (ids.length === 2 ? 'Tie' : 'Higher of the pair') : cutoffText(selected);
   target.append(make('p', `${summary}: ${answerText(rows, ids)}`, 'answer'));
 }
 
@@ -202,21 +224,29 @@ function invalidate() {
   el('recheck-source').textContent = `Data in use · ${chartSource.label}`;
   el('source-chart-title').textContent = chartSource === refreshedExample ? 'Simulated data refresh' : 'Source chart';
   updateExampleRefresh();
-  const showCutoff = Boolean(cutoffDirection({type: question.value}));
+  const showCutoff = isCutoffClaim({type: question.value});
   el('cutoff-label').hidden = !showCutoff;
+  const showPair = question.value === 'pair';
+  for (const input of pairInputs) el(input.id + '-label').hidden = !showPair;
+  refreshPairOptions(rows);
+  let selected;
   try {
-    el('studio-question').textContent = `${questionText(selectedQuestion())} Select all that apply.`;
+    selected = selectedQuestion();
+    el('studio-question').textContent = questionPromptText(selected, rows);
   } catch (error) {
     el('studio-question').textContent = error.message;
   }
   const unknown = choiceButton('The caption doesn’t say', () => browserCheck(null), true);
-  const checks = rows.map(({label}) => {
+  const checks = rows.flatMap(({label}, index) => {
+    const id = index + 1;
+    if (showPair && !selected?.ids.includes(id)) return [];
     const choice = categoryChoice(label, 'challenge-option');
     choice.input.disabled = busy;
-    return choice;
+    choice.input.dataset.categoryId = String(id);
+    return [{...choice, id}];
   });
   const reveal = choiceButton('Check selected categories', () => {
-    const ids = checks.flatMap(({input}, i) => input.checked ? [i + 1] : []);
+    const ids = checks.flatMap(({input, id}) => input.checked ? [id] : []);
     if (ids.length) browserCheck(ids);
     else status.textContent = 'Select at least one category, or choose an answer below.';
   });
@@ -323,14 +353,14 @@ function renderSource() {
 
 function loadSample(key) {
   clearCsvMapping();
-  chartSource = key === 'food-national' ? foodNationalExample : key === 'food' ? foodExample : originalExample;
+  chartSource = {food: foodExample, 'food-national': foodNationalExample, 'food-pair': foodPairExample}[key] ?? originalExample;
   exampleReview = null;
   el('example-select').value = key;
   csv.value = chartSource.csv;
   caption.value = key === 'cutoff' ? cutoffCaption : chartSource.caption;
   cutoff.value = '70';
-  setQuestion(key === 'cutoff' ? {type: 'atLeast', cutoff: 70} : chartSource.question);
   rows = readChart(chartSource.csv);
+  setQuestion(key === 'cutoff' ? {type: 'atLeast', cutoff: 70} : chartSource.question);
   el('csv-status').textContent = '';
   renderSource();
   invalidate();
@@ -339,6 +369,9 @@ function loadSample(key) {
 function describeClaim(claim) {
   if (claim.type === 'range') return `Range ${claim.min}%–${claim.max}%`;
   if (claim.type === 'value') return `${rows[claim.id - 1].label} is ${claim.value}%`;
+  if (claim.type === 'pair') {
+    return claim.higher ? `Higher in this pair: ${answerText(rows, [claim.higher])}` : `Same rate: ${answerText(rows, claim.ids)}`;
+  }
   if (claim.type === 'atLeast') return `At or above ${claim.cutoff}%: ${answerText(rows, claim.ids)}`;
   if (claim.type === 'below') return `${cutoffText(claim)}: ${answerText(rows, claim.ids)}`;
   if (claim.type === 'atLeastSome') return `${answerText(rows, claim.ids)} reached at least ${claim.cutoff}%`;
@@ -376,9 +409,9 @@ function renderProof(claims, alternate) {
 function renderWitness(selected, expected, alternate, alternateAnswer) {
   el('witness').hidden = !alternate;
   if (!alternate) return;
-  el('witness-question').textContent = questionText(selected);
-  el('witness-source').textContent = answerText(rows, expected);
-  el('witness-alternate').textContent = answerText(rows, alternateAnswer);
+  el('witness-question').textContent = questionText(selected, rows);
+  el('witness-source').textContent = answerText(rows, expected) + (selected?.type === 'pair' && expected.length === 2 ? ' (tie)' : '');
+  el('witness-alternate').textContent = answerText(rows, alternateAnswer) + (selected?.type === 'pair' && alternateAnswer.length === 2 ? ' (tie)' : '');
   const changes = rows.flatMap(({label, value}, i) => {
     if (value === alternate[i]) return [];
     const item = make('li');
@@ -448,8 +481,8 @@ function browserCheck(guess) {
   invalidate();
   readerAnswer = guess;
   if (Array.isArray(guess)) {
-    for (const [index, input] of el('reader-choices').querySelectorAll('input').entries()) {
-      input.checked = guess.includes(index + 1);
+    for (const input of el('reader-choices').querySelectorAll('input')) {
+      input.checked = guess.includes(Number(input.dataset.categoryId));
     }
   }
   try {
@@ -570,6 +603,7 @@ el('csv-file').addEventListener('change', async event => {
 caption.addEventListener('input', invalidate);
 question.addEventListener('change', invalidate);
 cutoff.addEventListener('input', invalidate);
+for (const input of pairInputs) input.addEventListener('change', invalidate);
 
 function connectFirebase() {
   if (firebaseConnection) return firebaseConnection;
@@ -723,7 +757,7 @@ el('brief-apply').addEventListener('click', () => {
 function previewCloudReview(target, text, selected) {
   snapshot = {target, text, prompt: cloudPrompt(rows, selected, text), revision,
     context: target === 'rewrite' ? rewriteContext : null};
-  el('cloud-question').textContent = questionText(selected);
+  el('cloud-question').textContent = questionText(selected, rows);
   el('cloud-categories').textContent = answerText(rows, rows.map((_, index) => index + 1));
   el('cloud-caption').textContent = text;
   el('preview-data').textContent = target === 'rewrite'
@@ -903,13 +937,15 @@ el('apply').addEventListener('click', () => {
     status.textContent = 'Shorten the caption before adding the detail.';
     return;
   }
-  const fact = typeof selected === 'string'
-    ? {type: selected, value: rows[result.expected[0] - 1].value}
-    : selected;
   const comparison = result.status === 'ambiguous'
     ? {rows, question: selected, expected: result.expected, before, after: text}
     : null;
-  applyCaptionRevision(text, [...reviewed, {...fact, ids: result.expected, evidence}], comparison);
+  try {
+    const newFacts = localCaptionClaims(evidence);
+    applyCaptionRevision(text, [...reviewed, ...newFacts], comparison);
+  } catch (error) {
+    status.textContent = error.message;
+  }
 });
 
 const rewriteDialog = el('rewrite-dialog');
@@ -936,7 +972,7 @@ el('open-rewrite').addEventListener('click', () => {
   rewriteContext = {revision, before, question: selectedQuestion()};
   el('rewrite-original').textContent = before;
   rewriteCaption.value = before;
-  el('rewrite-question').textContent = questionText(rewriteContext.question);
+  el('rewrite-question').textContent = questionText(rewriteContext.question, rows);
   clearRewriteCheck();
   rewriteDialog.returnValue = 'cancel';
   rewriteDialog.showModal();
@@ -1075,7 +1111,7 @@ el('editor-draft-file').addEventListener('change', async event => {
     const chart = readChart(draft.csv);
     if (busy || document.querySelector('dialog[open]')) throw Error('Finish the current action, then choose the draft again.');
     previewedEditorialFile = {draft, chart, name: file.name};
-    el('editor-draft-question').textContent = `${questionText(draft.question)} · ${chart.length} categories`;
+    el('editor-draft-question').textContent = `${questionText(draft.question, chart)} · ${chart.length} categories`;
     el('editor-draft-caption').textContent = draft.caption || 'Empty caption';
     el('editor-draft-data').open = false;
     el('editor-draft-categories').replaceChildren(...chart.map(({label, value}) => make('li', `${label} · ${value}%`)));
@@ -1096,7 +1132,7 @@ editorialFileDialog.addEventListener('close', () => {
   el('editor-draft-categories').replaceChildren();
   if (!preview || editorialFileDialog.returnValue !== 'open') return;
   const {draft, chart, name} = preview;
-  setQuestion(draft.question);
+  setQuestion(draft.question, chart);
   applyChart(chart, draft.csv, {label: 'Editorial draft', sourceCitation: draft.sourceNote});
   caption.value = draft.caption;
   savedCheck = draft.review;
@@ -1343,7 +1379,7 @@ function renderReaderTest() {
   el('reader-test-run').hidden = !readerTest;
   if (!readerTest) return;
   const labels = readerTest.labels.map(label => ({label}));
-  el('reader-test-question').textContent = `Question: ${questionText(readerTest.question)}`;
+  el('reader-test-question').textContent = `Question: ${questionText(readerTest.question, readerTest.labels.map(label => ({label})))}`;
   el('reader-test-versions').replaceChildren(...testVersions.map(([key, title]) => {
     const {caption, invitation} = readerTest[key];
     const card = readerVersionCard(readerTest, key, title);
@@ -1435,7 +1471,7 @@ el('reader-test-file').addEventListener('change', async event => {
     if (revision !== readerFileRevision) return;
     const test = readReaderTestFile(text);
     previewedReaderFile = test;
-    el('reader-file-question').textContent = questionText(test.question);
+    el('reader-file-question').textContent = questionText(test.question, test.labels.map(label => ({label})));
     el('reader-file-versions').replaceChildren(...testVersions.map(([key, title]) => readerVersionCard(test, key, title)));
     el('open-reader-file-note').textContent = readerTest
       ? 'Opening this file replaces the test in this tab. Save the current test first if you need to resume it later.'
@@ -1487,18 +1523,21 @@ function mountReader(packet) {
   el('studio').hidden = true;
   el('reader').hidden = false;
   el('reader-caption').textContent = packet.caption;
-  const prompt = questionText(packet.question);
-  el('reader-question').textContent = `${prompt} Select all that apply.`;
-  const options = packet.labels.map((label, index) => {
+  const readerRows = packet.labels.map(label => ({label}));
+  const prompt = questionText(packet.question, readerRows);
+  el('reader-question').textContent = questionPromptText(packet.question, readerRows);
+  const options = packet.labels.flatMap((label, index) => {
+    const id = index + 1;
+    if (packet.question?.type === 'pair' && !packet.question.ids.includes(id)) return [];
     const {input, option} = categoryChoice(label, 'reader-option');
     el('reader-options').append(option);
-    return {input, label, id: index + 1};
+    return [{input, id}];
   });
   const responseId = packet.invitation ? readerResponseId(tabStorage, packet.invitation) : null;
   let recorded;
   function record(choices) {
     const answer = choices === null ? 'The caption doesn’t say'
-      : answerText(packet.labels.map(label => ({label})), choices);
+      : answerText(readerRows, choices);
     recorded = `${prompt} My answer: ${answer}.`;
     el('reader-status').textContent = recorded;
     if (packet.invitation) {
@@ -1518,7 +1557,7 @@ function mountReader(packet) {
     }
   });
   const none = el('reader-none');
-  none.hidden = typeof packet.question === 'string';
+  none.hidden = !isCutoffClaim(packet.question);
   none.textContent = noCutoffMatches(packet.question.type);
   none.addEventListener('click', () => record([]));
   el('reader-unknown').addEventListener('click', () => record(null));

@@ -1,5 +1,5 @@
 import {
-  answer, answerText, checkCaption, fitsClaim, isCutoffClaim, questionText, readQuestion, sameAnswer, supportedDetail, validateClaims,
+  answer, answerText, checkCaption, fitsClaim, isCutoffClaim, questionText, readQuestion, sameAnswer, statesAnswer, supportedDetail, validateClaims,
 } from './check.mjs';
 import {checkText, localFacts, readQuotedCutoff, readQuotedFact, withQuotedRankValue} from './draft.mjs';
 
@@ -21,7 +21,7 @@ export function readPublishCheck(check) {
     throw Error('The recheck file needs two to seven unique chart categories.');
   }
   const caption = normalizeCaption(check.caption);
-  const question = readQuestion(check.question);
+  const question = readQuestion(check.question, labels.length);
   if (!Array.isArray(check.claims) || !check.claims.length) throw Error('A saved check needs at least one reviewed fact.');
   const categories = labels.map(label => ({label}));
   const claims = validateClaims(check.claims.map(claim => ({
@@ -48,6 +48,12 @@ export function reviewPublishInputs(rows, caption, check) {
   if (unsupported) {
     return {status: 'review_required', message: `Review what this cutoff sentence establishes before publishing. “${unsupported.evidence}”`};
   }
+  for (const claim of check.claims.filter(fact => fact.type === 'pair')) {
+    const quote = readQuotedFact(ordered, draft, claim.evidence.trim());
+    if (quote?.type !== 'pair' || !sameAnswer(quote.ids, claim.ids) || quote.higher !== claim.higher) {
+      return {status: 'review_required', message: `Review what this comparison establishes before publishing. “${claim.evidence}”`};
+    }
+  }
   return {status: 'ready', rows: ordered};
 }
 
@@ -57,7 +63,7 @@ export function runPublishCheck(rows, caption, check) {
   const result = checkCaption(input.rows, check.question, check.claims);
   const report = {
     status: result.status,
-    question: questionText(check.question),
+    question: questionText(check.question, input.rows),
     sourceAnswer: answerText(input.rows, result.expected),
   };
   if (result.status === 'conflict') {
@@ -80,16 +86,13 @@ export function suggestPublishRepair(rows, caption, check) {
 
   const [claim] = stale;
   const currentQuestion = check.question;
-  const sameQuestion = typeof currentQuestion === 'string'
-    ? claim.type === currentQuestion
-    : claim.type === currentQuestion.type && claim.cutoff === currentQuestion.cutoff;
-  if (!sameQuestion) return;
+  if (!statesAnswer(claim, currentQuestion)) return;
 
   const text = caption.replace(/\r\n/g, '\n');
   try {
     const parsed = readQuotedFact(input.rows, check.caption, claim.evidence.trim());
     if (!parsed || parsed.type !== claim.type || !sameAnswer(parsed.ids, claim.ids) ||
-        parsed.value !== claim.value || parsed.cutoff !== claim.cutoff) return;
+        parsed.value !== claim.value || parsed.cutoff !== claim.cutoff || parsed.higher !== claim.higher) return;
     const before = parsed.evidence;
     const start = text.indexOf(before);
     if (text.indexOf(before, start + 1) !== -1) return;

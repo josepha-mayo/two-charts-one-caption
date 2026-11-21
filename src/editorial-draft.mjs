@@ -18,7 +18,7 @@ function validate(file) {
   if (typeof caption !== 'string' || caption.length > 1800) throw Error('A draft caption can have up to 1,800 characters.');
   if (typeof sourceNote !== 'string' || sourceNote.length > 400) throw Error('The draft source note is invalid.');
   const rows = readChart(csv);
-  const question = readQuestion(file.question);
+  const question = readQuestion(file.question, rows.length);
   const check = review === null ? null : readPublishCheck(review);
   if (check && (JSON.stringify(question) !== JSON.stringify(check.question) ||
       reviewPublishInputs(rows, caption, check).status !== 'ready')) {

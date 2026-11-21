@@ -49,10 +49,12 @@ button:focus-visible, select:focus-visible, textarea:focus-visible, a:focus-visi
 .controls label { font-size: .92rem; }
 select { min-height: 32px; padding: 3px; }
 .question-controls { margin-block: 2px 8px; }
-#cutoff-label { display: inline-flex; align-items: center; gap: 8px; }
+#cutoff-label, #pair-first-label, #pair-second-label { display: inline-flex; align-items: center; gap: 8px; }
+.question-controls label, .question-controls select { min-width: 0; max-width: 100%; }
+#pair-first, #pair-second { overflow: hidden; text-overflow: ellipsis; }
 #cutoff { max-width: 7ch; min-height: 36px; font: inherit; padding: 3px 5px; }
 #cutoff:focus-visible { outline: 3px solid var(--cool); outline-offset: 3px; }
-#studio-question { color: var(--muted); font-size: .92rem; }
+#studio-question { color: var(--muted); font-size: .92rem; overflow-wrap: anywhere; }
 .brief-panel { margin-block: 10px; border: 1px solid var(--line); border-radius: 6px; padding: 8px 11px; font-size: .88rem; }
 .brief-panel summary { color: var(--cool); font-weight: 650; }
 .brief-panel .caption-head { margin-block: 12px 6px; }

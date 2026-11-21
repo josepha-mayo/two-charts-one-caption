@@ -18,3 +18,9 @@ export const foodNationalExample = {
   question: {type: 'below', cutoff: 13.7},
   sourceCitation: 'USDA Economic Research Service · Household Food Security in the United States in 2024, Table 2 and the national estimate',
 };
+
+export const foodPairExample = {
+  ...foodExample,
+  label: 'Food insecurity in the Midwest and West',
+  question: {type: 'pair', ids: [2, 4]},
+};
