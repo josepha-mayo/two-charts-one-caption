@@ -133,6 +133,8 @@ select { min-height: 32px; padding: 3px; }
 #stale-repair dd { margin: 0 0 7px; overflow-wrap: anywhere; }
 #stale-after { color: var(--mint); }
 .revision p { margin: 6px 0 12px; color: var(--gold); font-size: 1.15rem; }
+.rank-wording { display: inline-flex; align-items: center; gap: 8px; min-block-size: 36px; }
+#rank-wording-help { color: var(--muted); font-size: .86rem; margin-top: 0; }
 .revision-proof { margin-block: 14px; border-block-start: 3px solid var(--mint); }
 #revision-proof-title { scroll-margin-block-start: 22px; }
 #revision-proof-title:focus-visible { outline: 2px solid var(--cool); outline-offset: 4px; }

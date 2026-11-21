@@ -210,6 +210,17 @@ test('a false claim is a contradiction even when the cloud can generate a candid
   assert.equal(result.alternate, undefined);
 });
 
+test('rank-only edits round-trip tied names and reject a rate invented by a cloud draft', () => {
+  const rows = readChart('category,percent\nNorth,40\nNorth had the highest rate. Annex,80\nSouth,80');
+  const evidence = supportedDetail(rows, 'highest', [2, 3], {includeRate:false});
+  assert.equal(evidence, 'The 2 categories "North had the highest rate. Annex" and "South" shared the highest rate.');
+  const [rank] = localFacts(rows, evidence);
+  assert.deepEqual(rank, {type:'highest', ids:[2, 3], evidence});
+  const review = reviewCloudClaims(rows, evidence, [{...rank, value:80}]);
+  assert.equal(review.discarded[0].reason, 'mismatch');
+  assert.deepEqual(review.claims, [rank]);
+});
+
 test('ties are answers and the checked revision names all tied categories on a fresh chart', () => {
   const rows = readChart('service,percent\nReading Room,19.3\n"Children, East",19.3\nCheckout,31');
   assert.deepEqual(answer(rows.map(row => row.value), 'lowest'), [1, 2]);

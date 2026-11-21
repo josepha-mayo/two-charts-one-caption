@@ -491,7 +491,7 @@ export function answerText(rows, ids) {
   return `${noun} ${formatLabels(rows, ids, true)}`;
 }
 
-export function supportedDetail(rows, question, ids) {
+export function supportedDetail(rows, question, ids, {includeRate = true} = {}) {
   if (!sameAnswer(answer(rows.map(row => row.value), question), ids)) {
     throw Error('The proposed detail disagrees with the source chart.');
   }
@@ -513,9 +513,14 @@ export function supportedDetail(rows, question, ids) {
     }
     return ids.length ? `Only ${subjects} reached at least ${cutoff}.` : `No categories reached ${cutoff}.`;
   }
-  const value = rows[ids[0] - 1].value;
-  const subject = subjects === formatLabels(rows, ids) ? subjects : subjects[0].toUpperCase() + subjects.slice(1);
-  return ids.length === 1
-    ? `${subject} had the ${question} rate, at ${value}%.`
-    : `${subject} shared the ${question} rate, at ${value}%.`;
+  const plain = formatLabels(rows, ids);
+  const reserved = ids.some(id => / (?:had|shared) the (?:lowest|highest) rate\b/.test(rows[id - 1].label));
+  let subject = subjects === plain ? subjects : subjects[0].toUpperCase() + subjects.slice(1);
+  if (reserved) {
+    const group = ids.length === 1 ? 'The category' : `The ${ids.length} categories`;
+    subject = `${group} ${formatLabels(rows, ids, true)}`;
+  }
+  const verb = ids.length === 1 ? 'had' : 'shared';
+  const wording = `${subject} ${verb} the ${question} rate`;
+  return includeRate ? `${wording}, at ${rows[ids[0] - 1].value}%.` : wording + '.';
 }

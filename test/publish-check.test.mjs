@@ -94,6 +94,21 @@ test('a legacy saved rank claim flags a changed rate when the ranking is unchang
   assert.deepEqual(result.failedFacts, [evidence]);
 });
 
+test('ranking-only wording survives a rate refresh and its repair keeps the same disclosure', () => {
+  const first = readChart('category,percent\nNorth,78\nCentral,64\nSouth,48');
+  const refreshed = readChart('category,percent\nNorth,80\nCentral,67\nSouth,48');
+  const newLeader = readChart('category,percent\nNorth,80\nCentral,81\nSouth,48');
+  const wording = supportedDetail(first, 'highest', [1], {includeRate: false});
+  assert.equal(wording, 'North had the highest rate.');
+  const saved = createPublishCheck(first, 'highest', wording, localFacts(first, wording));
+  assert.equal(saved.claims[0].value, undefined);
+  assert.equal(runPublishCheck(refreshed, wording, saved).status, 'explicit');
+  assert.equal(runPublishCheck(newLeader, wording, saved).status, 'conflict');
+  const repaired = suggestPublishRepair(newLeader, wording, saved);
+  assert.equal(repaired.after, 'Central had the highest rate.');
+  assert.equal(runPublishCheck(newLeader, repaired.caption, repaired.check).status, 'explicit');
+});
+
 test('legacy cutoff checks preserve a partial quote and surface unsupported evidence', () => {
   const rows = readChart('category,percent\nNorth,78\nCentral,64\nSouth,48');
   const question = {type: 'atLeast', cutoff: 70};

@@ -146,6 +146,11 @@
     <section id="revision" class="revision" aria-labelledby="revision-title" hidden>
       <h2 id="revision-title" tabindex="-1">Make the answer clear</h2>
       <p id="detail"></p>
+      <label class="rank-wording" id="rank-wording" hidden>
+        <input type="checkbox" id="include-rank-rate" checked aria-describedby="rank-wording-help">
+        Include the exact percentage in the new sentence
+      </label>
+      <p id="rank-wording-help" hidden>A ranking-only sentence still holds after a refresh if the same categories keep that rank.</p>
       <div class="controls">
         <button type="button" class="primary" id="apply">Add this detail and recheck</button>
         <button type="button" id="open-rewrite">Test my own rewrite</button>

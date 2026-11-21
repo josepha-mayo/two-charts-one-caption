@@ -10,7 +10,7 @@ function subjectMatcher(prefix, suffix) {
   const legacy = new RegExp(`^${prefix}(.+?)${suffix}`);
   return text => quoted.exec(text) ?? legacy.exec(text);
 }
-const matchRank = subjectMatcher('', ` (had|shared) the (lowest|highest) rate, at (${percent})%\\.(?=\\s|$)`);
+const matchRank = subjectMatcher('', ` (had|shared) the (lowest|highest) rate(?:, at (${percent})%)?\\.(?=\\s|$)`);
 const cutoffVerb = '(reached at least|were at or above|met or exceeded|fell below|were below)';
 const cutoffEnding = `(${percent})(?:%| percent)(?:\\.(?=\\s|$)|$)`;
 const matchCutoff = subjectMatcher('(Only )?', ` ${cutoffVerb} ${cutoffEnding}`);
@@ -43,7 +43,7 @@ export function cloudPrompt(rows, question, caption) {
     'Use atLeast for explicit complete cutoff answers, such as “Only North reached at least 70%.” Use atLeastSome for positive cutoff statements that do not exclude other categories, such as “North reached at least 70%.”',
     'Use below for complete strict cutoff answers, such as “Only North fell below 70%.” Use belowSome for “North fell below 70%.” An exact match to the cutoff does not count as below.',
     'For cutoff evidence quote the whole sentence. Use an empty array only for an explicit no-category claim. An extremum assertion names all tied categories.',
-    'When the extremum quote states an exact rate, include it in the rank claim as value. Do not duplicate it as a separate value claim.',
+    'Include value only when the extremum quote states an exact rate. Keep that rate in the rank claim rather than adding a separate value claim.',
     'For a pair claim, give the two category IDs and the higher category ID (higher:0 for a tie). Quote a complete comparison sentence such as “North had a higher rate than South.” or “North and South had the same rate.”',
     'For a pair question, compare only the two named IDs. A tie selects both.',
     'Evidence is an exact quote from the caption. The question is separate and cannot supply facts. Do not extract an answer by treating the question as caption text.',
@@ -114,7 +114,7 @@ export function withQuotedRankValue(rows, claim) {
   const quote = matchRank(claim.evidence);
   if (quote?.[0] !== claim.evidence) return claim;
   const [, subject, verb, type, amount] = quote;
-  if (type !== claim.type || Number(amount) > 100) return claim;
+  if (amount === undefined || type !== claim.type || Number(amount) > 100) return claim;
   try {
     if (!sameAnswer(readCategoryList(rows, subject, verb === 'had') ?? [], claim.ids)) return claim;
   } catch {
@@ -182,7 +182,7 @@ function readLocalFact(rows, text) {
   if (rank) {
     const [, subjects, verb, type, amount] = rank;
     const ids = readCategoryList(rows, subjects, verb === 'had');
-    if (ids) return {type, ids, value: Number(amount), evidence: rank[0]};
+    if (ids) return {type, ids, ...(amount !== undefined && {value: Number(amount)}), evidence: rank[0]};
   }
   const cutoff = readCutoffFact(rows, text);
   if (cutoff) return cutoff;

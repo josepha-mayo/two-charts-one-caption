@@ -34,6 +34,8 @@ Under **What the words actually prove**, choose **See what else this caption ans
 
 When an answer is determined, **Find the excerpts that support this answer** finds one sufficient set of checked excerpts. Open each quote to see a chart that could change the answer if that quote's facts were left out of the set. This helps plan shorter wording. Run a new check after rewriting the caption.
 
+For a highest- or lowest-rate question, clear **Include the exact percentage in the new sentence** to state the rank alone. The saved check still verifies every tied category. If a refresh changes the number while the rank stays the same, that sentence still passes. A new leader or tie still requires review.
+
 ## Try a reader test
 
 1. Reveal an ambiguous caption, add the verified detail, and create before and after links.

@@ -114,7 +114,7 @@ export function suggestPublishRepair(rows, caption, check, columns) {
     const start = text.indexOf(before);
     if (text.indexOf(before, start + 1) !== -1) return;
 
-    const after = supportedDetail(input.rows, currentQuestion, answer(values, currentQuestion));
+    const after = supportedDetail(input.rows, currentQuestion, answer(values, currentQuestion), {includeRate: claim.value !== undefined});
     const [updatedFact] = localFacts(input.rows, after);
     const nextCaption = text.slice(0, start) + after + text.slice(start + before.length);
     const nextClaims = check.claims.map(fact => fact === claim ? updatedFact : fact);

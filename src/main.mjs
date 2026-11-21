@@ -565,6 +565,18 @@ function focusCheckResult() {
   status.focus();
 }
 
+const includeRankRate = el('include-rank-rate');
+
+function detailFor(selected, ids) {
+  return supportedDetail(rows, selected, ids, {includeRate: includeRankRate.checked});
+}
+
+includeRankRate.addEventListener('change', () => {
+  if (result?.status === 'ambiguous' || result?.status === 'implied') {
+    el('detail').textContent = detailFor(selectedQuestion(), result.expected);
+  }
+});
+
 function render(claims, alternatives = [], note = 'Browser check') {
   el('detail-status').textContent = '';
   el('revision-proof').hidden = true;
@@ -596,6 +608,7 @@ function render(claims, alternatives = [], note = 'Browser check') {
   el('export').hidden = !resolved;
   el('publication').hidden = !resolved;
   el('apply').hidden = state !== 'ambiguous' && state !== 'implied';
+  el('rank-wording-help').hidden = el('rank-wording').hidden = el('apply').hidden || typeof selected !== 'string';
   el('nano').hidden = state !== 'ambiguous';
   const guess = readerAnswer === undefined || state !== 'ambiguous' ? ''
     : readerAnswer === null ? 'You spotted the gap. '
@@ -619,7 +632,7 @@ function render(claims, alternatives = [], note = 'Browser check') {
   else el('alternate').replaceChildren(make('p', state === 'explicit' || state === 'implied'
     ? 'The caption decides this question.' : 'No alternate is shown for this check.', 'empty'));
   if (state !== 'conflict') {
-    el('detail').textContent = supportedDetail(rows, selected, expected);
+    el('detail').textContent = detailFor(selected, expected);
   }
   renderProof(claims, alternate);
   const excerpts = unverifiedCaptionExcerpts(rows, caption.value, claims);
@@ -1124,7 +1137,7 @@ el('nano').addEventListener('click', () => {
       try {
         if (!Array.isArray(reply?.ids)) throw Error('Chrome’s suggestion did not contain category IDs.');
         const ids = [...reply.ids].sort((a, b) => a - b);
-        el('detail').textContent = supportedDetail(rows, selected, ids);
+        el('detail').textContent = detailFor(selected, ids);
         detailStatus.textContent = 'Firebase ran on-device. The browser verified Chrome’s suggestion against the source chart.';
       } catch (error) {
         detailStatus.textContent = `Firebase ran on-device. ${error.message} You can still add the checked detail above.`;
@@ -1164,7 +1177,7 @@ function applyCaptionRevision(text, claims, comparison) {
 el('apply').addEventListener('click', () => {
   if (!result || !reviewed) return;
   const selected = selectedQuestion();
-  const evidence = supportedDetail(rows, selected, result.expected);
+  const evidence = detailFor(selected, result.expected);
   const before = checkText(caption.value);
   const text = `${before} ${evidence}`;
   if (text.length > 1800) {
@@ -1497,6 +1510,7 @@ el('download-comparison').addEventListener('click', () => {
   const report = comparisonReport(document, {
     caption: checkText(caption.value), question: selectedQuestion(), rows, result,
     claims: reviewed, describeClaim,
+    includeRate: includeRankRate.checked,
     sourceNote: [chartSource.sourceCitation, chartSource.columns?.filter && rowScope(chartSource.columns.filter)].filter(Boolean).join(' · '),
   });
   downloadFile(report, 'text/html;charset=utf-8', 'caption-comparison.html');

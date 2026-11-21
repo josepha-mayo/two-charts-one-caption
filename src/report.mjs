@@ -123,7 +123,7 @@ export function reviewedText(caption, rows, {columns, sourceCitation} = {}) {
   return [caption, '', heading, ...table, ...(sourceCitation ? ['', sourceCitation] : [])].join('\n');
 }
 
-export function comparisonReport(document, {caption, rows, question, result, claims, describeClaim, sourceNote}) {
+export function comparisonReport(document, {caption, rows, question, result, claims, describeClaim, sourceNote, includeRate}) {
   const {doc, main} = reportDocument(document, 'Chart caption comparison');
   const header = element(doc, 'header');
   header.append(element(doc, 'p', 'Two Charts, One Caption'), element(doc, 'h1', 'Same caption, different answers'));
@@ -165,7 +165,7 @@ export function comparisonReport(document, {caption, rows, question, result, cla
     element(doc, 'p', `Changing ${changed} is enough to change the answer. The second chart is hypothetical.`), table,
     element(doc, 'h2', 'Caption under review'), element(doc, 'blockquote', caption),
     element(doc, 'h2', 'Checked caption facts'), claims.length ? facts : element(doc, 'p', '0 quantitative facts were approved.'),
-    element(doc, 'h2', 'Suggested sentence'), element(doc, 'blockquote', supportedDetail(rows, question, result.expected)));
+    element(doc, 'h2', 'Suggested sentence'), element(doc, 'blockquote', supportedDetail(rows, question, result.expected, {includeRate})));
   if (sourceNote) {
     const source = element(doc, 'p', sourceNote);
     source.className = 'source';
