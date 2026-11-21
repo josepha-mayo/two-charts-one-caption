@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {readChart, chartForAnswer, explainReaderAnswer, checkCaption, validateClaims, answer, answerText, readCategoryList, supportedDetail, fits} from '../src/check.mjs';
 import {localFacts, cloudPrompt, localPrompt, readCloudReview, reviewCloudClaims} from '../src/draft.mjs';
 import {questionPrompt, readQuestionDraft} from '../src/brief.mjs';
-import {sampleCsv, sampleCaption, cutoffCaption, foodExample, foodNationalExample} from '../src/sample.mjs';
+import {sampleCsv, sampleCaption, cutoffCaption, recordedBusReview, foodExample, foodNationalExample} from '../src/sample.mjs';
 import {
   addReaderResponse, createReaderLink, createReaderTest, encodeResponse, readReaderLink,
   readReaderTestFile, readerCounts, readerDifferences, readerResponseId, restoreReaderTest, saveReaderTest, writeReaderTestFile,
@@ -11,6 +11,20 @@ import {
 
 const sample = readChart(sampleCsv);
 const sampleFacts = validateClaims(localFacts(sample, sampleCaption), sampleCaption, sample.length);
+
+test('the recorded Firebase excerpts and offline sentence reproduce the bus caption result', () => {
+  const {question, detail, excerpts} = recordedBusReview;
+  const original = excerpts.join(' ');
+  assert.equal(original, cutoffCaption);
+  const claims = localFacts(sample, original);
+  assert.deepEqual(claims.map(claim => claim.evidence), excerpts);
+  const before = checkCaption(sample, question, claims);
+  assert.equal(before.status, 'ambiguous');
+  assert.deepEqual(before.alternate, [71.5, 69.99, 65.1]);
+  assert.deepEqual(before.alternateAnswer, [1]);
+  const after = checkCaption(sample, question, localFacts(sample, original + ' ' + detail));
+  assert.deepEqual(after, {status:'explicit', expected:[1,2]});
+});
 
 test('category lists reflect edits and callers own the matched IDs', () => {
   const rows = readChart('category,percent\nNorth,20\nSouth,30\nEast,40');

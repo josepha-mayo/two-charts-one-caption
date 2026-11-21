@@ -10,7 +10,7 @@ import {createPublishCheck, readPublishCheck, reviewPublishInputs, suggestPublis
 import {maxEditorialDraftBytes, readEditorialDraft, writeEditorialDraft} from './editorial-draft.mjs';
 import {deviceAvailability} from './device.mjs';
 import {saveOfflineApp} from './offline.mjs';
-import {sampleCsv, sampleCaption, cutoffCaption, sampleSource, foodExample, foodNationalExample, foodPairExample} from './sample.mjs';
+import {sampleCsv, sampleCaption, cutoffCaption, sampleSource, recordedBusReview, foodExample, foodNationalExample, foodPairExample} from './sample.mjs';
 import {comparisonReport, reviewedDescription, reviewedFigure, reviewedFragment, reviewedText} from './report.mjs';
 import refreshedSampleCsv from '../examples/bus-cutoff/refreshed.csv?raw';
 import firstUnemploymentCsv from '../examples/bls-unemployment/first-published.csv?raw';
@@ -33,6 +33,7 @@ const status = el('status');
 const route = new URLSearchParams(location.search);
 const requestedExample = route.get('example');
 const openExampleReaderAnswer = route.get('demo') === 'reader-answer';
+const openRecordedFirebase = route.get('demo') === 'firebase-proof';
 let rows, result, reviewed, candidate, snapshot;
 let firebaseConnection;
 let cloudOperation;
@@ -78,7 +79,7 @@ const examples = new Map([
   ['bus', originalExample], ['cutoff', originalExample], ['food', foodExample],
   ['food-national', foodNationalExample], ['food-pair', foodPairExample], ['bls-revision', unemploymentExample],
 ]);
-const startingExample = openExampleReaderAnswer ? 'cutoff' : examples.has(requestedExample) ? requestedExample : 'bus';
+const startingExample = openExampleReaderAnswer || openRecordedFirebase ? 'cutoff' : examples.has(requestedExample) ? requestedExample : 'bus';
 const exampleRefreshes = [
   {before: originalExample, after: refreshedExample, question: {type: 'atLeast', cutoff: 70},
     apply: 'Try a simulated data refresh', restore: 'Restore original example data'},
@@ -2007,6 +2008,37 @@ el('open-reader-answer-example').addEventListener('click', startReaderAnswerExam
 el('reader-answer-example-choice').addEventListener('change', showExampleReaderAnswer);
 el('reader-answer-example-selection').addEventListener('change', showExampleReaderAnswer);
 
+const recordedFirebaseDialog = el('recorded-firebase-dialog');
+const recordedFirebaseResult = el('recorded-firebase-result');
+
+function showRecordedFirebase() {
+  el('recorded-firebase-excerpts').replaceChildren(...recordedBusReview.excerpts.map(excerpt => make('li', excerpt)));
+  el('recorded-firebase-detail').textContent = recordedBusReview.detail;
+  recordedFirebaseResult.replaceChildren();
+  recordedFirebaseResult.hidden = true;
+  recordedFirebaseDialog.showModal();
+}
+
+el('open-recorded-firebase').addEventListener('click', showRecordedFirebase);
+el('replay-firebase-check').addEventListener('click', () => {
+  const source = readChart(sampleCsv);
+  const {question, detail, excerpts} = recordedBusReview;
+  const originalCaption = excerpts.join(' ');
+  const revised = originalCaption + ' ' + detail;
+  const before = checkCaption(source, question, localFacts(source, originalCaption));
+  const after = checkCaption(source, question, localFacts(source, revised));
+  const result = before.status === 'ambiguous' && after.status === 'explicit' ? [
+    make('p', 'One answer allowed by the original wording is ' + answerText(source, before.alternateAnswer) + '.'),
+    ...source.flatMap(({label, value}, index) => value === before.alternate[index] ? [] : [
+      make('p', `Hypothetical change · ${label} goes from ${value}% to ${before.alternate[index]}%.`),
+    ]),
+    make('p', 'Revised wording requires ' + answerText(source, after.expected) + '.'),
+    make('p', 'Both captions were checked in the browser. No model calls were made.'),
+  ] : [make('p', 'The saved result could not be reproduced.')];
+  recordedFirebaseResult.hidden = false;
+  recordedFirebaseResult.replaceChildren(...result);
+});
+
 function renderReaderDifferences(test, labels) {
   const details = el('reader-differences');
   const differences = readerDifferences(test);
@@ -2263,6 +2295,9 @@ try {
     if (openExampleReaderAnswer) {
       el('open-reader-answer-example').focus();
       startReaderAnswerExample();
+    } else if (openRecordedFirebase) {
+      el('open-recorded-firebase').focus();
+      showRecordedFirebase();
     }
   }
 } catch {

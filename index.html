@@ -84,6 +84,7 @@
       </div>
       <div id="reader-answer-example-actions" class="controls" hidden>
         <button type="button" id="open-reader-answer-example">Try a reader’s answer</button>
+        <button type="button" id="open-recorded-firebase">See the recorded Firebase run</button>
       </div>
       <p id="status" role="status"></p>
     </section>
@@ -442,6 +443,32 @@
     <form method="dialog" class="controls">
       <button type="submit" autofocus>Close answer check</button>
     </form>
+  </dialog>
+  <dialog id="recorded-firebase-dialog" aria-labelledby="recorded-firebase-title">
+    <h2 id="recorded-firebase-title">How the 70% caption was checked</h2>
+    <p>Recorded November 20, 2026 in desktop Chrome 157.0.8103.79. The replay uses the public NYC bus example.</p>
+    <ol class="recorded-firebase-steps">
+      <li>
+        <h3>On-device · propose the question</h3>
+        <p>Chrome read an editor’s note and proposed checking which services reached at least 70%. The editor approved that question and kept the note on the device.</p>
+      </li>
+      <li>
+        <h3>In-cloud · review the wording</h3>
+        <p>The editor approved sending the caption, question, and category names through Firebase AI Logic with App Check. The browser kept the three facts below and excluded a cutoff claim that lacked supporting wording.</p>
+        <ul id="recorded-firebase-excerpts"></ul>
+      </li>
+      <li>
+        <h3>On-device, offline · draft the missing sentence</h3>
+        <p>After disconnecting, Chrome suggested this sentence. The browser checked it against the source rates:</p>
+        <blockquote id="recorded-firebase-detail"></blockquote>
+      </li>
+    </ol>
+    <form method="dialog" class="controls">
+      <button type="button" class="primary" id="replay-firebase-check">Rerun the caption check</button>
+      <button type="submit">Close recorded run</button>
+    </form>
+    <div class="recorded-firebase-result" id="recorded-firebase-result" role="status" hidden></div>
+    <p><a href="https://www.youtube.com/watch?v=CO2xOL6RM1Q" target="_blank" rel="noopener noreferrer">Watch the demo video</a></p>
   </dialog>
   <dialog id="replace-test-dialog" aria-labelledby="replace-test-title">
     <h2 id="replace-test-title">Replace this reader test?</h2>

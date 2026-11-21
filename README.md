@@ -2,7 +2,7 @@
 
 Check whether a chart description answers the question a reader needs to ask. The browser finds an alternative that changes the answer while preserving the checked facts and changing as few categories as possible. The revised description and an HTML data table can be downloaded once the selected answer is explicit.
 
-[Try the 70% bus cutoff](https://two-charts-caption-2026.web.app/?example=cutoff) · [Compare food insecurity with the national rate](https://two-charts-caption-2026.web.app/?example=food-national)
+[Try the 70% bus cutoff](https://two-charts-caption-2026.web.app/?example=cutoff) · [Replay the recorded Firebase result](https://two-charts-caption-2026.web.app/?demo=firebase-proof) · [Compare food insecurity with the national rate](https://two-charts-caption-2026.web.app/?example=food-national)
 
 ## Run locally
 
@@ -127,6 +127,8 @@ node scripts/verify-caption.mjs --batch examples/bus-cutoff/release.example.json
 The example reports one passing check and one stale excerpt. Batch mode reports every entry in order. It exits with `0` when all pass, `1` when any needs editorial review, and `2` when one or more inputs are invalid. Add `--require-checked-wording` to apply that policy to every entry.
 
 ## Firebase
+
+The recorded Firebase example shows the approved on-device question, the three caption facts kept after cloud review, and the source-checked sentence Chrome proposed offline. **Rerun the caption check** computes the original and revised answers using the browser verifier and the public bus data. It works without a model download. [Recorded review](https://two-charts-caption-2026.web.app/?demo=firebase-proof)
 
 The Firebase client is loaded on demand. Configure a Firebase web app with the Gemini Developer API and Firebase App Check. Put the web app’s public configuration and the reCAPTCHA Enterprise site key into `public/firebase.local.json` using the following keys.
 

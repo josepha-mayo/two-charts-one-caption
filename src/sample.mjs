@@ -3,6 +3,17 @@ export const sampleCaption = 'Median on-time rates ranged from 65.1% to 71.5% ac
 export const cutoffCaption = sampleCaption + ' Local had the highest rate, at 71.5%. Express had the lowest rate, at 65.1%.';
 export const sampleSource = 'https://comptroller.nyc.gov/reports/life-in-the-slow-lane/';
 
+// The public bus example from the November 20 hosted Firebase replay.
+export const recordedBusReview = {
+  question: {type: 'atLeast', cutoff: 70},
+  excerpts: [
+    sampleCaption,
+    'Local had the highest rate, at 71.5%.',
+    'Express had the lowest rate, at 65.1%.',
+  ],
+  detail: 'Only Local and Select Bus Service reached at least 70%.',
+};
+
 export const foodExample = {
   label: 'Food insecurity by region',
   csv: 'category,percent\nNortheast,12.2\nMidwest,13.3\nSouth,15.0\nWest,12.9',
