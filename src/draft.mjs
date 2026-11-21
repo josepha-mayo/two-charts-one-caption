@@ -50,28 +50,45 @@ export function cloudPrompt(rows, question, caption) {
 
 export function reviewCloudClaims(rows, caption, candidates) {
   const clean = checkText(caption);
-  const claims = validateClaims(candidates, clean, rows.length);
+  if (!Array.isArray(candidates) || candidates.length > 12) throw Error('Expected a list of up to twelve facts.');
   const {facts, complete} = scanCaptionFacts(rows, clean);
   const local = validateClaims(facts, clean, rows.length);
   const accepted = [];
+  const discarded = [];
   const represented = new Set();
-  let narrowed = 0;
-  for (const claim of claims) {
+  for (const [index, draft] of candidates.entries()) {
+    let claim;
+    try {
+      [claim] = validateClaims([draft], clean, rows.length);
+    } catch {
+      discarded.push({index: index + 1, reason: 'invalid'});
+      continue;
+    }
+
     const quote = claim.evidence.trim();
     const parsed = local.find(fact => matchesQuote(quote, fact));
     if (parsed) {
-      if (!matchesFact(claim, parsed) || represented.has(parsed.evidence)) continue;
-      represented.add(parsed.evidence);
-      if (claim.type === 'atLeast' && parsed.type === 'atLeastSome') narrowed += 1;
-      accepted.push({...parsed, evidence: claim.evidence});
+      if (!matchesFact(claim, parsed)) discarded.push({index: index + 1, claim, reason: 'mismatch', parsed});
+      else if (represented.has(parsed.evidence)) discarded.push({index: index + 1, claim, reason: 'duplicate'});
+      else {
+        represented.add(parsed.evidence);
+        let origin = 'matched';
+        if (claim.type === 'atLeast' && parsed.type === 'atLeastSome') origin = 'narrowed';
+        else if (claim.value === undefined && parsed.value !== undefined) origin = 'rate-restored';
+        accepted.push({claim: {...parsed, evidence: claim.evidence}, origin});
+      }
     } else if (!complete && !isCutoffClaim(claim) && !local.some(fact => fact.evidence.includes(quote))) {
-      accepted.push(claim);
+      accepted.push({claim, origin: 'interpreted'});
+    } else {
+      discarded.push({index: index + 1, claim, reason: isCutoffClaim(claim) ? 'cutoff' : 'excerpt'});
     }
   }
   const missing = local.filter(fact => !represented.has(fact.evidence));
-  const reviewed = validateClaims([...accepted, ...missing], clean, rows.length)
-    .sort((a, b) => clean.indexOf(a.evidence) - clean.indexOf(b.evidence));
-  return {claims: reviewed, excluded: claims.length - accepted.length, narrowed, restored: missing.length};
+  const factReviews = [...accepted, ...missing.map(claim => ({claim, origin: 'restored'}))]
+    .sort((a, b) => clean.indexOf(a.claim.evidence) - clean.indexOf(b.claim.evidence));
+  const claims = validateClaims(factReviews.map(({claim}) => claim), clean, rows.length);
+  return {claims, factReviews, discarded, excluded: discarded.length,
+    narrowed: accepted.filter(({origin}) => origin === 'narrowed').length, restored: missing.length};
 }
 
 function matchesFact(claim, fact) {

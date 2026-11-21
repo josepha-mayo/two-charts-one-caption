@@ -77,6 +77,8 @@ The Firebase client is loaded on demand. Configure a Firebase web app with the G
 
 **Test with cloud Gemini** shows the exact text sent to the cloud, including the approved caption, question, and category names. Sending the specific request connects Firebase on demand. The browser checks the meaning of quotes it can parse and restores omitted standalone facts, including in captions that mix prose with exact claims. Confirm the extracted facts before checking the alternate. **Ask Chrome Nano for the detail** uses Firebase in device-only mode. The browser independently verifies the returned category IDs against the source chart before using them in the revision.
 
+The review shows each fact beside its quotation and whether it matches the source data. Open **Excluded facts** to inspect why a proposed fact was dropped. A malformed item is excluded individually so you can still review the rest of the draft and the facts the browser recovered.
+
 **Cancel cloud review** returns control to the editor and local verifier immediately. Editing the caption or question also cancels the current review. A request that already reached Google may finish there. Review the current prompt before sending a new one.
 
 After Firebase returns an AI response, open **AI activity in this tab** to see its inference route and the kinds of inputs used. The downloadable JSON records the action, route, input categories, response count, and last response time. Chrome manages the installed model version separately.

@@ -59,9 +59,11 @@ const aiOperations = {
 const aiActivity = new Map();
 const cloudReviewControls = {
   editor: {feedback: 'status', panel: 'claim-review', list: 'claims', notes: 'claim-rejections',
-    start: 'cloud-preview', cancel: 'cloud-cancel', confirm: 'confirm-facts'},
+    exclusions: 'claim-exclusions', excludedList: 'claim-exclusion-list',
+    start: 'cloud-preview', cancel: 'cloud-cancel', heading: 'facts-title'},
   rewrite: {feedback: 'rewrite-status', panel: 'rewrite-claim-review', list: 'rewrite-claims', notes: 'rewrite-claim-notes',
-    start: 'rewrite-cloud-preview', cancel: 'rewrite-cloud-cancel', confirm: 'confirm-rewrite-facts'},
+    exclusions: 'rewrite-exclusions', excludedList: 'rewrite-exclusion-list',
+    start: 'rewrite-cloud-preview', cancel: 'rewrite-cloud-cancel', heading: 'rewrite-facts-title'},
 };
 
 try { tabStorage = window.sessionStorage; } catch { /* Session storage can be disabled. */ }
@@ -206,10 +208,11 @@ function invalidate() {
 }
 
 function syncActions() {
-  for (const id of ['check', 'cloud-preview', 'load', 'csv-file', 'example', 'example-select', 'nano', 'apply', 'confirm-facts', 'open-rewrite',
+  for (const id of ['check', 'cloud-preview', 'load', 'csv-file', 'example', 'example-select', 'nano', 'apply', 'open-rewrite',
     'brief-example', 'brief-submit', 'brief-apply', 'recheck-file', 'save-recheck', 'run-recheck',
     'review-saved-caption', 'apply-stale-repair', 'example-refresh', 'csv-category', 'csv-percent',
     'use-csv-columns', 'check-rewrite', 'rewrite-cloud-preview']) el(id).disabled = busy;
+  el('confirm-facts').disabled = busy || !candidate?.claims.length;
   el('confirm-rewrite-facts').disabled = busy || !rewriteCandidate?.claims.length;
   for (const control of el('reader-choices').querySelectorAll('button, input')) control.disabled = busy;
   for (const [target, controls] of Object.entries(cloudReviewControls)) {
@@ -670,18 +673,57 @@ function currentCloudRequest(request) {
     (rewriteDialog.open && request.context === rewriteContext && rewriteCaption.value.trim() === request.text));
 }
 
+const cloudFactOrigins = {
+  matched: 'The browser read the same fact in the quote.',
+  narrowed: 'The quote names qualifying categories and leaves the others open.',
+  'rate-restored': 'The browser restored the exact rate stated in this quote.',
+  interpreted: 'Gemini interpreted this quote. Check its meaning before approving.',
+  restored: 'The browser read this fact directly from the caption.',
+};
+
+const cloudFactExclusions = {
+  invalid: 'The draft fact lacked an exact excerpt or usable values.',
+  mismatch: 'The browser read a different fact in this quote.',
+  duplicate: 'The same quote already appears in the review.',
+  cutoff: 'A cutoff needs a full sentence that states who qualifies.',
+  excerpt: 'The excerpt does not establish a separate fact.',
+};
+
+function renderExcludedFacts(discarded, controls) {
+  const details = el(controls.exclusions);
+  details.hidden = !discarded.length;
+  details.open = false;
+  details.querySelector('summary').textContent = `${discarded.length} excluded ${discarded.length === 1 ? 'fact' : 'facts'}`;
+  el(controls.excludedList).replaceChildren(...discarded.map(({index, claim, reason, parsed}) => {
+    const item = make('li');
+    item.append(make('strong', claim ? describeClaim(claim) : `Draft fact ${index}`));
+    if (claim) item.append(make('q', claim.evidence));
+    item.append(make('p', cloudFactExclusions[reason]));
+    if (parsed) item.append(make('p', describeClaim(parsed)));
+    return item;
+  }));
+}
+
 function showCloudClaims(draft, request, controls) {
-  const {claims, excluded, narrowed, restored} = reviewCloudClaims(rows, request.text, draft.claims);
+  const {claims, factReviews, discarded, restored} = reviewCloudClaims(rows, request.text, draft.claims);
   const reviewedDraft = {claims, alternatives: draft.alternatives};
   if (request.target === 'editor') candidate = reviewedDraft;
   else rewriteCandidate = {...reviewedDraft, request};
-  const entries = claims.map(claim => make('li', `${describeClaim(claim)} · “${claim.evidence}”`));
+  const values = rows.map(row => row.value);
+  const entries = factReviews.map(({claim, origin}) => {
+    const item = make('li');
+    const matches = fitsClaim(values, claim);
+    const result = make('span', matches ? 'Matches the source data' : 'Conflicts with the source data', 'claim-result');
+    result.dataset.matches = String(matches);
+    item.append(make('strong', describeClaim(claim)), make('q', claim.evidence),
+      make('p', cloudFactOrigins[origin]), result);
+    return item;
+  });
   el(controls.list).replaceChildren(...(entries.length ? entries : [make('li', 'Gemini found no supported quantitative claims.')]));
-  const notes = [];
-  if (excluded) notes.push(`Omitted ${excluded} ${excluded === 1 ? 'draft fact' : 'draft facts'} without distinct supporting wording.`);
-  if (narrowed) notes.push('The quoted wording confirms who qualifies and leaves other categories open.');
-  if (restored) notes.push(`Recovered ${restored} ${restored === 1 ? 'fact' : 'facts'} directly from the caption.`);
-  el(controls.notes).textContent = notes.join(' ');
+  el(controls.notes).textContent = restored
+    ? `Recovered ${restored} ${restored === 1 ? 'fact' : 'facts'} directly from the caption.`
+    : '';
+  renderExcludedFacts(discarded, controls);
   el(controls.panel).hidden = false;
 }
 
@@ -733,8 +775,7 @@ dialog.addEventListener('close', async () => {
     if (ownsReview()) feedback.textContent = error.message;
   } finally {
     if (finishCloudReview(operation)) {
-      const confirm = el(controls.confirm);
-      (draftReady && !confirm.disabled ? confirm : el(controls.start)).focus();
+      el(draftReady ? controls.heading : controls.start).focus();
     }
   }
 });
@@ -749,7 +790,7 @@ for (const [target, controls] of Object.entries(cloudReviewControls)) {
 }
 
 el('confirm-facts').addEventListener('click', () => {
-  if (!candidate) return;
+  if (!candidate?.claims.length) return;
   render(candidate.claims, candidate.alternatives, 'Firebase cloud draft, verified in your browser');
   el('claim-review').hidden = true;
   focusCheckResult();

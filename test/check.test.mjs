@@ -448,6 +448,24 @@ test('a cloud draft cannot pin the middle bar with a quote that only states the 
   assert.deepEqual(result.alternate, [71.5, 69.99, 65.1]);
 });
 
+test('a malformed cloud fact leaves valid claims available for individual review', () => {
+  const partial = 'Select Bus Service reached at least 70%.';
+  const caption = `${sampleCaption} ${partial}`;
+  const cutoff = {type: 'atLeast', cutoff: 70, ids: [2], evidence: partial};
+  const invented = {type: 'value', id: 2, value: 70.5, evidence: sampleCaption};
+  const review = reviewCloudClaims(sample, caption, [
+    {...invented, evidence: 'A paraphrase missing from the caption.'},
+    invented, cutoff, cutoff, {...cutoff, evidence: 'at least 70%'},
+  ]);
+  assert.deepEqual(review.discarded.map(({index, reason}) => [index, reason]),
+    [[1, 'invalid'], [2, 'mismatch'], [4, 'duplicate'], [5, 'cutoff']]);
+  assert.equal(review.discarded[1].parsed.type, 'range');
+  assert.deepEqual(review.factReviews.map(({origin}) => origin), ['restored', 'narrowed']);
+  assert.deepEqual(review.claims, localFacts(sample, caption));
+  assert.equal(review.excluded, 4);
+  assert.equal(checkCaption(sample, {type: 'atLeast', cutoff: 70}, review.claims).status, 'ambiguous');
+});
+
 test('cloud review rejects altered facts when it recognizes their quotes inside mixed wording', () => {
   const caption = 'Buses were slow in the morning. Local had the highest rate, at 71.5%. ' +
     'Select Bus Service had a rate of 70.5%.';
@@ -456,11 +474,12 @@ test('cloud review rejects altered facts when it recognizes their quotes inside 
     {type: 'value', id: 1, value: 70.5, evidence: 'Select Bus Service had a rate of 70.5%'},
     {type: 'highest', ids: [1], evidence: 'Local had the highest rate, at 71.5%.'},
   ];
-  const {claims, excluded, restored} = reviewCloudClaims(sample, caption, drafted);
+  const {claims, excluded, restored, factReviews} = reviewCloudClaims(sample, caption, drafted);
   assert.deepEqual(claims, [{...drafted[2], value: 71.5},
     {type: 'value', id: 2, value: 70.5, evidence: 'Select Bus Service had a rate of 70.5%.'}]);
   assert.equal(excluded, 2);
   assert.equal(restored, 1);
+  assert.deepEqual(factReviews.map(({origin}) => origin), ['rate-restored', 'restored']);
   const paraphrased = 'Local led all services with an on-time rate of 71.5%.';
   const cloud = {type: 'highest', ids: [1], value: 71.5, evidence: paraphrased};
   assert.deepEqual(reviewCloudClaims(sample, paraphrased, [cloud]).claims, [cloud]);
@@ -509,7 +528,9 @@ test('positive cutoff evidence constrains named categories and leaves the other 
   const question = {type: 'atLeast', cutoff: 70};
   const evidence = 'North reached at least 70%.';
   const cloud = reviewCloudClaims(rows, evidence, [{...question, ids: [1], evidence}]);
-  assert.deepEqual(cloud, {claims: [{type: 'atLeastSome', cutoff: 70, ids: [1], evidence}], excluded: 0, narrowed: 1, restored: 0});
+  const claim = {type: 'atLeastSome', cutoff: 70, ids: [1], evidence};
+  assert.deepEqual(cloud, {claims: [claim], factReviews: [{claim, origin: 'narrowed'}], discarded: [],
+    excluded: 0, narrowed: 1, restored: 0});
   assert.deepEqual(localFacts(rows, evidence), cloud.claims);
   const result = checkCaption(rows, question, cloud.claims, [[69, 70, 48]]);
   assert.equal(result.status, 'ambiguous');
