@@ -13,7 +13,7 @@ jobs:
         with:
           persist-credentials: false
       # If CI generates the CSV or report, build it before this step.
-      - uses: josepha-mayo/two-charts-one-caption@f3c9096282b6559b64f6a1c1e743a8c4c4c4eef9
+      - uses: josepha-mayo/two-charts-one-caption@d8e5b99b0b5bb8f9f6cf3e54cedc5ac00e0918e9
         with:
           manifest: caption-checks/release.json
 `;

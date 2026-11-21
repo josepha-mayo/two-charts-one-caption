@@ -156,7 +156,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           persist-credentials: false
-      - uses: josepha-mayo/two-charts-one-caption@f3c9096282b6559b64f6a1c1e743a8c4c4c4eef9
+      - uses: josepha-mayo/two-charts-one-caption@d8e5b99b0b5bb8f9f6cf3e54cedc5ac00e0918e9
         with:
           manifest: reports/release.json
 ```

@@ -30,16 +30,21 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - name: Prepare the passing example release
+      - name: Prepare passing and incomplete example reviews
         run: |
           node -e '
             const fs = require("node:fs");
             const manifest = require("./examples/bls-unemployment/release.example.json");
             manifest.charts = manifest.charts.slice(0, 1);
             fs.writeFileSync("examples/bls-unemployment/release-passing.json", JSON.stringify(manifest), {flag: "wx"});
+            const review = require("./examples/bls-unemployment/caption-recheck.json");
+            review.claims = review.claims.filter(claim => claim.type !== "value");
+            fs.writeFileSync("examples/bls-unemployment/check-missing-fact.json", JSON.stringify(review), {flag: "wx"});
+            manifest.charts[0].check = "check-missing-fact.json";
+            fs.writeFileSync("examples/bls-unemployment/release-missing-fact.json", JSON.stringify(manifest), {flag: "wx"});
           '
       - name: Pass the original BLS figure with the published action
-        uses: josepha-mayo/two-charts-one-caption@f3c9096282b6559b64f6a1c1e743a8c4c4c4eef9
+        uses: josepha-mayo/two-charts-one-caption@d8e5b99b0b5bb8f9f6cf3e54cedc5ac00e0918e9
         with:
           manifest: examples/bls-unemployment/release-passing.json
       - name: Block a stale figure after the BLS data revision
@@ -48,10 +53,20 @@ jobs:
         continue-on-error: true
         with:
           manifest: examples/bls-unemployment/release.example.json
+      - name: Block the original figure if a checkable fact is missing from its review
+        id: missing-fact
+        uses: josepha-mayo/two-charts-one-caption@d8e5b99b0b5bb8f9f6cf3e54cedc5ac00e0918e9
+        continue-on-error: true
+        with:
+          manifest: examples/bls-unemployment/release-missing-fact.json
       - name: Confirm the release was held for editorial review
         env:
           GATE_OUTCOME: ${{ steps.stale.outcome }}
           GATE_EXIT_CODE: ${{ steps.stale.outputs.exit-code }}
+          MISSING_FACT_OUTCOME: ${{ steps.missing-fact.outcome }}
+          MISSING_FACT_EXIT_CODE: ${{ steps.missing-fact.outputs.exit-code }}
         run: |
           test "$GATE_OUTCOME" = failure
           test "$GATE_EXIT_CODE" = 1
+          test "$MISSING_FACT_OUTCOME" = failure
+          test "$MISSING_FACT_EXIT_CODE" = 1
