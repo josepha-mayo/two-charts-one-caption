@@ -1,0 +1,46 @@
+name: Check chart captions before publishing
+description: Verify reviewed caption wording and percentage tables against current CSVs.
+inputs:
+  manifest:
+    description: Path to the release manifest in the current checkout.
+    required: true
+  require-checked-wording:
+    description: Request review when some caption wording has no checked fact.
+    required: false
+    default: 'false'
+outputs:
+  exit-code:
+    description: 0 passes, 1 needs editorial review, and 2 indicates invalid input.
+    value: ${{ steps.verify.outputs.exit-code }}
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+      with:
+        node-version: 24
+        package-manager-cache: false
+    - name: Install the pinned caption verifier
+      shell: bash
+      env:
+        TWO_CHARTS_ACTION_ROOT: ${{ github.action_path }}
+      run: npm ci --omit=dev --ignore-scripts --no-audit --no-fund --prefix "$TWO_CHARTS_ACTION_ROOT"
+    - name: Check the reviewed captions and chart data
+      id: verify
+      shell: bash
+      env:
+        TWO_CHARTS_ACTION_ROOT: ${{ github.action_path }}
+        TWO_CHARTS_MANIFEST: ${{ inputs.manifest }}
+        TWO_CHARTS_REQUIRE_WORDING: ${{ inputs.require-checked-wording }}
+      run: |
+        args=(--batch "$TWO_CHARTS_MANIFEST" --json --github-actions)
+        status=0
+        case "$TWO_CHARTS_REQUIRE_WORDING" in
+          true) args+=(--require-checked-wording) ;;
+          false) ;;
+          *) printf 'require-checked-wording must be true or false.\n' >&2; status=2 ;;
+        esac
+        if [ "$status" -eq 0 ]; then
+          node "$TWO_CHARTS_ACTION_ROOT/scripts/verify-caption.mjs" "${args[@]}" || status=$?
+        fi
+        printf 'exit-code=%s\n' "$status" >> "$GITHUB_OUTPUT"
+        exit "$status"

@@ -1,0 +1,21 @@
+{
+  "version": 1,
+  "charts": [
+    {
+      "id": "bls-first-published",
+      "check": "caption-recheck.json",
+      "csv": "first-published.csv",
+      "html": "published-page.html",
+      "captionId": "unemployment-rates",
+      "checkTable": true
+    },
+    {
+      "id": "bls-january-revision",
+      "check": "caption-recheck.json",
+      "csv": "revised.csv",
+      "html": "published-page.html",
+      "captionId": "unemployment-rates",
+      "checkTable": true
+    }
+  ]
+}

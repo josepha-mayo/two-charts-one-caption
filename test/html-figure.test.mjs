@@ -86,6 +86,40 @@ test('a checked replacement closes the publication check after the caption and t
   assert.equal(runPublishedFigureCheck({...figure,text:'Changed independently.'}, rows, saved, undefined, options).captionRepair, undefined);
 });
 
+test('the GitHub gate summarizes each figure and rejects inputs outside the checkout', t => {
+  const directory = mkdtempSync(join(tmpdir(), 'two-charts-gate-'));
+  const names = ['check.json','first.csv','revised.csv','page.html','release.json','summary.md'];
+  t.after(() => {
+    for (const name of names) unlinkSync(join(directory,name));
+    rmdirSync(directory);
+  });
+  writeFileSync(join(directory,'check.json'),readFileSync(example('caption-recheck.json')));
+  writeFileSync(join(directory,'first.csv'),readFileSync(example('first-published.csv')));
+  writeFileSync(join(directory,'revised.csv'),readFileSync(example('revised.csv')));
+  writeFileSync(join(directory,'page.html'),checkedPage);
+  writeFileSync(join(directory,'summary.md'),'');
+  const figure = {check:'check.json',html:'page.html',captionId:'unemployment-rates',checkTable:true};
+  const charts = [
+    {...figure,id:'First publication',csv:'first.csv'},
+    {...figure,id:'Edited <img>|row',csv:'revised.csv'},
+    {...figure,id:'Outside file',csv:'first.csv',html:example('published-page.html')},
+  ];
+  writeFileSync(join(directory,'release.json'),JSON.stringify({version:1,charts}));
+  const result = spawnSync(process.execPath,
+    [script,'--batch','release.json','--json','--github-actions'], {
+      encoding:'utf8',env:{...process.env,GITHUB_WORKSPACE:directory,GITHUB_STEP_SUMMARY:join(directory,'summary.md')},
+    });
+  assert.equal(result.status,2,result.stderr);
+  const report = JSON.parse(result.stdout);
+  assert.deepEqual(report.totals,{passed:1,reviewRequired:1,invalid:1});
+  assert.equal(report.checks[1].answerChange.removed[0],'March');
+  assert.match(report.checks[2].message,/inside the checked-out GitHub workspace/);
+  const summary = readFileSync(join(directory,'summary.md'),'utf8');
+  assert.match(summary,/1 passed · 1 need review · 1 invalid/);
+  assert.match(summary,/<code>Edited &lt;img&gt;&#124;row<\/code> \| Review required/);
+  assert.doesNotMatch(summary,/<img>|January and March/);
+});
+
 test('a generated page can fail for changed wording, stale numbers, or an invalid target', t => {
   const temporary = mkdtempSync(join(tmpdir(),'two-charts-html-'));
   const page = join(temporary,'built.html'), batch = join(temporary,'release.json');

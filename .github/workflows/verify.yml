@@ -23,3 +23,35 @@ jobs:
       - run: npm run build
       - name: Verify the example release page against the reviewed caption and CSV
         run: node scripts/verify-caption.mjs examples/bls-unemployment/caption-recheck.json examples/bls-unemployment/first-published.csv examples/bls-unemployment/published-page.html --html --caption-id unemployment-rates --check-table
+  publication-gate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Prepare the passing example release
+        run: |
+          node -e '
+            const fs = require("node:fs");
+            const manifest = require("./examples/bls-unemployment/release.example.json");
+            manifest.charts = manifest.charts.slice(0, 1);
+            fs.writeFileSync("examples/bls-unemployment/release-passing.json", JSON.stringify(manifest), {flag: "wx"});
+          '
+      - name: Pass the original BLS figure
+        uses: ./
+        with:
+          manifest: examples/bls-unemployment/release-passing.json
+      - name: Block a stale figure after the BLS data revision
+        id: stale
+        uses: ./
+        continue-on-error: true
+        with:
+          manifest: examples/bls-unemployment/release.example.json
+      - name: Confirm the release was held for editorial review
+        env:
+          GATE_OUTCOME: ${{ steps.stale.outcome }}
+          GATE_EXIT_CODE: ${{ steps.stale.outputs.exit-code }}
+        run: |
+          test "$GATE_OUTCOME" = failure
+          test "$GATE_EXIT_CODE" = 1

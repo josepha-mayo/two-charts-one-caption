@@ -1,5 +1,5 @@
-import {open} from 'node:fs/promises';
-import {dirname, resolve} from 'node:path';
+import {appendFile, open, realpath} from 'node:fs/promises';
+import {dirname, isAbsolute, relative, resolve, sep} from 'node:path';
 import {parseArgs} from 'node:util';
 import {ratePrecisionText, readChart} from '../src/check.mjs';
 import {maxCsvBytes} from '../src/csv.mjs';
@@ -9,7 +9,7 @@ import {maxHtmlBytes, readFigures, runPublishedFigureCheck} from '../src/publish
 const usage = [
   'Usage: node scripts/verify-caption.mjs check.json chart.csv caption.txt [--category-column HEADER --percent-column HEADER] [--require-checked-wording] [--json]',
   '       node scripts/verify-caption.mjs check.json chart.csv page.html --html [--caption-id ID] [--check-table] [--json]',
-  '       node scripts/verify-caption.mjs --batch release.json [--require-checked-wording] [--json]',
+  '       node scripts/verify-caption.mjs --batch release.json [--require-checked-wording] [--json] [--github-actions]',
 ].join('\n');
 
 async function readText(path, limit) {
@@ -112,18 +112,27 @@ function printReport(report) {
   }
 }
 
-async function checkBatch(path, strict) {
+async function checkBatch(path, strict, workspace) {
   const root = dirname(resolve(path));
-  const entries = readBatch(await readText(path, 64000));
+  const entries = readBatch(await readInput(path, 64000));
+  async function readInput(path, limit) {
+    if (!workspace) return readText(path, limit);
+    const file = await realpath(path);
+    const inside = relative(workspace, file);
+    if (isAbsolute(inside) || inside === '..' || inside.startsWith('..' + sep)) {
+      throw Error('Choose files inside the checked-out GitHub workspace.');
+    }
+    return readText(file, limit);
+  }
   const files = new Map();
   function read(path, limit) {
     const key = JSON.stringify([path, limit]);
-    if (!files.has(key)) files.set(key, readText(path, limit));
+    if (!files.has(key)) files.set(key, readInput(path, limit));
     return files.get(key);
   }
   let lastPage;
   function readPage(file) {
-    if (lastPage?.file !== file) lastPage = {file, figures: loadFigures(file)};
+    if (lastPage?.file !== file) lastPage = {file, figures: readInput(file, maxHtmlBytes).then(readFigures)};
     return lastPage.figures;
   }
   const checks = [];
@@ -142,7 +151,22 @@ async function checkBatch(path, strict) {
   return {version:1, status, totals, checks};
 }
 
+function githubSummary(batch) {
+  const escapeId = id => id.replace(/[&<>|]/g, character =>
+    ({'&':'&amp;','<':'&lt;','>':'&gt;','|':'&#124;'})[character]);
+  const {passed: valid, reviewRequired, invalid} = batch.totals;
+  return [
+    '## Caption publication check', '',
+    `${valid} passed · ${reviewRequired} need review · ${invalid} invalid`, '',
+    '| Chart | Result |', '| --- | --- |',
+    ...batch.checks.map(check =>
+      `| <code>${escapeId(check.id)}</code> | ${passed(check) ? 'Passed' : check.status === 'invalid_input' ? 'Invalid input' : 'Review required'} |`),
+    '', 'Open the verifier step log for the caption and table details.', '',
+  ].join('\n');
+}
+
 let json = false;
+let githubSummaryPath;
 try {
   const {values, positionals} = parseArgs({
     options: {
@@ -155,6 +179,7 @@ try {
       'category-column': {type: 'string'},
       'percent-column': {type: 'string'},
       'require-checked-wording': {type: 'boolean'},
+      'github-actions': {type: 'boolean'},
     },
     allowPositionals: true,
   });
@@ -168,9 +193,18 @@ try {
     const strict = values['require-checked-wording'];
     const captionId = values['caption-id'];
     const checkTable = values['check-table'];
+    if (values['github-actions'] && values.batch === undefined) throw Error('Use --github-actions with --batch.');
     if (values.batch !== undefined) {
       if (!values.batch.trim() || positionals.length || hasMapping || values.html || captionId !== undefined || checkTable) throw Error(usage);
-      const batch = await checkBatch(values.batch, strict);
+      let workspace;
+      if (values['github-actions']) {
+        const {GITHUB_WORKSPACE, GITHUB_STEP_SUMMARY} = process.env;
+        if (!GITHUB_WORKSPACE || !GITHUB_STEP_SUMMARY) throw Error('GitHub Actions must provide the workspace and job summary file.');
+        workspace = await realpath(GITHUB_WORKSPACE);
+        githubSummaryPath = GITHUB_STEP_SUMMARY;
+      }
+      const batch = await checkBatch(workspace ? resolve(workspace, values.batch) : values.batch, strict, workspace);
+      if (githubSummaryPath) await appendFile(githubSummaryPath, githubSummary(batch));
       process.exitCode = batch.totals.invalid ? 2 : batch.totals.reviewRequired ? 1 : 0;
       if (json) console.log(JSON.stringify(batch, null, 2));
       else {
@@ -198,6 +232,10 @@ try {
   }
 } catch (error) {
   process.exitCode = 2;
+  if (githubSummaryPath) {
+    await appendFile(githubSummaryPath, '## Caption publication check\n\nCould not complete the release check. See the verifier step log.\n')
+      .catch(() => {});
+  }
   if (json) console.log(JSON.stringify({status: 'invalid_input', message: error.message}));
   else console.error(error.message);
 }
