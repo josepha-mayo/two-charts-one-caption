@@ -284,6 +284,11 @@ dialog p { color: var(--muted); margin-top: 8px; }
 dialog p a { color: var(--cool); text-underline-offset: 3px; }
 #publication-dialog label { display: block; margin-block: 10px 6px; }
 #publication-dialog .controls { margin-top: 12px; }
+#release-setup label[for] { display: block; margin: 10px 0 5px; }
+#release-setup input[type="text"] { display: block; width: 100%; min-height: 42px; padding: 7px 9px; font: inherit; color: var(--text); background: var(--background); border: 1px solid #64718a; border-radius: 5px; }
+#release-setup input:focus-visible { outline: 3px solid var(--cool); outline-offset: 3px; }
+#release-setup .controls { margin-top: 12px; }
+#release-setup .rank-wording { margin-top: 10px; }
 #publication-preview figure { margin: 12px 0; overflow-wrap: anywhere; }
 #publication-preview figcaption { white-space: pre-wrap; }
 #publication-preview table { width: 100%; table-layout: fixed; border-collapse: collapse; }

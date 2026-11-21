@@ -1,10 +1,12 @@
 import assert from 'node:assert/strict';
 import {spawnSync} from 'node:child_process';
-import {mkdtempSync, readFileSync, rmdirSync, unlinkSync, writeFileSync} from 'node:fs';
+import {mkdirSync, mkdtempSync, readFileSync, rmdirSync, unlinkSync, writeFileSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import test from 'node:test';
 import {fileURLToPath} from 'node:url';
+import {unzipSync, strFromU8} from 'fflate';
+import {createReleaseBundle} from '../src/ci-bundle.mjs';
 import {readChart} from '../src/check.mjs';
 import {readPublishCheck} from '../src/publish-check.mjs';
 import {compareFigureRows, readFigures, runPublishedFigureCheck} from '../src/published-html.mjs';
@@ -118,6 +120,45 @@ test('the GitHub gate summarizes each figure and rejects inputs outside the chec
   assert.match(summary,/1 passed · 1 need review · 1 invalid/);
   assert.match(summary,/<code>Edited &lt;img&gt;&#124;row<\/code> \| Review required/);
   assert.doesNotMatch(summary,/<img>|January and March/);
+});
+
+test('the downloaded release setup checks a generated page and detects a stale refresh', t => {
+  const directory = mkdtempSync(join(tmpdir(), 'two-charts-bundle-'));
+  const files = ['latest source.csv','generated report.html','release.json','caption-recheck.json'];
+  const checks = join(directory,'caption-checks');
+  mkdirSync(checks);
+  t.after(() => {
+    for (const name of files.slice(0,2)) unlinkSync(join(directory,name));
+    for (const name of files.slice(2)) unlinkSync(join(checks,name));
+    rmdirSync(checks);
+    rmdirSync(directory);
+  });
+  const check = JSON.parse(readFileSync(example('caption-recheck.json'), 'utf8'));
+  const options = {csv:'latest source.csv', page:'generated report.html', format:'html', captionId:'unemployment-rates'};
+  const bundle = unzipSync(createReleaseBundle(check,options));
+  assert.deepEqual(Object.keys(bundle).sort(), [
+    '.github/workflows/check-chart-captions.yml', 'caption-checks/caption-recheck.json', 'caption-checks/release.json',
+  ]);
+  const workflow = strFromU8(bundle['.github/workflows/check-chart-captions.yml']);
+  assert.match(workflow,/two-charts-one-caption@[a-f0-9]{40}/);
+  assert.match(workflow,/manifest: caption-checks\/release\.json/);
+  assert.doesNotMatch(workflow,/January|BLS|latest source\.csv/);
+  for (const name of files.slice(2)) writeFileSync(join(checks,name),bundle['caption-checks/'+name]);
+  writeFileSync(join(directory,'generated report.html'),checkedPage);
+  const run = csv => {
+    writeFileSync(join(directory,'latest source.csv'),readFileSync(example(csv)));
+    return spawnSync(process.execPath,[script,'--batch',join(checks,'release.json'),'--json'],{encoding:'utf8'});
+  };
+  assert.equal(run('first-published.csv').status,0);
+  const stale = run('revised.csv');
+  assert.equal(stale.status,1);
+  assert.deepEqual(JSON.parse(stale.stdout).checks[0].answerChange.removed,['March']);
+  const txt = unzipSync(createReleaseBundle(check,{...options,format:'text',page:'copy.txt'}));
+  const manifest = JSON.parse(strFromU8(txt['caption-checks/release.json']));
+  assert.equal(manifest.charts[0].caption,'../copy.txt');
+  assert.equal(manifest.charts[0].captionId,undefined);
+  assert.throws(() => createReleaseBundle(check,{...options,csv:'../outside.csv'}), /repository root/);
+  assert.throws(() => createReleaseBundle(check,{...options,captionId:'bad id'}), /without spaces/);
 });
 
 test('a generated page can fail for changed wording, stale numbers, or an invalid target', t => {

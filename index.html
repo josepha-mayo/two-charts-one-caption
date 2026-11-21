@@ -115,7 +115,10 @@
     <section class="caption-panel proof" id="proof" aria-labelledby="proof-title" hidden>
       <div class="caption-head">
         <h2 id="proof-title">What the words actually prove</h2>
-        <button type="button" id="save-recheck" class="small">Save recheck file</button>
+        <div class="controls">
+          <button type="button" id="save-recheck" class="small">Save recheck file</button>
+          <button type="button" id="open-release-setup" class="small" hidden>Set up publication CI</button>
+        </div>
       </div>
       <p id="proof-summary"></p>
       <p id="proof-precision" class="muted"></p>
@@ -552,6 +555,30 @@
       <button type="submit">Close</button>
     </form>
     <p id="publication-status" role="status"></p>
+  </dialog>
+  <dialog id="release-setup" aria-labelledby="release-setup-title" aria-describedby="release-setup-note">
+    <h2 id="release-setup-title">Check this caption in GitHub Actions</h2>
+    <p id="release-setup-note">The ZIP contains the reviewed caption and facts, a release manifest, and a workflow. Enter the paths to the current CSV and the file your publishing job produces.</p>
+    <form id="release-setup-form">
+      <label for="release-csv-path">CSV path from repository root</label>
+      <input type="text" id="release-csv-path" maxlength="240" placeholder="reports/chart.csv" required autocomplete="off" spellcheck="false" autofocus>
+      <label for="release-format">Publication format</label>
+      <select id="release-format">
+        <option value="html">Generated HTML</option>
+        <option value="text">Caption text</option>
+      </select>
+      <label for="release-page-path" id="release-page-label">HTML path from repository root</label>
+      <input type="text" id="release-page-path" maxlength="240" placeholder="dist/report.html" required autocomplete="off" spellcheck="false">
+      <div id="release-html-settings">
+        <label for="release-caption-id">Figure or figcaption ID (optional)</label>
+        <input type="text" id="release-caption-id" maxlength="200" placeholder="monthly-unemployment" autocomplete="off" spellcheck="false" aria-describedby="release-id-help">
+        <p id="release-id-help">Use the ID to select the figure on a page with several charts.</p>
+        <label class="rank-wording"><input type="checkbox" id="release-check-table" checked> Compare the figure’s data table with the CSV</label>
+      </div>
+      <div class="controls"><button type="submit" id="download-release-setup" class="primary">Download CI setup (.zip)</button></div>
+    </form>
+    <p id="release-setup-status" role="status"></p>
+    <form method="dialog" class="controls"><button type="submit">Close</button></form>
   </dialog>
   <dialog id="editor-draft-dialog" aria-labelledby="editor-draft-title" aria-describedby="editor-draft-note">
     <h2 id="editor-draft-title">Open editorial draft</h2>

@@ -132,6 +132,8 @@ The example reports one passing check and one stale excerpt. Batch mode reports 
 
 ### Hold a publication in GitHub Actions
 
+After a caption check resolves the question, choose **Set up publication CI**. Enter the existing checkout paths for the current CSV and final caption or generated HTML. The ZIP includes the reviewed caption file, release manifest and pinned workflow. Extract it at the repository root. It uses the CSV and report that you supply. If the HTML has several charts, enter the exact figure or caption ID.
+
 Run the caption action after creating the CSV and publication files. The manifest and the files it references must be inside the checkout. This workflow sends a failed release back for review. In a publishing job, place the upload or deploy step after the caption check.
 
 ```yaml

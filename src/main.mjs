@@ -260,6 +260,7 @@ function invalidate() {
     briefStatus.textContent = 'The chart changed. Ask Chrome for a question using the current categories.';
   }
   if (publicationDialog.open) publicationDialog.close();
+  if (el('release-setup').open) el('release-setup').close();
   revision += 1;
   candidate = null;
   reviewed = null;
@@ -331,7 +332,7 @@ function invalidate() {
 
 function syncActions() {
   for (const id of ['load', 'csv-file', 'example', 'example-select', 'nano', 'apply', 'open-rewrite',
-    'brief-example', 'brief-submit', 'brief-apply', 'recheck-file', 'save-recheck', 'run-recheck',
+    'brief-example', 'brief-submit', 'brief-apply', 'recheck-file', 'save-recheck', 'run-recheck', 'open-release-setup',
     'save-editor-draft', 'editor-draft-file', 'published-page-file', 'published-figure', 'published-table',
     'review-saved-caption', 'apply-stale-repair', 'example-refresh', 'csv-category', 'csv-percent', 'csv-group', 'csv-group-value',
     'use-csv-columns', 'check-rewrite', 'rewrite-cloud-preview', 'publication', 'export']) el(id).disabled = busy;
@@ -476,6 +477,7 @@ function renderProof(claims, alternate) {
   el('proof-facts').replaceChildren(...entries);
   el('proof-precision').textContent = ratePrecisionText(selectedPrecision());
   el('save-recheck').hidden = !claims.length || result.status === 'conflict';
+  el('open-release-setup').hidden = !claims.length || !canPublish();
   const count = result.changedCategories;
   el('proof-summary').textContent = alternate
     ? `Every checked fact holds in both charts. ${count === 1 ? 'One category is' : `${count} categories are`} the fewest that must change to get a different answer.`
@@ -1404,13 +1406,71 @@ el('download-ai-activity').addEventListener('click', () => {
   downloadFile(JSON.stringify(record, null, 2) + '\n', 'application/json', 'two-charts-ai-activity.json');
 });
 
+function currentPublishCheck() {
+  return createPublishCheck(rows, selectedQuestion(), caption.value, reviewed, chartSource.columns, selectedPrecision());
+}
+
 el('save-recheck').addEventListener('click', () => {
   if (!result || result.status === 'conflict' || !reviewed?.length) return;
   try {
-    const saved = createPublishCheck(rows, selectedQuestion(), caption.value, reviewed, chartSource.columns, selectedPrecision());
+    const saved = currentPublishCheck();
     downloadFile(JSON.stringify(saved, null, 2) + '\n', 'application/json', 'caption-recheck.json');
   } catch (error) {
     status.textContent = error.message;
+  }
+});
+
+const releaseDialog = el('release-setup');
+const releaseStatus = el('release-setup-status');
+const releaseFormat = el('release-format');
+const releasePage = el('release-page-path');
+const releaseDownload = el('download-release-setup');
+let releaseReview;
+
+releaseFormat.addEventListener('change', () => {
+  const html = releaseFormat.value === 'html';
+  el('release-html-settings').hidden = !html;
+  el('release-page-label').textContent = html ? 'HTML path from repository root' : 'Caption path from repository root';
+  releasePage.placeholder = html ? 'dist/report.html' : 'reports/caption.txt';
+  releaseStatus.textContent = '';
+});
+
+el('open-release-setup').addEventListener('click', () => {
+  if (busy || !canPublish() || !reviewed?.length) return;
+  try {
+    releaseReview = currentPublishCheck();
+    releaseStatus.textContent = '';
+    releaseDownload.disabled = false;
+    releaseDialog.showModal();
+  } catch (error) {
+    status.textContent = error.message;
+  }
+});
+releaseDialog.addEventListener('close', () => {
+  if (!releaseDialog.open) releaseReview = undefined;
+});
+el('release-setup-form').addEventListener('submit', async event => {
+  event.preventDefault();
+  if (!releaseReview || !releaseDialog.open || releaseDownload.disabled) return;
+  const check = releaseReview;
+  const options = {
+    csv: el('release-csv-path').value,
+    page: releasePage.value,
+    format: releaseFormat.value,
+    captionId: el('release-caption-id').value,
+    checkTable: el('release-check-table').checked,
+  };
+  releaseDownload.disabled = true;
+  releaseStatus.textContent = 'Preparing the workflow and reviewed check…';
+  try {
+    const {createReleaseBundle} = await import('./ci-bundle.mjs');
+    if (releaseReview !== check || !releaseDialog.open) return;
+    downloadFile(createReleaseBundle(check, options), 'application/zip', 'two-charts-ci-setup.zip');
+    releaseStatus.textContent = 'Extract the ZIP at the repository root. Build the CSV and report before running the workflow.';
+  } catch (error) {
+    if (releaseReview === check && releaseDialog.open) releaseStatus.textContent = error.message;
+  } finally {
+    if (releaseReview === check && releaseDialog.open) releaseDownload.disabled = false;
   }
 });
 

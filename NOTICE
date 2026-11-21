@@ -14,3 +14,7 @@ The unemployment example uses first-published and revised seasonally
 adjusted 2024 U.S. unemployment rates from the Bureau of Labor Statistics,
 Table A and the December estimate in the same release, January 10, 2025.
 https://www.bls.gov/news.release/archives/empsit_01102025.htm
+
+The browser's downloadable CI setup uses fflate, licensed under MIT.
+The hosted build includes its license in third-party-licenses.txt.
+https://github.com/101arrowz/fflate

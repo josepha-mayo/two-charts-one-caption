@@ -4,7 +4,9 @@ import {readFile, readdir, writeFile} from 'node:fs/promises';
 const dist = new URL('../dist/', import.meta.url);
 const assetFiles = await readdir(new URL('assets/', dist));
 const outputFiles = await readdir(dist);
-const files = ['index.html', ...assetFiles.sort().map(name => 'assets/' + name)];
+const zipLicense = await readFile(new URL('../node_modules/fflate/LICENSE', import.meta.url), 'utf8');
+await writeFile(new URL('third-party-licenses.txt', dist), 'fflate\n\n' + zipLicense);
+const files = ['index.html', 'third-party-licenses.txt', ...assetFiles.sort().map(name => 'assets/' + name)];
 if (outputFiles.includes('firebase.local.json')) files.push('firebase.local.json');
 
 const worker = await readFile(new URL('../src/offline-worker.js', import.meta.url), 'utf8');
