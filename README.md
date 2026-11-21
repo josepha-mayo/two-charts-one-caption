@@ -48,11 +48,11 @@ For freer wording, choose **Review with Gemini** in the rewrite dialog. Review a
 
 Each link contains its own caption, category names, question, and random invitation ID. The reader view does not receive the chart, the source answer, or the other caption. The test and imported responses survive a reload in the editor tab. Each reader tab generates an anonymous response ID so re-importing a code or updating an answer from that tab does not add another response. Counts are descriptive, and the links do not authenticate readers.
 
-Select **Save reader test** to continue later or on another browser. Under **Open a saved reader test**, choose the JSON file and review both captions before opening it. The original links and their collected responses carry over. Keep the JSON with the editor because it includes both captions, the answer, and individual selections. **Download results** gives a text summary for sharing.
+Select **Save reader test** to continue later or on another browser. Under **Open a saved reader test**, choose the JSON file and review both captions before opening it. The original links and their collected responses carry over. Keep the JSON with the editor because it includes both captions, the answer, reviewed facts, and individual selections. **Download results** gives a text summary for sharing.
 
 **See differing answers** groups incorrect selections by caption version and shows which categories readers missed or added. The text summary includes the same counts.
 
-Select a response count to test that answer against the caption the reader saw, using the chart and rate precision currently loaded. If the answer fits the checked facts, Two Charts shows a hypothetical chart that gives it. If it doesn't fit, Two Charts quotes a set of excerpts that together rule it out. Each excerpt is necessary within that set. Wording outside those checks stays visible for editorial review.
+Select a response count to test that answer against the caption the reader saw. Load the original chart to check what the reader selected. New tests carry the editor's reviewed facts and rate precision for both captions, including approved Gemini interpretations. Older files can still be opened and checked using the local parser and the editor's current precision. If the answer fits the checked facts, Two Charts shows a hypothetical chart that gives it. Otherwise, it quotes checked excerpts that together rule it out.
 
 [Try the bus reader-answer demo](https://two-charts-caption-2026.web.app/?demo=reader-answer). It starts with the example answer “Local only.” Switch between the original and revised captions or change the selected services to see which wording supports or rules out the new answer.
 

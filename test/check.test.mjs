@@ -6,7 +6,7 @@ import {questionPrompt, readQuestionDraft} from '../src/brief.mjs';
 import {sampleCsv, sampleCaption, cutoffCaption, recordedBusReview, foodExample, foodNationalExample} from '../src/sample.mjs';
 import {
   addReaderResponse, createReaderLink, createReaderTest, encodeResponse, readReaderLink,
-  readReaderTestFile, readerCounts, readerDifferences, readerResponseId, restoreReaderTest, saveReaderTest, writeReaderTestFile,
+  readReaderTestFile, readerAnswerReview, readerCounts, readerDifferences, readerResponseId, restoreReaderTest, saveReaderTest, writeReaderTestFile,
 } from '../src/reader.mjs';
 
 const sample = readChart(sampleCsv);
@@ -417,9 +417,37 @@ test('a saved test carries forward old invitations and deduplicates replies in a
 
   const file = JSON.parse(writeReaderTestFile(test));
   file.test.before.responses[0].invitation = file.test.after.invitation;
-  assert.throws(() => readReaderTestFile(JSON.stringify(file)), /invalid captions, invitations, or responses/);
+  assert.throws(() => readReaderTestFile(JSON.stringify(file)), /invalid captions, invitations, responses/);
   assert.throws(() => readReaderTestFile('{"version":1}'), /Save reader test/);
   assert.throws(() => readReaderTestFile('é'.repeat(32_001)), /64 KB/);
+});
+
+test('a restored reader test uses the approved interpretation and precision without sharing them in the reader link', () => {
+  const {csv,caption:before} = foodExample;
+  const rows = readChart(csv);
+  const after = 'The highest reported household food insecurity estimate was in the South.';
+  const draft = {type:'highest', ids:[3], evidence:after};
+  const review = {decimalPlaces:1, before:localFacts(rows,before), after:reviewCloudClaims(rows,after,[draft]).claims};
+  assert.throws(() => localFacts(rows,after), /needs a cloud fact draft/);
+  let saved = createReaderTest(rows, 'highest', [3], before, after, review);
+  saved = addReaderResponse(saved, encodeResponse(saved.after.invitation, crypto.randomUUID(), [2,3])).test;
+  const restored = readReaderTestFile(writeReaderTestFile(saved));
+  assert.deepEqual(restored,saved);
+
+  const recorded = readerAnswerReview(restored,'after');
+  assert.deepEqual(recorded,{decimalPlaces:1,claims:[draft]});
+  assert.deepEqual(explainReaderAnswer(rows,'highest',recorded.claims,[2,3],recorded.decimalPlaces),
+    {alternate:null,blockingExcerpts:[after]});
+  const link = createReaderLink('https://example.test/',rows,'highest',after,restored.after.invitation);
+  const hash = new URL(link).hash;
+  assert.deepEqual(Object.keys(readReaderLink(hash)),['caption','question','labels','invitation']);
+  assert.doesNotMatch(decodeURIComponent(hash), /decimalPlaces|review|13\.3|responseId/);
+
+  const file = JSON.parse(writeReaderTestFile(saved));
+  file.test.review.after[0].quote = [after.length,1];
+  assert.throws(() => readReaderTestFile(JSON.stringify(file)), /reviewed facts/);
+  const legacy = createReaderTest(rows,'highest',[3],before,after);
+  assert.equal(readerAnswerReview(readReaderTestFile(writeReaderTestFile(legacy)),'after'),undefined);
 });
 
 test('cutoff changes the eligible categories while both charts retain the stated range and endpoints', () => {

@@ -17,7 +17,7 @@ import firstUnemploymentCsv from '../examples/bls-unemployment/first-published.c
 import revisedUnemploymentCsv from '../examples/bls-unemployment/revised.csv?raw';
 import {
   addReaderResponse, createReaderLink, createReaderTest, encodeResponse, readReaderLink,
-  maxReaderTestFileBytes, readReaderTestFile, readerCounts, readerDifferences, readerResponseId, restoreReaderTest, saveReaderTest, writeReaderTestFile,
+  maxReaderTestFileBytes, readReaderTestFile, readerAnswerReview, readerCounts, readerDifferences, readerResponseId, restoreReaderTest, saveReaderTest, writeReaderTestFile,
 } from './reader.mjs';
 
 const el = id => document.getElementById(id);
@@ -1231,7 +1231,10 @@ el('nano').addEventListener('click', () => {
 function applyCaptionRevision(text, claims, comparison) {
   const prior = result;
   if (comparison) {
-    pendingReaderTest = comparison;
+    pendingReaderTest = {
+      ...comparison,
+      review: {decimalPlaces: selectedPrecision(), before: reviewed, after: claims},
+    };
     renderReaderTest();
   }
   caption.value = text;
@@ -1954,7 +1957,9 @@ function checkReaderAnswer(test, variant, selection, label, title, exampleRows) 
   el('reader-answer-caption').textContent = savedCaption;
   el('reader-answer-context').textContent = exampleRows
     ? 'This example uses the NYC bus report rates and a 70% cutoff.'
-    : 'This check uses the chart and rate precision currently loaded.';
+    : test.review
+      ? 'This check uses the saved facts with the chart currently loaded. ' + ratePrecisionText(test.review.decimalPlaces) + '.'
+      : 'This check reads the caption again using the chart and rate precision currently loaded.';
   hypothetical.hidden = true;
   hypothetical.replaceChildren();
   blocking.hidden = true;
@@ -1971,11 +1976,12 @@ function checkReaderAnswer(test, variant, selection, label, title, exampleRows) 
     if (!sameAnswer(answer(rates, test.question), test.expected)) {
       throw Error('The current chart gives a different source answer. Load the data used for this test.');
     }
-    const {claims} = reviewCloudClaims(source, savedCaption, []);
+    const savedReview = readerAnswerReview(test, variant);
+    const claims = savedReview?.claims ?? reviewCloudClaims(source, savedCaption, []).claims;
     const unchecked = unverifiedCaptionExcerpts(source, savedCaption, claims);
     renderUncheckedWording(wording, unchecked, true);
     if (!claims.length) throw Error('The browser could not read a checkable fact in this caption.');
-    const precision = exampleRows ? readDecimalPlaces() : selectedPrecision();
+    const precision = savedReview?.decimalPlaces ?? (exampleRows ? readDecimalPlaces() : selectedPrecision());
     const {alternate, blockingExcerpts} = explainReaderAnswer(source, test.question, claims, selection, precision);
     if (alternate) {
       const matchesSource = sameAnswer(selection, test.expected);
@@ -2151,9 +2157,9 @@ function openReaderTest(test, message) {
 
 function startReaderTest() {
   if (!pendingReaderTest) return;
-  const {rows, question, expected, before, after} = pendingReaderTest;
+  const {rows, question, expected, before, after, review} = pendingReaderTest;
   try {
-    const test = createReaderTest(rows, question, expected, before, after);
+    const test = createReaderTest(rows, question, expected, before, after, review);
     pendingReaderTest = null;
     openReaderTest(test, 'Reader links are ready.');
   } catch (error) {
@@ -2201,6 +2207,9 @@ el('reader-test-file').addEventListener('change', async event => {
     el('open-reader-file-note').textContent = readerTest
       ? 'Opening this file replaces the test in this tab. Save the current test first if you need to resume it later.'
       : 'Open this file to continue collecting replies to the original reader links.';
+    if (test.review) {
+      el('open-reader-file-note').append(' Reviewed facts are included. ' + ratePrecisionText(test.review.decimalPlaces) + '.');
+    }
     readerFileDialog.returnValue = 'cancel';
     readerFileDialog.showModal();
   } catch (error) {

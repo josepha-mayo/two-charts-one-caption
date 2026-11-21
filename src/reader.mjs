@@ -1,5 +1,5 @@
 import {checkText} from './draft.mjs';
-import {isCutoffClaim, readQuestion, sameAnswer} from './check.mjs';
+import {isCutoffClaim, readDecimalPlaces, readQuestion, sameAnswer, validateClaims} from './check.mjs';
 import {maxChartRows} from './csv.mjs';
 
 const PREFIX = '#reader=';
@@ -80,13 +80,52 @@ export function readerResponseId(storage, invitation) {
   return generated;
 }
 
-export function createReaderTest(rows, question, expected, before, after) {
+export function createReaderTest(rows, question, expected, before, after, review) {
   const periods = Object.fromEntries(VARIANTS.map(variant => [variant, {
-    caption: variant === 'before' ? before : after,
+    caption: checkText(variant === 'before' ? before : after),
     invitation: crypto.randomUUID(),
     responses: [],
   }]));
-  return readTest({question, labels: rows.map(row => row.label), expected, ...periods});
+  const savedReview = review && {
+    decimalPlaces: review.decimalPlaces,
+    ...Object.fromEntries(VARIANTS.map(variant => {
+      const caption = periods[variant].caption;
+      return [variant, packClaims(verifyClaims(review[variant], caption, rows.length), caption)];
+    })),
+  };
+  return readTest({question, labels: rows.map(row => row.label), expected, ...periods, review: savedReview});
+}
+
+function verifyClaims(claims, caption, size) {
+  // Appending a verified detail can add one fact to a twelve-fact review.
+  if (!Array.isArray(claims) || claims.length > 13) throw Error('Invalid reader review.');
+  return claims.flatMap(claim => validateClaims([claim], caption, size));
+}
+
+function packClaims(claims, caption) {
+  return claims.map(({evidence, ...fact}) => ({
+    ...fact, quote: [caption.indexOf(evidence), evidence.length],
+  }));
+}
+
+function unpackClaims(claims, caption, size) {
+  if (!Array.isArray(claims) || claims.length > 13) throw Error('Invalid reader review.');
+  return verifyClaims(claims.map(({quote, ...fact}) => {
+    if (!Array.isArray(quote) || quote.length !== 2) throw Error('Invalid reader review excerpt.');
+    const [start, length] = quote;
+    if (!Number.isInteger(start) || !Number.isInteger(length) || start < 0 || length < 1 || start + length > caption.length) {
+      throw Error('Invalid reader review excerpt.');
+    }
+    return {...fact, evidence: caption.slice(start, start + length)};
+  }), caption, size);
+}
+
+export function readerAnswerReview(test, variant) {
+  if (!test.review) return;
+  return {
+    decimalPlaces: test.review.decimalPlaces,
+    claims: unpackClaims(test.review[variant], test[variant].caption, test.labels.length),
+  };
 }
 
 function readTest(test) {
@@ -100,7 +139,16 @@ function readTest(test) {
   if (before.invitation === after.invitation || before.caption === after.caption) {
     throw Error('The reader test needs two different caption versions.');
   }
-  return {question, labels, expected, before, after};
+  const result = {question, labels, expected, before, after};
+  if (test.review !== undefined) {
+    const decimalPlaces = readDecimalPlaces(test.review?.decimalPlaces);
+    result.review = {decimalPlaces};
+    for (const variant of VARIANTS) {
+      const text = result[variant].caption;
+      result.review[variant] = packClaims(unpackClaims(test.review[variant], text, labels.length), text);
+    }
+  }
+  return result;
 }
 
 function readVariant(variant, caption, rules) {
@@ -133,14 +181,14 @@ export function readReaderTestFile(text) {
   try {
     return readTest(file.test);
   } catch {
-    throw Error('This reader test file has invalid captions, invitations, or responses.');
+    throw Error('This reader test file has invalid captions, invitations, responses, or reviewed facts.');
   }
 }
 
 export function restoreReaderTest(storage) {
   try {
     const raw = storage.getItem(STUDY_KEY);
-    return raw && raw.length < 50_000 ? readTest(JSON.parse(raw)) : null;
+    return raw && raw.length <= maxReaderTestFileBytes ? readTest(JSON.parse(raw)) : null;
   } catch {
     return null;
   }
