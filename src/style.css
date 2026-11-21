@@ -133,6 +133,21 @@ select { min-height: 32px; padding: 3px; }
 #stale-repair dd { margin: 0 0 7px; overflow-wrap: anywhere; }
 #stale-after { color: var(--mint); }
 .revision p { margin: 6px 0 12px; color: var(--gold); font-size: 1.15rem; }
+.revision-proof { margin-block: 14px; border-block-start: 3px solid var(--mint); }
+#revision-proof-title { scroll-margin-block-start: 22px; }
+#revision-proof-title:focus-visible { outline: 2px solid var(--cool); outline-offset: 4px; }
+.revision-proof blockquote {
+  margin: 10px 0 0;
+  padding-inline-start: 12px;
+  border-inline-start: 2px solid var(--mint);
+  font: 1.15rem/1.45 Georgia, serif;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+.revision-proof h3 { margin: 0; font-size: .8rem; color: var(--muted); }
+.revision-proof .revision-verdict { color: var(--mint); font-size: .78rem; }
+.revision-proof div + div .revision-verdict { color: var(--gold); }
+#revision-proof-rates { margin-bottom: 0; }
 #claim-review { margin-bottom: 14px; }
 #facts-title, #rewrite-facts-title { scroll-margin-block-start: 20px; }
 #facts-title:focus-visible, #rewrite-facts-title:focus-visible { outline: 2px solid var(--cool); outline-offset: 4px; }

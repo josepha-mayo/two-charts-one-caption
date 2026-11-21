@@ -216,6 +216,7 @@ function invalidate() {
   el('stale-repair').hidden = true;
   el('claim-review').hidden = true;
   el('revision').hidden = true;
+  el('revision-proof').hidden = true;
   el('proof').hidden = true;
   el('comparison').hidden = true;
   el('witness').hidden = true;
@@ -473,6 +474,7 @@ function focusCheckResult() {
 
 function render(claims, alternatives = [], note = 'Browser check') {
   el('detail-status').textContent = '';
+  el('revision-proof').hidden = true;
   reviewed = claims;
   const selected = selectedQuestion();
   result = checkCaption(rows, selected, claims, alternatives);
@@ -986,6 +988,7 @@ el('nano').addEventListener('click', () => {
 });
 
 function applyCaptionRevision(text, claims, comparison) {
+  const prior = result;
   if (comparison) {
     pendingReaderTest = comparison;
     renderReaderTest();
@@ -994,6 +997,21 @@ function applyCaptionRevision(text, claims, comparison) {
   revision += 1;
   readerAnswer = undefined;
   render(claims);
+  if (prior?.alternate && canPublish()) {
+    const decisive = claims.find(claim => !fitsClaim(prior.alternate, claim));
+    if (decisive) {
+      const selected = selectedQuestion();
+      el('revision-proof-quote').textContent = decisive.evidence;
+      el('revision-proof-source').textContent = witnessAnswer(selected, result.expected);
+      el('revision-proof-alternate').textContent = witnessAnswer(selected, prior.alternateAnswer);
+      renderRateChanges(el('revision-proof-rates'), prior.alternate);
+      el('revision-proof').hidden = false;
+      const heading = el('revision-proof-title');
+      heading.focus({preventScroll: true});
+      heading.scrollIntoView({block: 'start'});
+      return;
+    }
+  }
   if (pendingReaderTest) el('start-reader-test').focus();
   else focusCheckResult();
 }

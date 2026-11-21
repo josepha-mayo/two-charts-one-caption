@@ -28,6 +28,8 @@ Open [the Midwest and West comparison](https://two-charts-caption-2026.web.app/?
 
 After revealing a gap, choose **Download proof with chart data**. The HTML file opens offline with both answers, the exact percentages, the checked caption facts, and a suggested sentence. Share it with an editor who can see the source data, or use a reader link for a caption-only test.
 
+**Find the smallest rate shift** shows how far the rates have to move before a different answer is possible under the same checked facts. After adding a detail or applying a checked rewrite, the editor shows the quoted fact that rules out the original hypothetical chart.
+
 ## Try a reader test
 
 1. Reveal an ambiguous caption, add the verified detail, and create before and after links.
