@@ -51,6 +51,7 @@
         <textarea id="brief" rows="3" maxlength="1200" autocomplete="off" aria-describedby="brief-privacy"></textarea>
         <p id="brief-privacy">Chrome reads this note on this device. It stays out of the cloud request and reader links.</p>
         <button type="button" id="brief-submit">Suggest with Chrome</button>
+        <button type="button" id="brief-cancel" hidden>Stop waiting for Chrome</button>
         <p id="brief-status" role="status"></p>
         <div id="brief-review" hidden>
           <p id="brief-question"></p>
@@ -113,6 +114,7 @@
         <button type="button" class="primary" id="apply">Add this detail and recheck</button>
         <button type="button" id="open-rewrite">Test my own rewrite</button>
         <button type="button" id="nano">Ask Chrome Nano for the detail</button>
+        <button type="button" id="nano-cancel" hidden>Stop waiting for Chrome</button>
         <button type="button" id="export">Download reviewed text and data</button>
       </div>
       <p id="detail-status" role="status"></p>

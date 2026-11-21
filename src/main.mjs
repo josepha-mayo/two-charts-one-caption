@@ -29,6 +29,7 @@ const startingExample = ['cutoff', 'food', 'food-national'].includes(requestedEx
 let rows, result, reviewed, candidate, snapshot;
 let firebaseConnection;
 let cloudOperation;
+let deviceOperation;
 let revision = 0;
 let busy = false;
 let readerAnswer;
@@ -65,6 +66,12 @@ const cloudReviewControls = {
   rewrite: {feedback: 'rewrite-status', panel: 'rewrite-claim-review', list: 'rewrite-claims', notes: 'rewrite-claim-notes',
     exclusions: 'rewrite-exclusions', excludedList: 'rewrite-exclusion-list',
     start: 'rewrite-cloud-preview', cancel: 'rewrite-cloud-cancel', heading: 'rewrite-facts-title'},
+};
+const deviceControls = {
+  question: {feedback: 'brief-status', cancel: 'brief-cancel', start: 'brief-submit',
+    fallback: 'Set the question with the controls above.'},
+  detail: {feedback: 'detail-status', cancel: 'nano-cancel', start: 'nano',
+    fallback: 'You can still add the checked detail above.'},
 };
 
 try { tabStorage = window.sessionStorage; } catch { /* Session storage can be disabled. */ }
@@ -171,6 +178,7 @@ function updateExampleRefresh() {
 
 function invalidate() {
   cancelCloudReview();
+  stopDeviceInference('detail');
   revision += 1;
   candidate = null;
   reviewed = null;
@@ -229,6 +237,61 @@ function syncActions() {
   for (const [target, controls] of Object.entries(cloudReviewControls)) {
     el(controls.cancel).hidden = cloudOperation?.target !== target;
   }
+  for (const [target, controls] of Object.entries(deviceControls)) {
+    el(controls.cancel).hidden = deviceOperation?.target !== target;
+  }
+}
+
+function finishDeviceInference(operation) {
+  if (deviceOperation !== operation) return false;
+  deviceOperation = null;
+  clearTimeout(operation.timer);
+  busy = false;
+  syncActions();
+  return true;
+}
+
+function stopDeviceInference(target, message) {
+  const operation = deviceOperation;
+  if (operation?.target !== target) return;
+  const controls = deviceControls[target];
+  const focused = document.activeElement === el(controls.cancel);
+  operation.controller.abort();
+  finishDeviceInference(operation);
+  if (message) {
+    el(controls.feedback).textContent = `${message} ${controls.fallback}`;
+    if (focused) el(controls.start).focus();
+  }
+}
+
+async function runDeviceInference(target, prompt, constraint, waiting, useReply) {
+  if (busy) return;
+  const controls = deviceControls[target];
+  const feedback = el(controls.feedback);
+  const operation = {target, controller: new AbortController()};
+  deviceOperation = operation;
+  operation.timer = setTimeout(() => stopDeviceInference(target, 'Chrome did not respond in time.'), 60000);
+  busy = true;
+  syncActions();
+  feedback.textContent = waiting;
+  el(controls.cancel).focus();
+  try {
+    const firebase = await connectFirebase();
+    if (deviceOperation !== operation) return;
+    const reply = await firebase.generateOnDevice(prompt, constraint, {signal: operation.controller.signal});
+    if (deviceOperation !== operation) return;
+    recordAIResponse(target);
+    useReply(reply);
+  } catch (error) {
+    if (deviceOperation === operation) feedback.textContent = `${error.message} ${controls.fallback}`;
+  } finally {
+    const focused = document.activeElement === el(controls.cancel);
+    if (finishDeviceInference(operation) && focused) el(controls.start).focus();
+  }
+}
+
+for (const [target, controls] of Object.entries(deviceControls)) {
+  el(controls.cancel).addEventListener('click', () => stopDeviceInference(target, 'Stopped waiting for Chrome.'));
 }
 
 function finishCloudReview(operation) {
@@ -610,11 +673,10 @@ prepareDevice.addEventListener('click', async () => {
 
 const brief = el('brief');
 const briefStatus = el('brief-status');
-let briefRevision = 0;
 let questionDraft;
 
 function clearQuestionDraft() {
-  briefRevision += 1;
+  stopDeviceInference('question');
   questionDraft = null;
   el('brief-review').hidden = true;
   briefStatus.textContent = '';
@@ -627,7 +689,7 @@ el('brief-example').addEventListener('click', () => {
   brief.focus();
 });
 
-el('brief-submit').addEventListener('click', async () => {
+el('brief-submit').addEventListener('click', () => {
   let note;
   try {
     note = checkBrief(brief.value);
@@ -636,27 +698,14 @@ el('brief-submit').addEventListener('click', async () => {
     return;
   }
   clearQuestionDraft();
-  const current = briefRevision;
-  busy = true;
-  syncActions();
-  briefStatus.textContent = 'Chrome is reading the note on this device…';
-  try {
-    const firebase = await connectFirebase();
-    if (current !== briefRevision) return;
-    const proposal = await firebase.generateOnDevice(questionPrompt(note), questionConstraint);
-    if (current !== briefRevision) return;
-    recordAIResponse('question');
-    questionDraft = readQuestionDraft(proposal, note);
-    el('brief-question').textContent = questionText(questionDraft.question);
-    el('brief-evidence').textContent = questionDraft.evidence;
-    el('brief-review').hidden = false;
-    briefStatus.textContent = 'Firebase reported on-device inference. Review the question before using it.';
-  } catch (error) {
-    if (current === briefRevision) briefStatus.textContent = `${error.message} You can set the question with the controls above.`;
-  } finally {
-    busy = false;
-    syncActions();
-  }
+  void runDeviceInference('question', questionPrompt(note), questionConstraint, 'Chrome is reading the note on this device…',
+    proposal => {
+      questionDraft = readQuestionDraft(proposal, note);
+      el('brief-question').textContent = questionText(questionDraft.question);
+      el('brief-evidence').textContent = questionDraft.evidence;
+      el('brief-review').hidden = false;
+      briefStatus.textContent = 'Firebase reported on-device inference. Review the question before using it.';
+    });
 });
 
 el('brief-apply').addEventListener('click', () => {
@@ -812,34 +861,21 @@ el('confirm-facts').addEventListener('click', () => {
   focusCheckResult();
 });
 
-el('nano').addEventListener('click', async () => {
+el('nano').addEventListener('click', () => {
   if (!result) return;
-  const current = revision;
   const detailStatus = el('detail-status');
-  busy = true;
-  syncActions();
-  detailStatus.textContent = 'Chrome Nano is reading the source chart on this device…';
-  try {
-    const firebase = await connectFirebase();
-    if (current !== revision) return;
-    const selected = selectedQuestion();
-    const reply = await firebase.generateOnDevice(localPrompt(rows, selected), answerConstraint);
-    if (current !== revision) return;
-    recordAIResponse('detail');
-    try {
-      if (!Array.isArray(reply?.ids)) throw Error('Chrome’s suggestion did not contain category IDs.');
-      const ids = [...reply.ids].sort((a, b) => a - b);
-      el('detail').textContent = supportedDetail(rows, selected, ids);
-      detailStatus.textContent = 'Firebase ran on-device. The browser verified Chrome’s suggestion against the source chart.';
-    } catch (error) {
-      detailStatus.textContent = `Firebase ran on-device. ${error.message} You can still add the checked detail above.`;
-    }
-  } catch (error) {
-    if (current === revision) detailStatus.textContent = `${error.message} You can still add the checked detail above.`;
-  } finally {
-    busy = false;
-    syncActions();
-  }
+  const selected = selectedQuestion();
+  void runDeviceInference('detail', localPrompt(rows, selected), answerConstraint,
+    'Chrome Nano is reading the source chart on this device…', reply => {
+      try {
+        if (!Array.isArray(reply?.ids)) throw Error('Chrome’s suggestion did not contain category IDs.');
+        const ids = [...reply.ids].sort((a, b) => a - b);
+        el('detail').textContent = supportedDetail(rows, selected, ids);
+        detailStatus.textContent = 'Firebase ran on-device. The browser verified Chrome’s suggestion against the source chart.';
+      } catch (error) {
+        detailStatus.textContent = `Firebase ran on-device. ${error.message} You can still add the checked detail above.`;
+      }
+    });
 });
 
 function applyCaptionRevision(text, claims, comparison) {

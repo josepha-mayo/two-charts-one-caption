@@ -24,15 +24,18 @@ export async function configure() {
   }
 }
 
-function deviceModel(responseConstraint) {
+function deviceModel(responseConstraint, signal) {
   deviceClient ??= getAI(initializeApp(config.firebase, 'two-charts-device'), {backend: new GoogleAIBackend()});
-  let model = deviceModels.get(responseConstraint);
+  let model = signal ? undefined : deviceModels.get(responseConstraint);
   if (!model) {
     model = getGenerativeModel(deviceClient, {
       mode: InferenceMode.ONLY_ON_DEVICE,
-      onDeviceParams: {promptOptions: {responseConstraint}},
-    }, {timeout: 60_000});
-    deviceModels.set(responseConstraint, model);
+      onDeviceParams: {
+        ...(signal ? {createOptions: {signal}} : {}),
+        promptOptions: {responseConstraint, ...(signal ? {signal} : {})},
+      },
+    });
+    if (!signal) deviceModels.set(responseConstraint, model);
   }
   return model;
 }
@@ -41,14 +44,17 @@ export async function prepareOnDevice(responseConstraint, onProgress) {
   await deviceModel(responseConstraint).initializeDeviceModel(onProgress);
 }
 
-export async function generateOnDevice(prompt, responseConstraint) {
+export async function generateOnDevice(prompt, responseConstraint, {signal} = {}) {
+  signal?.throwIfAborted();
   const state = await deviceAvailability();
+  signal?.throwIfAborted();
   if (state !== 'available') {
     if (state === 'unavailable') throw Error('On-device inference is unavailable in this Chrome session.');
     throw Error('The Chrome model needs to finish downloading. Open Chrome AI setup to prepare it.');
   }
-  const model = deviceModel(responseConstraint);
+  const model = deviceModel(responseConstraint, signal);
   await model.initializeDeviceModel();
+  signal?.throwIfAborted();
   return generate(model, prompt, InferenceSource.ON_DEVICE);
 }
 
