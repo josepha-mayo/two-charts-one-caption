@@ -220,7 +220,7 @@
       <label for="csv-file">Choose a CSV file</label>
       <input id="csv-file" type="file" accept=".csv,text/csv">
       <label for="csv">Or paste CSV</label>
-      <p id="csv-help">Use two to seven data rows. You can choose which columns to use from your spreadsheet.</p>
+      <p id="csv-help">Choose chart columns and, if needed, a row group such as one reporting period. The chart uses two to seven rows.</p>
       <textarea id="csv" rows="6" spellcheck="false" aria-describedby="csv-help"></textarea>
       <button type="button" id="load">Load chart</button>
       <fieldset id="csv-columns" hidden>
@@ -230,6 +230,12 @@
           <select id="csv-category"></select>
           <label for="csv-percent">Percentage</label>
           <select id="csv-percent"></select>
+        </div>
+        <div class="controls" id="csv-group-controls" hidden>
+          <label for="csv-group">Row group column</label>
+          <select id="csv-group"></select>
+          <label for="csv-group-value" id="csv-group-value-label" hidden>Group value</label>
+          <select id="csv-group-value" hidden></select>
         </div>
         <button type="button" id="use-csv-columns">Use these columns</button>
       </fieldset>

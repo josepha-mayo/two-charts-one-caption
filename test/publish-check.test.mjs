@@ -262,3 +262,39 @@ test('a resolved question can leave contextual prose for editorial review', t =>
   );
   assert.doesNotMatch(ordinary.stdout + strict.stdout, /PRIVATE_CONTEXT/);
 });
+
+test('a saved row group limits the CLI check and catches a changed category within that group', t => {
+  const directory = mkdtempSync(join(tmpdir(), 'two-charts-row-group-'));
+  const csvPath = join(directory, 'export.csv');
+  const checkPath = join(directory, 'check.json');
+  const columns = {category:'Service', rate:'Rate', filter:{column:'Period', value:'2024'}};
+  const chart = readChart(readExample('current.csv'));
+  const scoped = createPublishCheck(chart, check.question, caption, check.claims, columns);
+  assert.match(runPublishCheck(chart, caption, scoped, {...columns, filter:{column:'Period',value:'2025'}}).message, /Period = 2024/);
+  assert.equal(runPublishCheck(chart, caption, check, columns).status, 'review_required');
+  writeFileSync(checkPath, JSON.stringify(scoped));
+  const csv = [
+    'Rate,Service,Period',
+    '71.5,Local,2024', '71.5,Local,2025', '70.5,Select Bus Service,2024',
+    '69.99,Select Bus Service,2025', '65.1,Express,2024', '65.1,Express,2025',
+    '77,Private service,2025', '90,New route,2025',
+  ].join('\n');
+  writeFileSync(csvPath, csv);
+  t.after(() => {
+    unlinkSync(csvPath);
+    unlinkSync(checkPath);
+    rmdirSync(directory);
+  });
+  const run = () => spawnSync(process.execPath, [
+    fileURLToPath(new URL('../scripts/verify-caption.mjs', import.meta.url)), checkPath, csvPath,
+    fileURLToPath(example('caption.txt')), '--json',
+  ], {encoding:'utf8'});
+  const matched = run();
+  assert.equal(matched.status, 0, matched.stderr);
+  assert.equal(JSON.parse(matched.stdout).status, 'explicit');
+  assert.doesNotMatch(matched.stdout, /Private service|New route/);
+  writeFileSync(csvPath, csv.replace('70.5,Select Bus Service,2024','69.99,Select Bus Service,2024'));
+  assert.equal(JSON.parse(run().stdout).status, 'conflict');
+  writeFileSync(csvPath, csv + '\n72,New route,2024');
+  assert.match(JSON.parse(run().stdout).message, /category list changed/);
+});

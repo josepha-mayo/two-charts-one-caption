@@ -1,6 +1,7 @@
 import {open} from 'node:fs/promises';
 import {parseArgs} from 'node:util';
 import {readChart} from '../src/check.mjs';
+import {maxCsvBytes} from '../src/csv.mjs';
 import {readPublishCheck, runPublishCheck} from '../src/publish-check.mjs';
 
 const usage = 'Usage: node scripts/verify-caption.mjs check.json chart.csv caption.txt [--category-column HEADER --percent-column HEADER] [--require-checked-wording] [--json]';
@@ -48,10 +49,10 @@ try {
       throw Error('Specify both --category-column and --percent-column with nonempty header names.');
     }
     const [recipeText, csv, caption] = await Promise.all([
-      readText(positionals[0], 40000), readText(positionals[1], 12000), readText(positionals[2], 8000),
+      readText(positionals[0], 40000), readText(positionals[1], maxCsvBytes), readText(positionals[2], 8000),
     ]);
     const check = readPublishCheck(JSON.parse(recipeText));
-    const columns = hasMapping ? {category, rate} : check.columns;
+    const columns = hasMapping ? {category, rate, ...(check.columns?.filter && {filter: check.columns.filter})} : check.columns;
     const report = runPublishCheck(readChart(csv, columns), caption, check, columns);
     if (values['require-checked-wording'] && report.uncheckedWordingCount) {
       report.status = 'review_required';

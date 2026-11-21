@@ -1,7 +1,12 @@
 const percent = /^\d{1,3}(?:\.\d{1,2})?\s*%?$/;
+export const maxCsvBytes = 64_000;
+const validFilterValue = value => typeof value === 'string' && value.trim() === value && value.length > 0 &&
+  value.length <= 128 && !/[\r\n]/.test(value);
 
 export function readCsvTable(csv) {
-  if (typeof csv !== 'string' || csv.length > 4000) throw Error('Use CSV under 4,000 characters.');
+  if (typeof csv !== 'string' || csv.length > maxCsvBytes || new TextEncoder().encode(csv).byteLength > maxCsvBytes) {
+    throw Error('Use CSV up to 64 KB.');
+  }
   const text = csv.replace(/^\uFEFF/, '').replace(/\r\n?/g, '\n');
   const field = /(?:[ \t]*"((?:[^"]|"")*)"[ \t]*|([^",\n]*))(,|\n|$)/y;
   const records = [];
@@ -25,7 +30,7 @@ export function readCsvTable(csv) {
 
   const headers = records.shift()?.cells ?? [];
   if (headers.length < 2) throw Error('Use a CSV with a header and at least two columns.');
-  if (records.length < 2 || records.length > 7) throw Error('Enter two to seven categories.');
+  if (records.length < 2 || records.length > 500) throw Error('Enter two to 500 rows before selecting a row group.');
   for (const record of records) {
     if (record.cells.length !== headers.length) {
       throw Error('Line ' + record.line + ' must have the same number of columns as the header.');
@@ -48,18 +53,35 @@ function namedColumn(headers, name) {
 
 export function readColumnNames(columns) {
   if (columns === undefined) return;
-  const {category, rate} = columns ?? {};
+  const {category, rate, filter} = columns ?? {};
   if (![category, rate].every(name => typeof name === 'string' && name && name.trim() === name) ||
       category === rate) throw Error('Use two distinct, nonempty CSV header names.');
-  return {category, rate};
+  if (filter === undefined) return {category, rate};
+  const {column, value} = filter ?? {};
+  if (typeof column !== 'string' || !column || column.trim() !== column || [category, rate].includes(column) || !validFilterValue(value)) {
+    throw Error('Choose a separate group column and a nonempty group value.');
+  }
+  return {category, rate, filter: {column, value}};
 }
 
-export function readChartRows(table, {category, rate} = {}) {
+export function readChartRows(table, {category, rate, filter} = {}) {
   const {headers, records} = table;
   if (![category, rate].every(index => Number.isInteger(index) && index >= 0 && index < headers.length) ||
       category === rate) throw Error('Choose separate columns for the category and percentage.');
+  let selected = records;
+  if (filter) {
+    const {column, value} = filter;
+    if (!Number.isInteger(column) || column < 0 || column >= headers.length || [category, rate].includes(column) || !validFilterValue(value)) {
+      throw Error('Choose a separate group column and a nonempty group value.');
+    }
+    selected = records.filter(({cells}) => cells[column] === value);
+  }
+  if (selected.length < 2 || selected.length > 7) {
+    throw Error(filter ? `The selected group has ${selected.length} rows. Choose a group of two to seven categories.`
+      : 'Choose two to seven categories, or select a row group.');
+  }
   const seen = new Set();
-  return records.map(({cells, line}) => {
+  return selected.map(({cells, line}) => {
     const label = cells[category];
     const raw = cells[rate];
     const key = label.normalize('NFKC').toLowerCase();
@@ -80,9 +102,15 @@ export function readChartRows(table, {category, rate} = {}) {
 export function readChart(csv, columnNames) {
   const table = readCsvTable(csv);
   const {headers} = table;
-  const columns = columnNames
-    ? {category: namedColumn(headers, columnNames.category), rate: namedColumn(headers, columnNames.rate)}
+  const names = readColumnNames(columnNames);
+  const columns = names
+    ? {category: namedColumn(headers, names.category), rate: namedColumn(headers, names.rate)}
     : defaultChartColumns(headers);
   if (!columns) throw Error('Use the header category,percent or specify the two column names.');
+  if (names?.filter) columns.filter = {column: namedColumn(headers, names.filter.column), value: names.filter.value};
   return readChartRows(table, columns);
+}
+
+export function rowScope({column, value}) {
+  return `${column} = ${value}`;
 }

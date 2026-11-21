@@ -46,7 +46,7 @@ test('draft import rejects mixed reviews and oversized files', () => {
 });
 
 test('an editorial draft keeps the selected headers alongside the standard chart CSV', () => {
-  const columns = {category: 'Region, 2024', rate: 'Share saying "yes"'};
+  const columns = {category:'Region', rate:'Share saying "yes"', filter:{column:'Period',value:'2024'}};
   const selectedReview = createPublishCheck(rows, question, caption, review.claims, columns);
   const draft = readEditorialDraft(writeEditorialDraft({rows, caption, question, review: selectedReview, columns}));
   assert.deepEqual(draft.columns, columns);

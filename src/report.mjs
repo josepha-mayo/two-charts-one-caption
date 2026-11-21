@@ -1,4 +1,5 @@
 import {answerText, fitsClaim, questionText, supportedDetail} from './check.mjs';
+import {rowScope} from './csv.mjs';
 
 const reportStyle = `
   :root { color-scheme: light; color: #17253a; background: #f7f3e9; font: 16px/1.5 system-ui, sans-serif; }
@@ -88,7 +89,8 @@ export function reviewedFigure(doc, caption, rows, {columns, sourceCitation, sou
   const figure = element(doc, 'figure');
   const description = element(doc, 'figcaption');
   description.append(element(doc, 'p', caption));
-  const {table, body} = dataTable(doc, 'Chart data', [columns?.category ?? 'Category', columns?.rate ?? 'Rate']);
+  const title = columns?.filter ? `Chart data · ${rowScope(columns.filter)}` : 'Chart data';
+  const {table, body} = dataTable(doc, title, [columns?.category ?? 'Category', columns?.rate ?? 'Rate']);
   for (const {label, value} of rows) labelRow(doc, body, label).insertCell().textContent = `${value}%`;
   figure.append(description, table);
   if (sourceCitation) {
@@ -115,7 +117,8 @@ export function reviewedDescription(document, caption, rows, source) {
 }
 
 export function reviewedText(caption, rows, {columns, sourceCitation} = {}) {
-  const heading = (columns?.rate ?? 'Rate') + ' by ' + (columns?.category ?? 'Category');
+  const group = columns?.filter ? ' · ' + rowScope(columns.filter) : '';
+  const heading = (columns?.rate ?? 'Rate') + ' by ' + (columns?.category ?? 'Category') + group;
   const table = rows.map(({label, value}) => `${label}: ${value}%`);
   return [caption, '', heading, ...table, ...(sourceCitation ? ['', sourceCitation] : [])].join('\n');
 }

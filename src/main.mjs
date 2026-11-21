@@ -3,7 +3,7 @@ import {
   readChart, checkCaption, captionCoverage, answerSupport, smallestAnswerShift, validateClaims, answerText, isCutoffClaim, sameAnswer, supportedDetail, fitsClaim, questionText, readQuestion,
 } from './check.mjs';
 import {localFacts, cloudPrompt, localPrompt, checkText, answerConstraint, reviewCloudClaims, unverifiedCaptionExcerpts} from './draft.mjs';
-import {defaultChartColumns, readChartRows, readCsvTable} from './csv.mjs';
+import {defaultChartColumns, maxCsvBytes, readChartRows, readCsvTable, rowScope} from './csv.mjs';
 import {checkBrief, questionPrompt, questionConstraint, readQuestionDraft} from './brief.mjs';
 import {createPublishCheck, readPublishCheck, reviewPublishInputs, suggestPublishRepair} from './publish-check.mjs';
 import {maxEditorialDraftBytes, readEditorialDraft, writeEditorialDraft} from './editorial-draft.mjs';
@@ -229,9 +229,11 @@ function invalidate() {
   status.removeAttribute('data-state');
   el('recheck-status').textContent = '';
   const columns = chartSource.columns;
+  const group = columns?.filter ? rowScope(columns.filter) : '';
   el('recheck-source').textContent = 'Data in use · ' + chartSource.label +
-    (columns ? ' · ' + columns.rate + ' by ' + columns.category : '');
-  el('source-chart-title').textContent = chartSource === refreshedExample ? 'Simulated data refresh' : 'Source chart';
+    (columns ? ' · ' + columns.rate + ' by ' + columns.category : '') + (group ? ' · ' + group : '');
+  el('source-chart-title').textContent = chartSource === refreshedExample ? 'Simulated data refresh'
+    : group ? 'Source chart · ' + group : 'Source chart';
   updateExampleRefresh();
   const showCutoff = isCutoffClaim({type: question.value});
   el('cutoff-label').hidden = !showCutoff;
@@ -269,7 +271,7 @@ function syncActions() {
   for (const id of ['check', 'cloud-preview', 'load', 'csv-file', 'example', 'example-select', 'nano', 'apply', 'open-rewrite',
     'brief-example', 'brief-submit', 'brief-apply', 'recheck-file', 'save-recheck', 'run-recheck',
     'save-editor-draft', 'editor-draft-file',
-    'review-saved-caption', 'apply-stale-repair', 'example-refresh', 'csv-category', 'csv-percent',
+    'review-saved-caption', 'apply-stale-repair', 'example-refresh', 'csv-category', 'csv-percent', 'csv-group', 'csv-group-value',
     'use-csv-columns', 'check-rewrite', 'rewrite-cloud-preview', 'publication', 'export']) el(id).disabled = busy;
   el('confirm-facts').disabled = busy || !candidate?.claims.length;
   el('confirm-rewrite-facts').disabled = busy || !rewriteCandidate?.claims.length;
@@ -664,6 +666,8 @@ el('show-fix').addEventListener('click', () => {
   heading.scrollIntoView({block: 'start'});
 });
 const csvStatus = el('csv-status');
+const csvGroup = el('csv-group');
+const csvGroupValue = el('csv-group-value');
 function csvError(message) {
   csvStatus.textContent = message + ' The current chart is still in use.';
 }
@@ -673,6 +677,25 @@ function clearCsvMapping() {
   el('csv-columns').hidden = true;
   el('csv-category').replaceChildren();
   el('csv-percent').replaceChildren();
+  csvGroup.replaceChildren();
+  csvGroupValue.replaceChildren();
+}
+
+function updateCsvGroupValue(preselected) {
+  const column = csvGroup.value;
+  csvGroupValue.hidden = !column;
+  el('csv-group-value-label').hidden = !column;
+  csvGroupValue.replaceChildren(new Option('Choose a group', ''));
+  if (!column || !pendingImport) return;
+  const counts = new Map();
+  for (const {cells} of pendingImport.table.records) {
+    const value = cells[Number(column)];
+    if (value && value.length <= 128 && !/[\r\n]/.test(value)) counts.set(value, (counts.get(value) ?? 0) + 1);
+  }
+  for (const [value, count] of counts) {
+    csvGroupValue.add(new Option(`${value} (${count} rows)`, value));
+  }
+  if (counts.has(preselected)) csvGroupValue.value = preselected;
 }
 
 function applyChart(chart, input, source, columns) {
@@ -686,7 +709,8 @@ function applyChart(chart, input, source, columns) {
   }
   invalidate();
   renderSource();
-  csvStatus.textContent = `Loaded ${rows.length} categories${source === pastedCsv ? '' : ` from ${source.label}`}.`;
+  const group = columns?.filter ? ` · ${rowScope(columns.filter)}` : '';
+  csvStatus.textContent = `Loaded ${rows.length} categories${source === pastedCsv ? '' : ` from ${source.label}`}${group}.`;
   caption.focus();
 }
 
@@ -694,6 +718,10 @@ function applyImportedChart(table, columns, input, source) {
   const chart = readChartRows(table, columns);
   const names = {category: table.headers[columns.category], rate: table.headers[columns.rate]};
   const unique = Object.values(names).every(name => name && table.headers.indexOf(name) === table.headers.lastIndexOf(name));
+  if (columns.filter) {
+    if (!unique) throw Error('Choose unique category and percentage headers to save this row group.');
+    names.filter = {column: table.headers[columns.filter.column], value: columns.filter.value};
+  }
   applyChart(chart, input, source, unique ? names : undefined);
 }
 
@@ -718,6 +746,17 @@ function importChart(input, source = pastedCsv) {
       const match = table.headers.indexOf(required);
       if (match !== -1 && match === table.headers.lastIndexOf(required)) select.value = String(match);
     }
+    csvGroup.add(new Option('All rows', ''));
+    table.headers.forEach((header, index) => {
+      if (header && table.headers.indexOf(header) === table.headers.lastIndexOf(header)) csvGroup.add(new Option(header, index));
+    });
+    const savedGroup = savedCheck?.columns?.filter;
+    if (savedGroup && table.headers.lastIndexOf(savedGroup.column) === table.headers.indexOf(savedGroup.column)) {
+      const index = table.headers.indexOf(savedGroup.column);
+      if (index !== -1) csvGroup.value = String(index);
+    }
+    el('csv-group-controls').hidden = table.headers.length < 3;
+    updateCsvGroupValue(savedGroup?.value);
     el('csv-columns').hidden = false;
     csvStatus.textContent = 'Choose two columns to replace the current chart.';
     el('csv-category').focus();
@@ -727,6 +766,7 @@ function importChart(input, source = pastedCsv) {
 }
 
 el('load').addEventListener('click', () => importChart(csv.value));
+csvGroup.addEventListener('change', () => updateCsvGroupValue());
 csv.addEventListener('input', () => {
   clearCsvMapping();
   csvStatus.textContent = '';
@@ -738,7 +778,8 @@ el('use-csv-columns').addEventListener('click', () => {
   const rate = el('csv-percent').value;
   try {
     if (!category || !rate) throw Error('Choose a category column and a percentage column.');
-    applyImportedChart(table, {category: Number(category), rate: Number(rate)}, csv.value, source);
+    const filter = csvGroup.value ? {column: Number(csvGroup.value), value: csvGroupValue.value} : undefined;
+    applyImportedChart(table, {category: Number(category), rate: Number(rate), filter}, csv.value, source);
   } catch (error) {
     csvError(error.message);
   }
@@ -749,8 +790,8 @@ el('csv-file').addEventListener('change', async event => {
   picker.value = '';
   if (!file) return;
   clearCsvMapping();
-  if (file.size > 12_000) {
-    csvError('Choose a CSV under 12 KB.');
+  if (file.size > maxCsvBytes) {
+    csvError('Choose a CSV up to 64 KB.');
     return;
   }
   const previousDraft = csv.value;
@@ -1455,7 +1496,8 @@ el('download-comparison').addEventListener('click', () => {
   if (result?.status !== 'ambiguous') return;
   const report = comparisonReport(document, {
     caption: checkText(caption.value), question: selectedQuestion(), rows, result,
-    claims: reviewed, describeClaim, sourceNote: chartSource.sourceCitation,
+    claims: reviewed, describeClaim,
+    sourceNote: [chartSource.sourceCitation, chartSource.columns?.filter && rowScope(chartSource.columns.filter)].filter(Boolean).join(' · '),
   });
   downloadFile(report, 'text/html;charset=utf-8', 'caption-comparison.html');
 });

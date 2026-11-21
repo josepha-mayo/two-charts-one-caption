@@ -48,7 +48,7 @@ Each link contains its own caption, category names, question, and random invitat
 
 Select **Save reader test** to continue later or on another browser. Under **Open a saved reader test**, choose the JSON file and review both captions before opening it. The original links and their collected responses carry over. Keep the JSON with the editor because it includes both captions, the answer, and individual selections. **Download results** gives a text summary for sharing.
 
-To load another chart, choose or paste a UTF-8 CSV with a header and two to seven data rows. The two-column formats `category,percent` and `service,percent` load directly. For other layouts, choose a category column and a percentage column. Only the chosen columns enter the chart check. Use percentages such as `71.5` or `71.5%`, with up to two decimal places.
+To load another chart, choose or paste a UTF-8 CSV up to 64 KB with a header. The two-column formats `category,percent` and `service,percent` load directly. For other layouts, choose the category and percentage columns. If the sheet contains several reporting periods or series, choose a separate row group column and one value. That group supplies the two to seven chart rows. Values match exactly after trimming surrounding whitespace. Use percentages such as `71.5` or `71.5%`, with up to two decimal places.
 
 Open **Save or open an editorial draft** to keep the loaded chart, wording, question, and any currently reviewed facts in one file. Reopen it in another browser or in a saved offline copy of Two Charts. The editor shows a preview and runs any saved review against the restored chart. The draft contains the selected chart values. Unused spreadsheet columns, private editor notes, and reader responses stay out of the file.
 
@@ -71,6 +71,8 @@ Try replacing `current.csv` with the simulated `refreshed.csv`. Select Bus Servi
 When the selected facts resolve the question, the browser still shows wording it could not match to a complete checked fact. The proof and publishing dialog display those excerpts locally. The CLI reports their count. Add `--require-checked-wording` to request editorial review when any such wording remains.
 
 New recheck files remember the selected CSV headers when both headings are unique and nonempty. The browser shows the columns in use and requires the saved pair for that recheck. Place the columns anywhere in the next export. The CLI selects them by exact name automatically. For older files and files saved without unique headings, pass the exact, case-sensitive names you selected in the browser.
+
+For a chart made from a row group, the recheck file also binds the group header and value. The browser preselects the group when you load the next CSV after opening the check, and the CLI applies it automatically. Rows in other groups can change independently. A different category list within the selected group requires review.
 
 ```sh
 npm run verify-caption -- check.json latest.csv caption.txt --category-column "Bus service" --percent-column "On-time rate"

@@ -102,7 +102,7 @@ select { min-height: 32px; padding: 3px; }
 #shift-answer { margin-top: 6px; font-weight: 750; }
 #shift-rates { margin-bottom: 0; }
 .charts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; margin: 14px 0; }
-.chart-panel h2 { margin-bottom: 15px; }
+.chart-panel h2 { margin-bottom: 15px; overflow-wrap: anywhere; }
 .chart-panel.alternate h2 { color: var(--gold); }
 .empty { color: var(--muted); max-width: 34ch; }
 .axis { display: flex; justify-content: space-between; margin-inline-end: 4rem; color: var(--muted); font-size: .68rem; font-variant-numeric: tabular-nums; }

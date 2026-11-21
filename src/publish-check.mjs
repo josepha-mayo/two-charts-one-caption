@@ -2,7 +2,7 @@ import {
   answer, answerText, checkCaption, fitsClaim, isCutoffClaim, questionText, readQuestion, sameAnswer, statesAnswer, supportedDetail, validateClaims,
 } from './check.mjs';
 import {checkText, localFacts, readQuotedCutoff, readQuotedFact, unverifiedCaptionExcerpts, withQuotedRankValue} from './draft.mjs';
-import {readColumnNames} from './csv.mjs';
+import {readColumnNames, rowScope} from './csv.mjs';
 
 function normalizeCaption(text) {
   if (typeof text !== 'string') throw Error('The check needs the reviewed caption text.');
@@ -42,6 +42,13 @@ export function reviewPublishInputs(rows, caption, check, columns) {
     return {status: 'review_required', message: 'The caption text changed. Review the new wording before publishing.'};
   }
   const required = check.columns;
+  const savedGroup = required?.filter;
+  const currentGroup = columns?.filter;
+  if (savedGroup?.column !== currentGroup?.column || savedGroup?.value !== currentGroup?.value) {
+    return {status: 'review_required', message: savedGroup
+      ? `This check uses the row group ${rowScope(savedGroup)}. Load that group to rerun the check.`
+      : 'This check uses the full chart. Review the caption for the selected row group.'};
+  }
   if (required && (columns?.category !== required.category || columns?.rate !== required.rate)) {
     return {status: 'review_required',
       message: 'This check was saved for “' + required.rate + '” grouped by “' + required.category + '”. Load those columns or review the caption for the new chart.'};
