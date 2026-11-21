@@ -283,6 +283,7 @@ function invalidate() {
   el('source-chart-title').textContent = chartSource === refreshedExample ? 'Simulated data refresh'
     : chartSource === revisedUnemployment ? 'Revised BLS rates'
     : group ? 'Source chart · ' + group : 'Source chart';
+  el('published-example-actions').hidden = chartSource !== unemploymentExample && chartSource !== revisedUnemployment;
   updateExampleRefresh();
   precisionIssue = decimalPlaceIssue(rows, selectedPrecision());
   el('rate-precision-status').textContent = precisionIssue ?? '';
@@ -1591,37 +1592,86 @@ el('check-published-page').addEventListener('click', () => {
     const checkTable = el('published-table').checked;
     const figure = publishedPage.figures.read({captionIndex: Number(selected), checkTable});
     const report = publishedPage.runPublishedFigureCheck(figure, rows, savedCheck, chartSource.columns);
-    feedback.textContent = report.message ?? {
-      explicit: 'Pass. The reviewed facts still answer the question.',
-      implied: 'Pass. The reviewed facts still imply the answer.',
-      conflict: 'Review required. The published caption conflicts with the current CSV.',
-      ambiguous: 'Review required. The caption leaves a different answer possible.',
-    }[report.status];
-    const details = el('published-page-result');
-    if (report.sourceAnswer) details.append(make('p', 'Current CSV answer · ' + report.sourceAnswer));
-    if (report.alternateAnswer) details.append(make('p', 'Alternate answer from the caption · ' + report.alternateAnswer));
-    if (report.uncheckedWordingCount) details.append(make('p', 'Excerpts still needing editorial review · ' + report.uncheckedWordingCount));
-    const excerpts = report.failedFacts ?? report.missingReviewedExcerpts;
-    if (excerpts?.length) {
-      details.append(make('p', report.failedFacts ? 'Outdated excerpts' : 'Reviewed excerpts missing from the page'));
-      const list = make('ul');
-      list.append(...excerpts.map(text => make('li', text)));
-      details.append(list);
-    }
-    if (report.table?.matches) details.append(make('p', 'All published table values match the current CSV.'));
-    if (report.table?.mismatches.length) {
-      details.append(make('p', 'Rows with different values'));
-      const format = rate => rate === null ? 'missing' : `${rate}%`;
-      const list = make('ul');
-      list.append(...report.table.mismatches.map(({label, sourceRate, tableRate}) =>
-        make('li', `${label} · CSV ${format(sourceRate)} · HTML ${format(tableRate)}`)));
-      details.append(list);
-    }
-    details.hidden = !details.childElementCount;
+    renderPublishedReport(report, feedback, el('published-page-result'));
   } catch (error) {
     feedback.textContent = error.message;
   }
 });
+
+function renderPublishedReport(report, feedback, details) {
+  feedback.textContent = report.message ?? {
+    explicit: 'Pass. The reviewed facts still answer the question.',
+    implied: 'Pass. The reviewed facts still imply the answer.',
+    conflict: 'Review required. The published caption conflicts with the current CSV.',
+    ambiguous: 'Review required. The caption leaves a different answer possible.',
+  }[report.status];
+  details.replaceChildren();
+  if (report.question) details.append(make('p', report.question));
+  if (report.sourceAnswer) details.append(make('p', 'Current CSV answer · ' + report.sourceAnswer));
+  if (report.alternateAnswer) details.append(make('p', 'Alternate answer from the caption · ' + report.alternateAnswer));
+  if (report.uncheckedWordingCount) details.append(make('p', 'Excerpts still needing editorial review · ' + report.uncheckedWordingCount));
+  const excerpts = report.failedFacts ?? report.missingReviewedExcerpts;
+  if (excerpts?.length) {
+    details.append(make('p', report.failedFacts ? 'Outdated excerpts' : 'Reviewed excerpts missing from the page'));
+    const list = make('ul');
+    list.append(...excerpts.map(text => make('li', text)));
+    details.append(list);
+  }
+  if (report.table?.matches) details.append(make('p', 'All published table values match the current CSV.'));
+  if (report.table?.mismatches.length) {
+    const table = make('table');
+    table.createCaption().textContent = 'Rows with different values';
+    const headings = table.createTHead().insertRow();
+    for (const label of ['Category', 'Published HTML', 'Current CSV']) {
+      const cell = make('th', label);
+      cell.scope = 'col';
+      headings.append(cell);
+    }
+    const data = table.createTBody();
+    const format = rate => rate === null ? 'Missing' : `${rate}%`;
+    for (const {label, sourceRate, tableRate} of report.table.mismatches) {
+      const row = data.insertRow();
+      const category = make('th', label);
+      category.scope = 'row';
+      row.append(category);
+      row.insertCell().textContent = format(tableRate);
+      row.insertCell().textContent = format(sourceRate);
+    }
+    details.append(table);
+  }
+  details.hidden = !details.childElementCount;
+}
+
+const publishedExampleDialog = el('published-example-dialog');
+const publishedExampleStatus = el('published-example-status');
+const publishedExampleInputs = el('published-example-inputs');
+const publishedExampleCaption = el('published-example-caption');
+const publishedExampleResult = el('published-example-result');
+
+async function showPublishedExampleResult() {
+  try {
+    const {checkBlsPage} = await import('./published-example.mjs');
+    if (!publishedExampleDialog.open) return;
+    const {caption, report} = checkBlsPage(el('published-example-revised').checked);
+    publishedExampleCaption.textContent = caption;
+    publishedExampleCaption.hidden = false;
+    publishedExampleInputs.hidden = false;
+    renderPublishedReport(report, publishedExampleStatus, publishedExampleResult);
+    publishedExampleStatus.dataset.state = report.status;
+  } catch {
+    if (publishedExampleDialog.open) publishedExampleStatus.textContent = 'The example could not load. Reconnect and try again.';
+  }
+}
+
+el('open-published-example').addEventListener('click', () => {
+  el('published-example-original').checked = true;
+  publishedExampleInputs.hidden = publishedExampleCaption.hidden = publishedExampleResult.hidden = true;
+  publishedExampleStatus.removeAttribute('data-state');
+  publishedExampleStatus.textContent = 'Reading the original example page…';
+  publishedExampleDialog.showModal();
+  void showPublishedExampleResult();
+});
+publishedExampleInputs.addEventListener('change', showPublishedExampleResult);
 
 el('apply-stale-repair').addEventListener('click', () => {
   if (!staleRepair || busy) return;

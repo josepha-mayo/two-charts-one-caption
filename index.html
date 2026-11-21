@@ -79,6 +79,9 @@
         <button type="button" id="cloud-cancel" hidden>Cancel cloud review</button>
         <button type="button" id="reader-preview">Make a reader link</button>
       </div>
+      <div id="published-example-actions" class="controls" hidden>
+        <button type="button" id="open-published-example">Try the BLS publication check</button>
+      </div>
       <p id="status" role="status"></p>
     </section>
     <section class="witness" id="witness" aria-labelledby="witness-title" hidden>
@@ -295,7 +298,7 @@
             <button type="button" id="check-published-page" disabled>Check generated page</button>
           </div>
           <p id="published-page-status" role="status"></p>
-          <div id="published-page-result" hidden></div>
+          <div id="published-page-result" class="published-report" hidden></div>
         </details>
       </div>
       <p id="recheck-status" role="status"></p>
@@ -364,6 +367,21 @@
       <button type="button" id="save-offline" aria-describedby="offline-copy-help">Save app for offline use</button>
       <p id="offline-copy-status" role="status"></p>
     </section>
+  </dialog>
+  <dialog id="published-example-dialog" aria-labelledby="published-example-title">
+    <h2 id="published-example-title">Can the old page stay online?</h2>
+    <p>The Bureau of Labor Statistics revised its 2024 unemployment rates in January 2025. This example keeps the same HTML page while you switch the data it’s checked against. <a href="https://www.bls.gov/news.release/archives/empsit_01102025.htm" target="_blank" rel="noopener noreferrer">BLS release, Table A</a></p>
+    <blockquote id="published-example-caption" hidden></blockquote>
+    <fieldset id="published-example-inputs" hidden>
+      <legend>CSV to check against</legend>
+      <label><input type="radio" name="published-example-csv" id="published-example-original" checked> First-published rates</label>
+      <label><input type="radio" name="published-example-csv" id="published-example-revised"> January 2025 revision</label>
+    </fieldset>
+    <p id="published-example-status" role="status"></p>
+    <div id="published-example-result" class="published-report" hidden></div>
+    <form method="dialog" class="controls">
+      <button type="submit" autofocus>Close example</button>
+    </form>
   </dialog>
   <dialog id="reader-dialog" aria-labelledby="reader-link-title">
     <h2 id="reader-link-title">Share the caption alone</h2>
