@@ -243,6 +243,14 @@ dialog p a { color: var(--cool); text-underline-offset: 3px; }
 .unchecked-wording summary { color: var(--gold); cursor: pointer; font-weight: 650; }
 .unchecked-wording p { color: var(--muted); margin-block: 6px; }
 .unchecked-wording ul { padding-inline-start: 20px; overflow-wrap: anywhere; }
+.caption-coverage { margin-top: 14px; border-block-start: 1px solid var(--line); padding-top: 9px; }
+.caption-coverage summary { color: var(--cool); font-weight: 650; min-block-size: 31px; }
+.caption-coverage label { font-size: .86rem; margin-inline-end: 6px; }
+.caption-coverage select { max-inline-size: 100%; }
+#coverage-count { color: var(--text); font-weight: 700; margin-block-end: 8px; }
+.caption-coverage li { flex-direction: column; align-items: start; gap: 3px; }
+.caption-coverage button { text-align: start; max-inline-size: 100%; overflow-wrap: anywhere; }
+.caption-coverage small { color: var(--muted); overflow-wrap: anywhere; }
 .cloud-preview { display: grid; grid-template-columns: minmax(0, 1fr); gap: 4px; margin: 14px 0; }
 .cloud-preview dt { color: var(--muted); font-size: .85rem; font-weight: 650; }
 .cloud-preview dd { margin: 0 0 7px; overflow-wrap: anywhere; }

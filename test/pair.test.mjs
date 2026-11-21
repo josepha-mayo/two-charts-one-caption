@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import {answer, checkCaption, fits, readChart, smallestAnswerShift, supportedDetail, validateClaims} from '../src/check.mjs';
+import {answer, captionCoverage, checkCaption, fits, readChart, smallestAnswerShift, supportedDetail, validateClaims} from '../src/check.mjs';
 import {questionPrompt, readQuestionDraft} from '../src/brief.mjs';
 import {localFacts, localPrompt, reviewCloudClaims} from '../src/draft.mjs';
 import {createPublishCheck, runPublishCheck, suggestPublishRepair} from '../src/publish-check.mjs';
@@ -140,4 +140,25 @@ test('two rates moving 10 points each can tie when a one-category edit takes at 
     alternate: [50, 50],
     alternateAnswer: [1, 2],
   });
+});
+
+test('caption coverage agrees with the individual proof across all seven-category questions', () => {
+  const chart = Array.from({length: 7}, (_, i) => ({label: `Category ${i + 1}`, value: 50 + i}));
+  const range = {type: 'range', min: 50, max: 56};
+  const ascending = chart.slice(1).map((_, i) => ({type: 'pair', ids: [i + 1, i + 2], higher: i + 2}));
+  for (const claims of [
+    [range],
+    [range, {type: 'lowest', ids: [1]}],
+    [range, ...ascending],
+  ]) {
+    const coverage = captionCoverage(chart, claims);
+    assert.equal(coverage.length, 23);
+    assert.equal(new Set(coverage.map(entry => JSON.stringify(entry.question))).size, 23);
+    for (const {question, expected, status} of coverage) {
+      const checked = checkCaption(chart, question, claims);
+      assert.equal(status, checked.status);
+      assert.deepEqual(expected, checked.expected);
+    }
+  }
+  assert.deepEqual(captionCoverage(chart, [{...range, max: 57}]), []);
 });

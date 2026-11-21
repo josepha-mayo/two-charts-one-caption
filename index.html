@@ -108,6 +108,17 @@
         <p>The browser could not independently match these excerpts to a complete checked fact.</p>
         <ul></ul>
       </details>
+      <details class="caption-coverage" id="caption-coverage" hidden>
+        <summary>See what else this caption answers</summary>
+        <p>Explore the highest and lowest rates and each head-to-head comparison using the same checked facts.</p>
+        <p id="coverage-count" role="status"></p>
+        <label for="coverage-filter" id="coverage-filter-label" hidden>Questions to show</label>
+        <select id="coverage-filter" hidden>
+          <option value="ambiguous">Different answers possible</option>
+          <option value="resolved">Answer determined</option>
+        </select>
+        <ul id="coverage-questions"></ul>
+      </details>
       <section id="stale-repair" aria-labelledby="stale-repair-title" hidden>
         <h3 id="stale-repair-title">Update the stale sentence</h3>
         <dl>

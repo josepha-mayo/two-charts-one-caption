@@ -30,6 +30,8 @@ After revealing a gap, choose **Download proof with chart data**. The HTML file 
 
 **Find the smallest rate shift** shows how far the rates have to move before a different answer is possible under the same checked facts. After adding a detail or applying a checked rewrite, the editor shows the quoted fact that rules out the original hypothetical chart.
 
+Under **What the words actually prove**, choose **See what else this caption answers** to check the highest rate, lowest rate, and every pair using the same reviewed facts. Pick a question to open its individual proof. This is a coverage check for those questions, so an editorial cutoff can still be checked separately.
+
 ## Try a reader test
 
 1. Reveal an ambiguous caption, add the verified detail, and create before and after links.

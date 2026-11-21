@@ -204,6 +204,8 @@ function intervalWitness(actual, claims, movable, acceptGroups = () => true, {in
     bounds[index] = [Math.max(lower, bound[0]), Math.min(upper, bound[1])];
   }
   if (bounds.some(([lower, upper]) => lower > upper)) return null;
+  // A contradiction among pair comparisons also rules out every choice of extrema.
+  if (edges.length && !fitPairs(bounds.map(([lower]) => lower), bounds, edges)) return null;
 
   for (let low = requiredLow || 1; low <= (requiredLow || full); low += 1) {
     // A non-flat chart needs disjoint extrema. Visit only subsets of the
@@ -376,6 +378,28 @@ export function checkCaption(rows, question, claims, proposed = []) {
   const {alternate, origin, changedCategories} = best;
   if (!qualifies(alternate)) throw Error('The proposed alternate could not be verified.');
   return {status: 'ambiguous', expected, alternate, alternateAnswer: answerValues(alternate, selected), origin, changedCategories};
+}
+
+export function captionCoverage(rows, claims) {
+  const actual = rows.map(row => row.value);
+  if (!fits(actual, claims)) return [];
+  const questions = ['highest', 'lowest'];
+  for (let first = 1; first < rows.length; first++) {
+    for (let second = first + 1; second <= rows.length; second++) {
+      questions.push({type: 'pair', ids: [first, second]});
+    }
+  }
+  const full = (1 << rows.length) - 1;
+  return questions.map(question => {
+    const expected = answerValues(actual, question);
+    if (claims.some(claim => statesAnswer(claim, question))) return {question, expected, status: 'explicit'};
+    // Find the smallest witness only when the editor opens an individual proof.
+    const alternate = alternateIntervals(actual, claims, expected, question, full);
+    if (alternate && (!fits(alternate, claims) || sameAnswer(answerValues(alternate, question), expected))) {
+      throw Error('A question in the coverage check could not be verified.');
+    }
+    return {question, expected, status: alternate ? 'ambiguous' : 'implied'};
+  });
 }
 
 function formatLabels(rows, ids, quoted = false) {

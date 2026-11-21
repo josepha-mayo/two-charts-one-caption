@@ -1,6 +1,6 @@
 import './style.css';
 import {
-  readChart, checkCaption, smallestAnswerShift, validateClaims, answerText, isCutoffClaim, sameAnswer, supportedDetail, fitsClaim, questionText, readQuestion,
+  readChart, checkCaption, captionCoverage, smallestAnswerShift, validateClaims, answerText, isCutoffClaim, sameAnswer, supportedDetail, fitsClaim, questionText, readQuestion,
 } from './check.mjs';
 import {localFacts, cloudPrompt, localPrompt, checkText, answerConstraint, reviewCloudClaims, unverifiedCaptionExcerpts} from './draft.mjs';
 import {defaultChartColumns, readChartRows, readCsvTable} from './csv.mjs';
@@ -415,6 +415,59 @@ function renderProof(claims, alternate) {
   el('proof').hidden = false;
 }
 
+const coveragePanel = el('caption-coverage');
+const coverageFilter = el('coverage-filter');
+const coverageCount = el('coverage-count');
+const coverageQuestions = el('coverage-questions');
+let coverage;
+
+function renderCoverage() {
+  const showGaps = coverageFilter.value === 'ambiguous';
+  const items = coverage.filter(entry => (entry.status === 'ambiguous') === showGaps);
+  coverageQuestions.replaceChildren(...items.map(entry => {
+    const item = make('li');
+    const action = make('button', questionText(entry.question, rows), 'small');
+    action.type = 'button';
+    action.addEventListener('click', () => {
+      if (busy || !reviewed) return;
+      const current = selectedQuestion();
+      if (current !== entry.question && !(current?.type === 'pair' &&
+          entry.question?.type === 'pair' && sameAnswer(current.ids, entry.question.ids))) {
+        const facts = reviewed;
+        setQuestion(entry.question);
+        invalidate();
+        render(facts, [], 'Same checked facts');
+      }
+      focusCheckResult();
+    });
+    item.append(action);
+    if (!showGaps) {
+      const explanation = entry.status === 'explicit' ? 'Stated directly' : 'Follows from the checked facts';
+      item.append(make('small', `${witnessAnswer(entry.question, entry.expected)} · ${explanation}`));
+    }
+    return item;
+  }));
+}
+
+coveragePanel.addEventListener('toggle', () => {
+  if (!coveragePanel.open || coveragePanel.hidden || !reviewed || coverage) return;
+  try {
+    coverage = captionCoverage(rows, reviewed);
+    const gaps = coverage.filter(entry => entry.status === 'ambiguous').length;
+    const determined = coverage.length - gaps;
+    coverageCount.textContent = `${determined} of ${coverage.length} questions have a determined answer.`;
+    coverageFilter.value = gaps ? 'ambiguous' : 'resolved';
+    coverageFilter.hidden = !gaps || !determined;
+    el('coverage-filter-label').hidden = coverageFilter.hidden;
+    renderCoverage();
+  } catch (error) {
+    coverageCount.textContent = error.message;
+  }
+});
+coverageFilter.addEventListener('change', () => {
+  if (coverage) renderCoverage();
+});
+
 function witnessAnswer(selected, ids) {
   return answerText(rows, ids) + (selected?.type === 'pair' && ids.length === 2 ? ' (tie)' : '');
 }
@@ -484,6 +537,13 @@ function render(claims, alternatives = [], note = 'Browser check') {
   const names = answerText(rows, expected);
   const state = result.status;
   const resolved = canPublish();
+  coverage = null;
+  coveragePanel.hidden = state === 'conflict';
+  coveragePanel.open = false;
+  coverageFilter.hidden = true;
+  el('coverage-filter-label').hidden = true;
+  coverageCount.textContent = '';
+  coverageQuestions.replaceChildren();
   status.dataset.state = state;
   el('comparison').hidden = false;
   el('revision').hidden = state === 'conflict';
