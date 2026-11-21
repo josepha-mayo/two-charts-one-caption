@@ -484,29 +484,51 @@ export function answerSupport(rows, question, claims, places = defaultDecimalPla
   function findAlternate(facts) {
     if (facts.some(fact => statesAnswer(fact, selected))) return null;
     const witness = alternateIntervals(actual, facts, expected, selected, full, grid);
-    if (!witness) return null;
-    const qualifies = values => fits(values, facts) && !sameAnswer(answerValues(values, selected), expected);
-    if (!qualifies(witness)) {
+    if (witness && (!fits(witness, facts) || sameAnswer(answerValues(witness, selected), expected))) {
       throw Error('The answer support could not be verified.');
     }
-    const alternate = oneCategoryWitness(actual, facts, selected, qualifies, grid)?.alternate ?? witness;
-    return {alternate, alternateAnswer: answerValues(alternate, selected)};
+    return witness;
   }
   if (findAlternate(claims)) return null;
-  const excerpts = new Set(claims.map(claim => claim.evidence));
-  const direct = claims.find(claim => statesAnswer(claim, selected));
-  const retained = new Set(direct ? [direct.evidence] : excerpts);
-  const essential = [];
-  for (const excerpt of excerpts) {
-    if (!retained.delete(excerpt)) continue;
-    const witness = findAlternate(claims.filter(claim => retained.has(claim.evidence)));
-    if (witness) {
-      // This counterexample also satisfies any smaller set of remaining facts.
-      retained.add(excerpt);
-      essential.push({excerpt, ...witness});
+  const excerpts = [...new Set(claims.map(claim => claim.evidence))];
+  const length = text => Array.from(text).length;
+  const explicit = claims.filter(claim => statesAnswer(claim, selected))
+    .sort((a, b) => length(a.evidence) - length(b.evidence));
+  const retained = new Set(excerpts);
+  const retainedFacts = () => claims.filter(claim => retained.has(claim.evidence));
+
+  // Keep a direct answer when the caption already states one. Otherwise,
+  // compare all subsets for small proofs and bound the work for longer ones.
+  if (explicit.length) {
+    retained.clear();
+    if (findAlternate([])) retained.add(explicit[0].evidence);
+  } else if (excerpts.length <= 6) {
+    const weights = excerpts.map(excerpt => length(excerpt) + 1);
+    const subsets = Array.from({length:1 << excerpts.length}, (_, mask) => ({
+      mask, cost:weights.reduce((total, weight, index) => total + ((mask & (1 << index)) ? weight : 0), 0),
+    })).sort((a, b) => a.cost - b.cost);
+    for (const {mask} of subsets) {
+      retained.clear();
+      excerpts.forEach((excerpt, index) => { if (mask & (1 << index)) retained.add(excerpt); });
+      if (!findAlternate(retainedFacts())) break;
+    }
+  } else {
+    for (const excerpt of excerpts) {
+      retained.delete(excerpt);
+      if (findAlternate(retainedFacts())) retained.add(excerpt);
     }
   }
-  return {essential, omitted: [...excerpts].filter(excerpt => !retained.has(excerpt))};
+  const essential = [];
+  for (const excerpt of excerpts) {
+    if (!retained.has(excerpt)) continue;
+    const others = retainedFacts().filter(claim => claim.evidence !== excerpt);
+    const witness = findAlternate(others);
+    if (!witness) continue;
+    const qualifies = values => fits(values, others) && !sameAnswer(answerValues(values, selected), expected);
+    const alternate = oneCategoryWitness(actual, others, selected, qualifies, grid)?.alternate ?? witness;
+    essential.push({excerpt, alternate, alternateAnswer: answerValues(alternate, selected)});
+  }
+  return {essential, omitted: excerpts.filter(excerpt => !retained.has(excerpt))};
 }
 
 function formatLabels(rows, ids, quoted = false) {

@@ -338,7 +338,7 @@ function syncActions() {
     'brief-example', 'brief-submit', 'brief-apply', 'recheck-file', 'save-recheck', 'run-recheck', 'open-release-setup',
     'save-editor-draft', 'editor-draft-file', 'published-page-file', 'published-figure', 'published-table',
     'review-saved-caption', 'apply-stale-repair', 'example-refresh', 'csv-category', 'csv-percent', 'csv-group', 'csv-group-value',
-    'use-csv-columns', 'check-rewrite', 'rewrite-cloud-preview', 'publication', 'export']) el(id).disabled = busy;
+    'use-csv-columns', 'check-rewrite', 'rewrite-cloud-preview', 'review-shorter-caption', 'publication', 'export']) el(id).disabled = busy;
   el('confirm-facts').disabled = busy || !candidate?.claims.length;
   const figureReady = !busy && Boolean(publishedPage) && el('published-figure').value !== '';
   el('open-published-figure').disabled = !figureReady;
@@ -563,6 +563,25 @@ const supportPanel = el('answer-support');
 const supportSummary = el('support-summary');
 const supportExcerpts = el('support-excerpts');
 const supportOmitted = el('support-omitted');
+const shorterCaptionControls = el('support-shorter');
+let shorterCaption;
+
+function offerShorterCaption(proof) {
+  if (!proof.essential.length || !proof.omitted.length) return;
+  const current = checkText(caption.value);
+  if (unverifiedCaptionExcerpts(rows, current, reviewed).length) return;
+  const proposed = proof.essential.map(({excerpt}) => excerpt.trim()).join(' ');
+  const originalLength = Array.from(current).length;
+  const proposedLength = Array.from(proposed).length;
+  if (proposedLength >= originalLength) return;
+  let claims;
+  try { claims = localCaptionClaims(proposed); } catch { return; }
+  const check = checkCaption(rows, selectedQuestion(), claims, [], selectedPrecision());
+  if (check.status !== result.status || !sameAnswer(check.expected, result.expected)) return;
+  shorterCaption = proposed;
+  el('support-length').textContent = `${originalLength} → ${proposedLength} characters`;
+  shorterCaptionControls.hidden = false;
+}
 
 supportPanel.addEventListener('toggle', () => {
   if (!supportPanel.open || !canPublish() || supportSummary.textContent) return;
@@ -592,6 +611,7 @@ supportPanel.addEventListener('toggle', () => {
       item.append(make('q', excerpt));
       return item;
     }));
+    offerShorterCaption(proof);
   } catch (error) {
     supportSummary.textContent = error.message;
   }
@@ -672,6 +692,8 @@ function render(claims, alternatives = [], note = 'Browser check') {
   supportExcerpts.replaceChildren();
   supportOmitted.hidden = true;
   supportOmitted.open = false;
+  shorterCaptionControls.hidden = true;
+  shorterCaption = null;
   coverage = null;
   coveragePanel.hidden = state === 'conflict';
   coveragePanel.open = false;
@@ -1308,17 +1330,24 @@ function clearRewriteCheck() {
   el('use-rewrite').disabled = true;
 }
 
-el('open-rewrite').addEventListener('click', () => {
-  if (!result || result.status === 'conflict') return;
+function openRewrite(proposed) {
+  if (busy || !result || result.status === 'conflict') return;
   const before = checkText(caption.value);
   rewriteContext = {revision, before, question: selectedQuestion()};
   el('rewrite-original').textContent = before;
-  rewriteCaption.value = before;
+  rewriteCaption.value = proposed ?? before;
   el('rewrite-question').textContent = questionText(rewriteContext.question, rows);
   clearRewriteCheck();
   rewriteDialog.returnValue = 'cancel';
   rewriteDialog.showModal();
   rewriteCaption.focus();
+}
+
+el('open-rewrite').addEventListener('click', () => openRewrite());
+el('review-shorter-caption').addEventListener('click', () => {
+  if (busy || !canPublish() || !shorterCaption) return;
+  openRewrite(shorterCaption);
+  checkLocalRewrite();
 });
 rewriteCaption.addEventListener('input', clearRewriteCheck);
 
@@ -1353,7 +1382,7 @@ function checkRewrite(text, claims, alternatives = []) {
   el('use-rewrite').disabled = false;
 }
 
-el('check-rewrite').addEventListener('click', () => {
+function checkLocalRewrite() {
   clearRewriteCheck();
   try {
     const text = readChangedRewrite();
@@ -1361,7 +1390,8 @@ el('check-rewrite').addEventListener('click', () => {
   } catch (error) {
     rewriteStatus.textContent = error.message;
   }
-});
+}
+el('check-rewrite').addEventListener('click', checkLocalRewrite);
 
 el('rewrite-cloud-preview').addEventListener('click', () => {
   try {

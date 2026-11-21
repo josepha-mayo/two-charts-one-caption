@@ -32,7 +32,9 @@ After revealing a gap, choose **Download proof with chart data**. The HTML file 
 
 Under **What the words actually prove**, choose **See what else this caption answers** to check the highest rate, lowest rate, and every pair using the same reviewed facts. Pick a question to open its individual proof. This is a coverage check for those questions, so an editorial cutoff can still be checked separately.
 
-When an answer is determined, **Find the excerpts that support this answer** finds one sufficient set of checked excerpts. Open each quote to see a chart that could change the answer if that quote's facts were left out of the set. This helps plan shorter wording. Run a new check after rewriting the caption.
+When an answer is determined, **Find the excerpts that support this answer** finds a sufficient set of checked excerpts. For up to six excerpts, it tests the shorter combinations when the answer is implied. If the caption states the answer directly, it keeps the shortest direct statement. Open each retained quote to see a chart that could change the answer if that quote's facts were left out.
+
+**Review shorter caption** opens the original and shorter wording side by side when the browser independently verifies that both give the same kind of answer. Review the excerpts outside the proof before applying it. The option requires a caption whose wording can all be independently checked.
 
 For a highest- or lowest-rate question, clear **Include the exact percentage in the new sentence** to state the rank alone. The saved check still verifies every tied category. If a refresh changes the number while the rank stays the same, that sentence still passes. A new leader or tie still requires review.
 

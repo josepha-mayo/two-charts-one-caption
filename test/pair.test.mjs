@@ -183,6 +183,26 @@ test('an inferred comparison retains both links in its proof and verifies both o
   }
 });
 
+test('shorter comparison excerpts win over a longer sufficient route through the same chart', () => {
+  const chart = readChart('category,percent\nNorth,40\nSouth,10\nWest,20\nCentral Business District,30');
+  const short = ['North had a higher rate than West.', 'West had a higher rate than South.'];
+  const long = ['North had a higher rate than Central Business District.', 'Central Business District had a higher rate than South.'];
+  const selected = {type:'pair', ids:[1,2]};
+  const facts = localFacts(chart, [...short, ...long].join(' '));
+  const proof = answerSupport(chart, selected, facts);
+  assert.deepEqual(proof.essential.map(({excerpt}) => excerpt), short);
+  assert.deepEqual(proof.omitted, long);
+  const kept = facts.filter(({evidence}) => short.includes(evidence));
+  assert.equal(checkCaption(chart, selected, kept).status, 'implied');
+  for (const {excerpt, alternate} of proof.essential) {
+    assert.equal(fits(alternate, kept.filter(({evidence}) => evidence !== excerpt)), true);
+    assert.notDeepEqual(answer(alternate, selected), [1]);
+  }
+  const explicit = 'North had a higher rate than South.';
+  const withAnswer = answerSupport(chart, selected, localFacts(chart, [...short, ...long, explicit].join(' ')));
+  assert.deepEqual(withAnswer.essential.map(({excerpt}) => excerpt), [explicit]);
+});
+
 test('support groups multiple facts from one quote and handles a cutoff resolved by the domain', () => {
   const chart = readChart('category,percent\nNorth,40\nSouth,60');
   const quote = 'North and South reported 40% and 60%, respectively.';
