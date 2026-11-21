@@ -538,8 +538,11 @@ if (import.meta.env.PROD && 'serviceWorker' in navigator) {
     button.disabled = true;
     feedback.textContent = 'Saving the app for offline use…';
     try {
-      await saveOfflineApp(import.meta.env.BASE_URL + 'offline-worker.js');
-      feedback.textContent = 'Offline copy saved. You can reopen this app without a connection.';
+      const version = document.querySelector('meta[name="two-charts-offline-build"]')?.content;
+      const {waiting} = await saveOfflineApp(import.meta.env.BASE_URL + 'offline-worker.js', version);
+      feedback.textContent = waiting
+        ? 'Offline copy saved. Close all Two Charts tabs before reopening offline to use this version.'
+        : 'Offline copy saved. You can reopen this app without a connection.';
     } catch (error) {
       feedback.textContent = error.message || 'The offline copy could not be saved. Try again when connected.';
     } finally {

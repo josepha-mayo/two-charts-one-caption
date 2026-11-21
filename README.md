@@ -83,6 +83,8 @@ Open **Chrome AI setup** while online. If Chrome needs the model, select **Prepa
 
 In the hosted app, select **Save app for offline use** from the same setup dialog and wait for **Offline copy saved**. Then you can close the tab and reopen the app offline on that browser. If Chrome’s model is installed and available, the app can also load the Firebase on-device route in the reopened tab. The offline copy contains the public app files and Firebase web configuration. Export a recheck file to keep reviewed work between tabs. Cloud review needs a connection.
 
+After an update, the save checks that the downloaded files match the release on screen. If setup asks you to close all Two Charts tabs, save your work and close those tabs so the new offline copy can take over. A failed download keeps the previously installed copy available.
+
 Local development on `127.0.0.1` supports the official App Check debug provider with `VITE_CHARTS_APP_CHECK_DEBUG_TOKEN` in a private `.env.development.local` file. Use an app-specific test token and revoke it when done. The production bundle requires a reCAPTCHA Enterprise site key. Keep debug credentials out of public assets and deployment archives.
 
 ## Current scope
