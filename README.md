@@ -50,7 +50,7 @@ Each link contains its own caption, category names, question, and random invitat
 
 Select **Save reader test** to continue later or on another browser. Under **Open a saved reader test**, choose the JSON file and review both captions before opening it. The original links and their collected responses carry over. Keep the JSON with the editor because it includes both captions, the answer, and individual selections. **Download results** gives a text summary for sharing.
 
-To load another chart, choose or paste a UTF-8 CSV up to 64 KB with a header. The two-column formats `category,percent` and `service,percent` load directly. For other layouts, choose the category and percentage columns. If the sheet contains several reporting periods or series, choose a separate row group column and one value. That group supplies the two to seven chart rows. Values match exactly after trimming surrounding whitespace. Use percentages such as `71.5` or `71.5%`, with up to two decimal places.
+To load another chart, choose or paste a UTF-8 CSV up to 64 KB with a header. The two-column formats `category,percent` and `service,percent` load directly. For other layouts, choose the category and percentage columns. If the sheet contains several reporting periods or series, choose a separate row group column and one value. That group supplies the 2 to 12 chart rows. Values match exactly after trimming surrounding whitespace. Use percentages such as `71.5` or `71.5%`, with up to two decimal places.
 
 Open **Save or open an editorial draft** to keep the loaded chart, wording, question, and any currently reviewed facts in one file. Reopen it in another browser or in a saved offline copy of Two Charts. The editor shows a preview and runs any saved review against the restored chart. The draft contains the selected chart values. Unused spreadsheet columns, private editor notes, and reader responses stay out of the file.
 
@@ -59,6 +59,8 @@ Open **Save or open an editorial draft** to keep the loaded chart, wording, ques
 After a successful check, choose **Copy for publishing**. Copy the caption into a CMS text field, select **Formatted caption and table** for an editor that accepts rich paste, or select **HTML with data table** for an HTML block. The table uses the selected CSV headings when available. The preview, HTML source, and standalone download use the same figure and carry its source attribution. [W3C guidance on descriptions for charts and other complex images](https://www.w3.org/WAI/tutorials/images/complex/)
 
 In the 70% example, resolve the caption and choose **Try a simulated data refresh** to run the same saved check with the example’s updated CSV. If exactly one supported answer sentence goes stale, the browser shows that sentence and a verified replacement. **Replace sentence and recheck** changes the quoted sentence. **Save recheck file** exports the newly checked wording. **Restore original example data** switches back while keeping the caption in the editor so it can be checked again.
+
+In the [BLS revision example](https://two-charts-caption-2026.web.app/?example=bls-revision), check which months fell below 3.9% across a full year of seasonally adjusted U.S. unemployment rates. Add the verified answer and select **Load the published BLS revision**. March moves from 3.8% to exactly 3.9% and drops out of the answer. July also changes, but stays above the cutoff. The review points to the one sentence that needs to change. The fixtures use the original and revised values from Table A and the first December estimate from the same release. [BLS December 2024 release](https://www.bls.gov/news.release/archives/empsit_01102025.htm)
 
 **Save recheck file** records the caption, question, category labels, and approved facts. To rerun it in the browser, load the newest CSV and open the file under **Rerun a saved check**. Paste the exact wording you plan to publish, or choose **Review saved caption** to inspect and restore the approved wording. You can run the loaded check again after editing or loading another CSV. Two Charts matches rows by category name, so reordering the CSV is safe. Changed caption text or category names need fresh review. The check file itself may include figures that were approved in the caption.
 
@@ -71,6 +73,12 @@ npm run verify-caption -- examples/bus-cutoff/caption-recheck.json examples/bus-
 Try replacing `current.csv` with the simulated `refreshed.csv`. Select Bus Service drops below 70% while the range and named extrema stay the same. The command returns the exact stale excerpt. Exit code 0 means the approved facts still determine the answer, 1 requests editorial review, and 2 indicates invalid input. Call `node scripts/verify-caption.mjs … --json` for machine-readable output without an npm script banner.
 
 When the selected facts resolve the question, the browser still shows wording it could not match to a complete checked fact. The proof and publishing dialog display those excerpts locally. The CLI reports their count. Add `--require-checked-wording` to request editorial review when any such wording remains.
+
+To reproduce the BLS release check in CI, run the example against `first-published.csv` for the original pass, then use `revised.csv` to see the stale sentence and exit code 1.
+
+```sh
+node scripts/verify-caption.mjs examples/bls-unemployment/caption-recheck.json examples/bls-unemployment/revised.csv examples/bls-unemployment/caption.txt --json
+```
 
 New recheck files remember the selected CSV headers when both headings are unique and nonempty. The browser shows the columns in use and requires the saved pair for that recheck. Place the columns anywhere in the next export. The CLI selects them by exact name automatically. For older files and files saved without unique headings, pass the exact, case-sensitive names you selected in the browser.
 
@@ -133,7 +141,7 @@ Local development on `127.0.0.1` supports the official App Check debug provider 
 
 ## Current scope
 
-Two to seven categories with percentage values and one question about rank, a cutoff, or the order of two named categories. The verifier supports ranges, individual values, extrema, cutoff lists, and pair comparisons. It treats percentages as exact within the app’s two-decimal domain. Gemini’s interpretation of free-form text requires review. The browser checks the approved claims and selected question.
+Two to twelve categories with percentage values and one question about rank, a cutoff, or the order of two named categories. The verifier supports ranges, individual values, extrema, cutoff lists, and pair comparisons. It treats percentages as exact within the app’s two-decimal domain. Gemini’s interpretation of free-form text requires review. The browser checks the approved claims and selected question.
 
 ## License
 

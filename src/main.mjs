@@ -12,6 +12,8 @@ import {saveOfflineApp} from './offline.mjs';
 import {sampleCsv, sampleCaption, cutoffCaption, sampleSource, foodExample, foodNationalExample, foodPairExample} from './sample.mjs';
 import {comparisonReport, reviewedDescription, reviewedFigure, reviewedFragment, reviewedText} from './report.mjs';
 import refreshedSampleCsv from '../examples/bus-cutoff/refreshed.csv?raw';
+import firstUnemploymentCsv from '../examples/bls-unemployment/first-published.csv?raw';
+import revisedUnemploymentCsv from '../examples/bls-unemployment/revised.csv?raw';
 import {
   addReaderResponse, createReaderLink, createReaderTest, encodeResponse, readReaderLink,
   maxReaderTestFileBytes, readReaderTestFile, readerCounts, readerResponseId, restoreReaderTest, saveReaderTest, writeReaderTestFile,
@@ -26,7 +28,6 @@ const csv = el('csv');
 const dialog = el('dialog');
 const status = el('status');
 const requestedExample = new URLSearchParams(location.search).get('example');
-const startingExample = ['cutoff', 'food', 'food-national', 'food-pair'].includes(requestedExample) ? requestedExample : 'bus';
 let rows, result, reviewed, candidate, snapshot;
 let firebaseConnection;
 let cloudOperation;
@@ -46,9 +47,36 @@ const originalExample = {
 };
 const refreshedExample = {
   label: 'Simulated bus report refresh',
+  csv: refreshedSampleCsv,
   sourceUrl: sampleSource,
   sourceCitation: 'Simulated data refresh based on the NYC Comptroller’s bus report, Table 3.',
 };
+const unemploymentExample = {
+  label: '2024 U.S. unemployment rates as first published',
+  csv: firstUnemploymentCsv,
+  caption: 'January had the lowest rate, at 3.7%.',
+  question: {type: 'below', cutoff: 3.9},
+  brief: 'Before the chart goes live, check which months fell below a 3.9% unemployment rate. Keep this editing note private.',
+  sourceUrl: 'https://www.bls.gov/news.release/archives/empsit_01102025.htm',
+  sourceCitation: 'U.S. Bureau of Labor Statistics · Seasonally adjusted 2024 rates as first published, Table A and December release',
+};
+const revisedUnemployment = {
+  ...unemploymentExample,
+  label: 'BLS January 2025 revision of 2024 data',
+  csv: revisedUnemploymentCsv,
+  sourceCitation: 'U.S. Bureau of Labor Statistics · Seasonally adjusted 2024 rates after annual revision, Table A and December release',
+};
+const examples = new Map([
+  ['bus', originalExample], ['cutoff', originalExample], ['food', foodExample],
+  ['food-national', foodNationalExample], ['food-pair', foodPairExample], ['bls-revision', unemploymentExample],
+]);
+const startingExample = examples.has(requestedExample) ? requestedExample : 'bus';
+const exampleRefreshes = [
+  {before: originalExample, after: refreshedExample, question: {type: 'atLeast', cutoff: 70},
+    apply: 'Try a simulated data refresh', restore: 'Restore original example data'},
+  {before: unemploymentExample, after: revisedUnemployment, question: unemploymentExample.question,
+    apply: 'Load the published BLS revision', restore: 'Restore first-published BLS rates'},
+];
 const pastedCsv = {label: 'Pasted CSV'};
 let chartSource = originalExample;
 let exampleReview;
@@ -141,9 +169,14 @@ function noCutoffMatches(type) {
   return type === 'below' ? 'None fall below the cutoff' : 'None reach the cutoff';
 }
 
-function chart(target, values, ids, selected, compareToSource = false) {
+function sharedChartScale(source, alternate, selected) {
+  const highest = Math.max(...source, ...(alternate ?? []), selected?.cutoff ?? 0);
+  return [1, 2, 5, 10, 20, 40, 60, 80, 100].find(limit => limit >= highest);
+}
+
+function chart(target, values, ids, selected, scale, compareToSource = false) {
   const axis = make('div', undefined, 'axis');
-  for (const label of ['0%', '25%', '50%', '75%', '100%']) axis.append(make('span', label));
+  for (let tick = 0; tick <= 4; tick += 1) axis.append(make('span', `${tick * scale / 4}%`));
   axis.setAttribute('aria-hidden', 'true');
   const list = make('ul', undefined, 'bars');
   rows.forEach(({label}, i) => {
@@ -158,11 +191,11 @@ function chart(target, values, ids, selected, compareToSource = false) {
     const track = make('span', undefined, 'track');
     track.setAttribute('aria-hidden', 'true');
     const bar = make('span', undefined, 'bar');
-    bar.style.inlineSize = `${values[i]}%`;
+    bar.style.inlineSize = `${values[i] / scale * 100}%`;
     track.append(bar);
     if (isCutoffClaim(selected)) {
       const rule = make('span', undefined, 'cutoff-line');
-      rule.style.insetInlineStart = `${selected.cutoff}%`;
+      rule.style.insetInlineStart = `${selected.cutoff / scale * 100}%`;
       track.append(rule);
     }
     const value = make('strong', `${values[i]}%`, 'value');
@@ -192,12 +225,20 @@ function categoryChoice(label, className) {
   return {input, option};
 }
 
+function currentExampleRefresh() {
+  return exampleRefreshes.find(({before, after}) => chartSource === before || chartSource === after);
+}
+
 function updateExampleRefresh() {
-  const restoring = chartSource === refreshedExample;
-  const eligible = chartSource === originalExample && result?.status === 'explicit' &&
-    question.value === 'atLeast' && cutoff.valueAsNumber === 70;
+  const demo = currentExampleRefresh();
+  const restoring = demo && chartSource === demo.after;
+  const eligible = demo && result?.status === 'explicit' &&
+    question.value === demo.question.type && cutoff.valueAsNumber === demo.question.cutoff;
   el('example-refresh-panel').hidden = !restoring && !eligible;
-  el('example-refresh').textContent = restoring ? 'Restore original example data' : 'Try a simulated data refresh';
+  el('example-data-changes').hidden = !restoring;
+  if (!restoring && !eligible) return;
+  el('example-refresh').textContent = restoring ? demo.restore : demo.apply;
+  if (restoring) renderRateChanges(el('example-data-rates'), rows.map(row => row.value), readChart(demo.before.csv));
 }
 
 function invalidate() {
@@ -233,6 +274,7 @@ function invalidate() {
   el('recheck-source').textContent = 'Data in use · ' + chartSource.label +
     (columns ? ' · ' + columns.rate + ' by ' + columns.category : '') + (group ? ' · ' + group : '');
   el('source-chart-title').textContent = chartSource === refreshedExample ? 'Simulated data refresh'
+    : chartSource === revisedUnemployment ? 'Revised BLS rates'
     : group ? 'Source chart · ' + group : 'Source chart';
   updateExampleRefresh();
   const showCutoff = isCutoffClaim({type: question.value});
@@ -364,7 +406,7 @@ function renderSource() {
 
 function loadSample(key) {
   clearCsvMapping();
-  chartSource = {food: foodExample, 'food-national': foodNationalExample, 'food-pair': foodPairExample}[key] ?? originalExample;
+  chartSource = examples.get(key) ?? originalExample;
   exampleReview = null;
   el('example-select').value = key;
   csv.value = chartSource.csv;
@@ -474,8 +516,8 @@ function witnessAnswer(selected, ids) {
   return answerText(rows, ids) + (selected?.type === 'pair' && ids.length === 2 ? ' (tie)' : '');
 }
 
-function renderRateChanges(list, alternate) {
-  const changes = rows.flatMap(({label, value}, i) => {
+function renderRateChanges(list, alternate, baseline = rows) {
+  const changes = baseline.flatMap(({label, value}, i) => {
     if (value === alternate[i]) return [];
     const item = make('li');
     item.append(make('strong', label), make('span', `${value}% to ${alternate[i]}%`));
@@ -584,8 +626,10 @@ function render(claims, alternatives = [], note = 'Browser check') {
   const selected = selectedQuestion();
   result = checkCaption(rows, selected, claims, alternatives);
   const {expected, alternate, alternateAnswer} = result;
+  const sourceValues = rows.map(row => row.value);
+  const scale = sharedChartScale(sourceValues, alternate, selected);
   renderWitness(selected, expected, alternate, alternateAnswer);
-  chart(el('actual'), rows.map(row => row.value), expected, selected);
+  chart(el('actual'), sourceValues, expected, selected, scale);
   const names = answerText(rows, expected);
   const state = result.status;
   const resolved = canPublish();
@@ -628,7 +672,7 @@ function render(claims, alternatives = [], note = 'Browser check') {
       : 'Your selection differs from the checked answer. ';
   }
   status.textContent = feedback + text[state];
-  if (alternate) chart(el('alternate'), alternate, alternateAnswer, selected, true);
+  if (alternate) chart(el('alternate'), alternate, alternateAnswer, selected, scale, true);
   else el('alternate').replaceChildren(make('p', state === 'explicit' || state === 'implied'
     ? 'The caption decides this question.' : 'No alternate is shown for this check.', 'empty'));
   if (state !== 'conflict') {
@@ -718,7 +762,9 @@ function applyChart(chart, input, source, columns) {
   csv.value = input;
   if (!source.sourceUrl) {
     exampleReview = null;
-    if ([sampleCaption, cutoffCaption, foodExample.caption].includes(caption.value)) caption.value = '';
+    if (caption.value === cutoffCaption || [...examples.values()].some(example => example.caption === caption.value)) {
+      caption.value = '';
+    }
   }
   invalidate();
   renderSource();
@@ -1470,15 +1516,16 @@ el('apply-stale-repair').addEventListener('click', () => {
   }
 });
 el('example-refresh').addEventListener('click', () => {
-  const restoring = chartSource === refreshedExample;
+  const refresh = currentExampleRefresh();
+  if (!refresh || busy) return;
+  const restoring = chartSource === refresh.after;
   try {
     const demo = restoring ? exampleReview : {
       check: createPublishCheck(rows, selectedQuestion(), caption.value, reviewed),
       readerTest: pendingReaderTest,
     };
-    const data = restoring ? sampleCsv : refreshedSampleCsv;
-    const source = restoring ? originalExample : refreshedExample;
-    applyChart(readChart(data), data, source);
+    const source = restoring ? refresh.before : refresh.after;
+    applyChart(readChart(source.csv), source.csv, source);
     exampleReview = restoring ? null : demo;
     runSavedCheck(demo.check, status);
     if (restoring && result?.status === 'explicit' && demo.readerTest) {

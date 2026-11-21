@@ -27,6 +27,7 @@
             <option value="food">Food insecurity by region</option>
             <option value="food-national">Food insecurity vs. U.S. rate</option>
             <option value="food-pair">Midwest vs. West food insecurity</option>
+            <option value="bls-revision">U.S. unemployment · BLS revision</option>
           </select>
           <button type="button" id="example">Load example</button>
         </div>
@@ -129,6 +130,10 @@
         </select>
         <ul id="coverage-questions"></ul>
       </details>
+      <section id="example-data-changes" aria-labelledby="example-data-changes-title" hidden>
+        <h3 id="example-data-changes-title">Rates that changed in this release</h3>
+        <ul id="example-data-rates" class="rate-changes"></ul>
+      </section>
       <section id="stale-repair" aria-labelledby="stale-repair-title" hidden>
         <h3 id="stale-repair-title">Update the stale sentence</h3>
         <dl>
@@ -225,7 +230,7 @@
       <label for="csv-file">Choose a CSV file</label>
       <input id="csv-file" type="file" accept=".csv,text/csv">
       <label for="csv">Or paste CSV</label>
-      <p id="csv-help">Choose chart columns and, if needed, a row group such as one reporting period. The chart uses two to seven rows.</p>
+      <p id="csv-help">Choose chart columns and, if needed, a row group such as one reporting period. The chart uses 2 to 12 rows.</p>
       <textarea id="csv" rows="6" spellcheck="false" aria-describedby="csv-help"></textarea>
       <button type="button" id="load">Load chart</button>
       <fieldset id="csv-columns" hidden>

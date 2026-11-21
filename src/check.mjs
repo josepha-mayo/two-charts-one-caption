@@ -1,3 +1,4 @@
+import {maxChartRows} from './csv.mjs';
 export {readChart} from './csv.mjs';
 
 const validPercent = value =>
@@ -26,7 +27,7 @@ function readPairIds(ids, size) {
   return [...ids].sort((a, b) => a - b);
 }
 
-export function readQuestion(question, size = 7) {
+export function readQuestion(question, size = maxChartRows) {
   if (question === 'lowest' || question === 'highest') return question;
   if (question?.type === 'pair') return {type: 'pair', ids: readPairIds(question.ids, size)};
   if ((question?.type === 'atLeast' || question?.type === 'below') && validPercent(question.cutoff)) {
@@ -133,10 +134,6 @@ export function fitsClaim(values, claim) {
     (claim.value === undefined || values[claim.ids[0] - 1] === claim.value);
 }
 
-function maskOf(ids) {
-  return ids.reduce((mask, id) => mask | (1 << (id - 1)), 0);
-}
-
 const points = percent => Math.round(percent * 100);
 
 // Each edge means that "to" is at least "from" plus this many hundredths.
@@ -146,8 +143,21 @@ function pairEdges({ids: [first, second], higher}) {
   return [[lower - 1, higher - 1, 1]];
 }
 
-function fitPairs(candidate, intervals, edges) {
-  if (edges.every(([from, to, delta]) => candidate[to] >= candidate[from] + delta)) return candidate;
+function rankEdges({type, ids: [first, ...tied]}, size) {
+  const anchor = first - 1;
+  const edges = tied.flatMap(id => [[anchor, id - 1, 0], [id - 1, anchor, 0]]);
+  for (let i = 0; i < size; i++) {
+    if (i === anchor || tied.includes(i + 1)) continue;
+    edges.push(type === 'highest' ? [i, anchor, 1] : [anchor, i, 1]);
+  }
+  return edges;
+}
+
+function fitsEdges(values, edges) {
+  return edges.every(([from, to, delta]) => values[to] >= values[from] + delta);
+}
+
+function leastSolution(intervals, edges) {
   const minimum = intervals.map(([lower]) => lower);
   // Propagate lower bounds. An update after n-1 passes would require a positive cycle.
   for (let pass = 0; pass < minimum.length; pass += 1) {
@@ -164,19 +174,32 @@ function fitPairs(candidate, intervals, edges) {
   return null;
 }
 
-// Each named value or cutoff narrows a category's integer interval. For a
-// pair of extremum groups, the smallest permitted minimum and the largest
-// permitted maximum give every interior category the most room.
-function intervalWitness(actual, claims, movable, acceptGroups = () => true, {index, bound, extraEdges = [], radius = 10000} = {}) {
-  const full = (1 << actual.length) - 1;
-  const requiredLow = maskOf(claims.find(claim => claim.type === 'lowest')?.ids ?? []);
-  const requiredHigh = maskOf(claims.find(claim => claim.type === 'highest')?.ids ?? []);
+// A quoted range requires at least one occurrence of each endpoint. Pin a
+// possible maximum at a time. If its componentwise least solution has no
+// bar at the minimum, no larger solution with that maximum can attain it.
+function fitRange(intervals, edges, min, max) {
+  for (const [i, [, upper]] of intervals.entries()) {
+    if (upper !== max) continue;
+    const pinned = intervals.slice();
+    pinned[i] = [max, max];
+    const values = leastSolution(pinned, edges);
+    if (values?.includes(min)) return values;
+  }
+  return null;
+}
+
+function intervalWitness(actual, claims, movable, {index, bound, extraEdges = [], radius = 10000} = {}) {
   const range = claims.find(claim => claim.type === 'range');
   const minBound = range ? points(range.min) : 0;
   const maxBound = range ? points(range.max) : 10000;
   const sourcePoints = actual.map(points);
   const bounds = actual.map(() => [minBound, maxBound]);
-  const edges = [...claims.filter(claim => claim.type === 'pair').flatMap(pairEdges), ...extraEdges];
+  const edges = [
+    ...claims.filter(claim => claim.type === 'pair').flatMap(pairEdges),
+    ...claims.filter(claim => claim.type === 'lowest' || claim.type === 'highest')
+      .flatMap(claim => rankEdges(claim, actual.length)),
+    ...extraEdges,
+  ];
   for (const claim of claims) {
     if (claim.value === undefined) continue;
     const pinned = points(claim.value);
@@ -204,73 +227,43 @@ function intervalWitness(actual, claims, movable, acceptGroups = () => true, {in
     bounds[index] = [Math.max(lower, bound[0]), Math.min(upper, bound[1])];
   }
   if (bounds.some(([lower, upper]) => lower > upper)) return null;
-  // A contradiction among pair comparisons also rules out every choice of extrema.
-  if (edges.length && !fitPairs(bounds.map(([lower]) => lower), bounds, edges)) return null;
-
-  for (let low = requiredLow || 1; low <= (requiredLow || full); low += 1) {
-    // A non-flat chart needs disjoint extrema. Visit only subsets of the
-    // available categories, in ascending order to keep witness selection stable.
-    const available = full ^ low;
-    const firstHigh = requiredHigh || (available & -available) || full;
-    for (let high = firstHigh; high; high = requiredHigh || !available ? 0 : (high - available) & available) {
-      const flat = low === full && high === full;
-      if (((low & high) && !flat) || !acceptGroups(low, high)) continue;
-      let min = minBound;
-      let max = maxBound;
-      for (const [i, [lower, upper]] of bounds.entries()) {
-        const bit = 1 << i;
-        if (low & bit) min = Math.max(min, lower);
-        if (high & bit) max = Math.min(max, upper);
-      }
-      if (range && (min !== minBound || max !== maxBound)) continue;
-      if (flat) {
-        if (min <= max && (!range || min === max) && edges.every(([, , delta]) => delta === 0)) {
-          return actual.map(() => min / 100);
-        }
-        continue;
-      }
-      if (min >= max) continue;
-      const candidate = [];
-      const intervals = [];
-      for (const [i, [lower, upper]] of bounds.entries()) {
-        const bit = 1 << i;
-        const floor = low & bit ? min : high & bit ? max : min + 1;
-        const ceiling = low & bit ? min : high & bit ? max : max - 1;
-        const from = Math.max(floor, lower);
-        const to = Math.min(ceiling, upper);
-        if (from > to) break;
-        candidate.push(Math.max(from, Math.min(to, sourcePoints[i])));
-        if (edges.length) intervals.push([from, to]);
-      }
-      if (candidate.length !== actual.length) continue;
-      const checked = edges.length ? fitPairs(candidate, intervals, edges) : candidate;
-      if (checked) return checked.map(value => value / 100);
-    }
-  }
-  return null;
+  const reachesEndpoints = values => !range || (values.includes(minBound) && values.includes(maxBound));
+  const clamped = bounds.map(([lower, upper], i) => Math.max(lower, Math.min(upper, sourcePoints[i])));
+  if (fitsEdges(clamped, edges) && reachesEndpoints(clamped)) return clamped.map(value => value / 100);
+  const least = leastSolution(bounds, edges);
+  if (!least) return null;
+  if (reachesEndpoints(least)) return least.map(value => value / 100);
+  if (!least.includes(minBound)) return null;
+  return fitRange(bounds, edges, minBound, maxBound)?.map(value => value / 100) ?? null;
 }
 
 function alternateIntervals(actual, claims, expected, question, movable, radius) {
   if (typeof question === 'string') {
-    const expectedMask = maskOf(expected);
-    return intervalWitness(actual, claims, movable, (low, high) => (question === 'lowest' ? low : high) !== expectedMask, {radius});
+    // A changed set of winners violates at least one of its defining
+    // equalities or strict comparisons. Negate one edge at a time.
+    for (const [from, to, delta] of rankEdges({type: question, ids: expected}, actual.length)) {
+      if (!(movable & ((1 << from) | (1 << to)))) continue;
+      const witness = intervalWitness(actual, claims, movable, {radius, extraEdges: [[to, from, 1 - delta]]});
+      if (witness) return witness;
+    }
+    return null;
   }
   if (question.type === 'pair') {
     const [first, second] = question.ids;
     if (expected.length === 2) {
-      return intervalWitness(actual, claims, movable, undefined, {radius, extraEdges: [[first - 1, second - 1, 1]]}) ??
-        intervalWitness(actual, claims, movable, undefined, {radius, extraEdges: [[second - 1, first - 1, 1]]});
+      return intervalWitness(actual, claims, movable, {radius, extraEdges: [[first - 1, second - 1, 1]]}) ??
+        intervalWitness(actual, claims, movable, {radius, extraEdges: [[second - 1, first - 1, 1]]});
     }
     const winner = expected[0];
     const other = winner === first ? second : first;
-    return intervalWitness(actual, claims, movable, undefined, {radius, extraEdges: [[winner - 1, other - 1, 0]]});
+    return intervalWitness(actual, claims, movable, {radius, extraEdges: [[winner - 1, other - 1, 0]]});
   }
   const cutoff = points(question.cutoff);
   // A different answer must change the membership of at least one category.
   for (const [i, value] of actual.entries()) {
     if (!(movable & (1 << i))) continue;
     const opposite = value >= question.cutoff ? [0, cutoff - 1] : [cutoff, 10000];
-    const candidate = intervalWitness(actual, claims, movable, undefined, {index: i, bound: opposite, radius});
+    const candidate = intervalWitness(actual, claims, movable, {index: i, bound: opposite, radius});
     if (candidate) return candidate;
   }
   return null;
@@ -341,10 +334,17 @@ function fewestChanges(actual, claims, expected, question, best) {
   const full = (1 << actual.length) - 1;
   best = preferWitness(best, alternateIntervals(actual, claims, expected, question, full), 'browser', actual);
   if (!best || best.changedCategories <= 2) return best;
+  const tiedGroups = claims.filter(claim => claim.type === 'pair' ? claim.higher === 0
+    : (claim.type === 'highest' || claim.type === 'lowest') && claim.ids.length > 1)
+    .map(claim => claim.ids.reduce((mask, id) => mask | (1 << (id - 1)), 0));
   const masksBySize = Array.from({length: actual.length}, () => []);
   for (let mask = 1; mask < full; mask += 1) {
-    const size = actual.filter((_, index) => mask & (1 << index)).length;
-    masksBySize[size].push(mask);
+    // All members already have the same value. Changing only part of
+    // a required tie cannot yield a chart that keeps the approved fact.
+    if (tiedGroups.some(group => (mask & group) !== 0 && (mask & group) !== group)) continue;
+    let size = 0;
+    for (let bits = mask; bits; bits &= bits - 1) size += 1;
+    if (size < best.changedCategories) masksBySize[size].push(mask);
   }
   // Pin all bars outside each subset. Once a size works, every smaller
   // subset has already been ruled out.
@@ -468,7 +468,7 @@ function matchingLists(rows, subjects, single, quoted) {
 }
 
 export function readCategoryList(rows, subjects, single) {
-  const named = /^(?:[Tt]he category |[Tt]he ([2-7]) categories )(?=")/.exec(subjects);
+  const named = /^(?:[Tt]he category |[Tt]he (\d+) categories )(?=")/.exec(subjects);
   const names = named ? subjects.slice(named[0].length) : subjects;
   if (names.startsWith('"')) {
     const [quoted] = matchingLists(rows, names, single, true);

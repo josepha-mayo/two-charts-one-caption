@@ -1,5 +1,6 @@
 const percent = /^\d{1,3}(?:\.\d{1,2})?\s*%?$/;
 export const maxCsvBytes = 64_000;
+export const maxChartRows = 12;
 const validFilterValue = value => typeof value === 'string' && value.trim() === value && value.length > 0 &&
   value.length <= 128 && !/[\r\n]/.test(value);
 
@@ -76,9 +77,9 @@ export function readChartRows(table, {category, rate, filter} = {}) {
     }
     selected = records.filter(({cells}) => cells[column] === value);
   }
-  if (selected.length < 2 || selected.length > 7) {
-    throw Error(filter ? `The selected group has ${selected.length} rows. Choose a group of two to seven categories.`
-      : 'Choose two to seven categories, or select a row group.');
+  if (selected.length < 2 || selected.length > maxChartRows) {
+    throw Error(filter ? `The selected group has ${selected.length} rows. Choose a group of 2 to ${maxChartRows} categories.`
+      : `Choose 2 to ${maxChartRows} categories, or select a row group.`);
   }
   const seen = new Set();
   return selected.map(({cells, line}) => {

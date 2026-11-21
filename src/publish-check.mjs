@@ -2,7 +2,7 @@ import {
   answer, answerText, checkCaption, fitsClaim, isCutoffClaim, questionText, readQuestion, sameAnswer, statesAnswer, supportedDetail, validateClaims,
 } from './check.mjs';
 import {checkText, localFacts, readQuotedCutoff, readQuotedFact, unverifiedCaptionExcerpts, withQuotedRankValue} from './draft.mjs';
-import {readColumnNames, rowScope} from './csv.mjs';
+import {maxChartRows, readColumnNames, rowScope} from './csv.mjs';
 
 function normalizeCaption(text) {
   if (typeof text !== 'string') throw Error('The check needs the reviewed caption text.');
@@ -16,10 +16,10 @@ export function createPublishCheck(rows, question, caption, claims, columns) {
 export function readPublishCheck(check) {
   if (check?.version !== 1) throw Error('Use a Two Charts recheck file with version 1.');
   const {labels} = check;
-  if (!Array.isArray(labels) || labels.length < 2 || labels.length > 7 ||
+  if (!Array.isArray(labels) || labels.length < 2 || labels.length > maxChartRows ||
       !labels.every(label => typeof label === 'string' && label.trim() === label && label && label.length <= 64) ||
       new Set(labels.map(label => label.normalize('NFKC').toLowerCase())).size !== labels.length) {
-    throw Error('The recheck file needs two to seven unique chart categories.');
+    throw Error(`The recheck file needs 2 to ${maxChartRows} unique chart categories.`);
   }
   const caption = normalizeCaption(check.caption);
   const question = readQuestion(check.question, labels.length);

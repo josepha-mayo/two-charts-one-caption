@@ -45,5 +45,5 @@ test('row groups bind to unique headers and validate only their selected chart r
   ]);
   assert.throws(() => readChart(csv, {...columns, filter:{...columns.filter, value:'2025'}}), /Line 7/);
   assert.throws(() => readChart(csv, {...columns, filter:{column:'Period',value:'2026'}}), /selected group has 0 rows/);
-  assert.throws(() => readChart(csv, {category:'Region',rate:'Rate'}), /select a row group/);
+  assert.throws(() => readChart(csv, {category:'Region',rate:'Rate'}), /repeats a category/);
 });

@@ -1,5 +1,6 @@
 import {checkText} from './draft.mjs';
 import {isCutoffClaim, readQuestion, sameAnswer} from './check.mjs';
+import {maxChartRows} from './csv.mjs';
 
 const PREFIX = '#reader=';
 const RESPONSE_PREFIX = 'two-charts-v1.';
@@ -26,7 +27,7 @@ export function readReaderLink(hash) {
 
 function readPacket(packet) {
   if (!packet || typeof packet.caption !== 'string' ||
-      !Array.isArray(packet.labels) || packet.labels.length < 2 || packet.labels.length > 7 ||
+      !Array.isArray(packet.labels) || packet.labels.length < 2 || packet.labels.length > maxChartRows ||
       !packet.labels.every(label => typeof label === 'string' && label.trim() && label.length <= 64) ||
       new Set(packet.labels.map(label => label.normalize('NFKC').toLowerCase())).size !== packet.labels.length) {
     throw Error('This reader link has an invalid question or category list.');
@@ -54,7 +55,7 @@ function readSelection(ids, {size, allowNone, pair}, allowUnknown) {
   return ids;
 }
 
-function readResponse(response, rules = {size: 7, allowNone: true}) {
+function readResponse(response, rules = {size: maxChartRows, allowNone: true}) {
   if (!response || typeof response !== 'object') throw Error('Invalid reader response.');
   return {
     invitation: readId(response.invitation),
