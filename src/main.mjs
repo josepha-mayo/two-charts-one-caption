@@ -1,6 +1,6 @@
 import './style.css';
 import {
-  readChart, checkCaption, captionCoverage, smallestAnswerShift, validateClaims, answerText, isCutoffClaim, sameAnswer, supportedDetail, fitsClaim, questionText, readQuestion,
+  readChart, checkCaption, captionCoverage, answerSupport, smallestAnswerShift, validateClaims, answerText, isCutoffClaim, sameAnswer, supportedDetail, fitsClaim, questionText, readQuestion,
 } from './check.mjs';
 import {localFacts, cloudPrompt, localPrompt, checkText, answerConstraint, reviewCloudClaims, unverifiedCaptionExcerpts} from './draft.mjs';
 import {defaultChartColumns, readChartRows, readCsvTable} from './csv.mjs';
@@ -482,6 +482,44 @@ function renderRateChanges(list, alternate) {
   list.replaceChildren(...changes);
 }
 
+const supportPanel = el('answer-support');
+const supportSummary = el('support-summary');
+const supportExcerpts = el('support-excerpts');
+const supportOmitted = el('support-omitted');
+
+supportPanel.addEventListener('toggle', () => {
+  if (!supportPanel.open || !canPublish() || supportSummary.textContent) return;
+  try {
+    const selected = selectedQuestion();
+    const proof = answerSupport(rows, selected, reviewed);
+    if (!proof) throw Error('The answer support could not be verified.');
+    const count = proof.essential.length;
+    supportSummary.textContent = count
+      ? `${count === 1 ? 'This excerpt determines' : 'These excerpts together determine'} the answer. Open each to see what changes if its facts are removed from this proof.`
+      : 'The answer follows from the question and the 0–100% rate range alone.';
+    supportExcerpts.replaceChildren(...proof.essential.map(({excerpt, alternate, alternateAnswer}) => {
+      const item = make('li');
+      const details = make('details');
+      const heading = make('summary');
+      heading.append(make('q', excerpt));
+      const changes = make('ul', undefined, 'rate-changes');
+      renderRateChanges(changes, alternate);
+      details.append(heading, make('p', `Without this excerpt, the other facts in this proof also allow ${witnessAnswer(selected, alternateAnswer)}.`), changes);
+      item.append(details);
+      return item;
+    }));
+    supportOmitted.hidden = !proof.omitted.length;
+    supportOmitted.querySelector('summary').textContent = `${proof.omitted.length} other checked excerpt${proof.omitted.length === 1 ? '' : 's'} outside this proof`;
+    supportOmitted.querySelector('ul').replaceChildren(...proof.omitted.map(excerpt => {
+      const item = make('li');
+      item.append(make('q', excerpt));
+      return item;
+    }));
+  } catch (error) {
+    supportSummary.textContent = error.message;
+  }
+});
+
 const shiftAnalysis = el('shift-analysis');
 const shiftSummary = el('shift-summary');
 const shiftAnswer = el('shift-answer');
@@ -537,6 +575,12 @@ function render(claims, alternatives = [], note = 'Browser check') {
   const names = answerText(rows, expected);
   const state = result.status;
   const resolved = canPublish();
+  supportPanel.hidden = !resolved;
+  supportPanel.open = false;
+  supportSummary.textContent = '';
+  supportExcerpts.replaceChildren();
+  supportOmitted.hidden = true;
+  supportOmitted.open = false;
   coverage = null;
   coveragePanel.hidden = state === 'conflict';
   coveragePanel.open = false;

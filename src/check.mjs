@@ -402,6 +402,40 @@ export function captionCoverage(rows, claims) {
   });
 }
 
+export function answerSupport(rows, question, claims) {
+  const actual = rows.map(row => row.value);
+  const selected = readQuestion(question, rows.length);
+  const expected = answerValues(actual, selected);
+  if (!fits(actual, claims)) return null;
+  const full = (1 << rows.length) - 1;
+  function findAlternate(facts) {
+    if (facts.some(fact => statesAnswer(fact, selected))) return null;
+    const witness = alternateIntervals(actual, facts, expected, selected, full);
+    if (!witness) return null;
+    const qualifies = values => fits(values, facts) && !sameAnswer(answerValues(values, selected), expected);
+    if (!qualifies(witness)) {
+      throw Error('The answer support could not be verified.');
+    }
+    const alternate = oneCategoryWitness(actual, facts, selected, qualifies)?.alternate ?? witness;
+    return {alternate, alternateAnswer: answerValues(alternate, selected)};
+  }
+  if (findAlternate(claims)) return null;
+  const excerpts = new Set(claims.map(claim => claim.evidence));
+  const direct = claims.find(claim => statesAnswer(claim, selected));
+  const retained = new Set(direct ? [direct.evidence] : excerpts);
+  const essential = [];
+  for (const excerpt of excerpts) {
+    if (!retained.delete(excerpt)) continue;
+    const witness = findAlternate(claims.filter(claim => retained.has(claim.evidence)));
+    if (witness) {
+      // This counterexample also satisfies any smaller set of remaining facts.
+      retained.add(excerpt);
+      essential.push({excerpt, ...witness});
+    }
+  }
+  return {essential, omitted: [...excerpts].filter(excerpt => !retained.has(excerpt))};
+}
+
 function formatLabels(rows, ids, quoted = false) {
   return listFormat.format(ids.map(id => {
     const label = rows[id - 1].label;

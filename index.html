@@ -103,12 +103,22 @@
       </div>
       <p id="proof-summary"></p>
       <ul id="proof-facts"></ul>
+      <details class="proof-detail" id="answer-support" hidden>
+        <summary>Find the excerpts that support this answer</summary>
+        <p id="support-summary" role="status"></p>
+        <ul id="support-excerpts"></ul>
+        <details id="support-omitted" hidden>
+          <summary></summary>
+          <ul></ul>
+          <p>Recheck rewritten wording before publishing.</p>
+        </details>
+      </details>
       <details class="unchecked-wording" id="proof-wording" hidden>
         <summary>Review wording outside the browser check</summary>
         <p>The browser could not independently match these excerpts to a complete checked fact.</p>
         <ul></ul>
       </details>
-      <details class="caption-coverage" id="caption-coverage" hidden>
+      <details class="proof-detail caption-coverage" id="caption-coverage" hidden>
         <summary>See what else this caption answers</summary>
         <p>Explore the highest and lowest rates and each head-to-head comparison using the same checked facts.</p>
         <p id="coverage-count" role="status"></p>

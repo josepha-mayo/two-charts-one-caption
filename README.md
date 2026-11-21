@@ -32,6 +32,8 @@ After revealing a gap, choose **Download proof with chart data**. The HTML file 
 
 Under **What the words actually prove**, choose **See what else this caption answers** to check the highest rate, lowest rate, and every pair using the same reviewed facts. Pick a question to open its individual proof. This is a coverage check for those questions, so an editorial cutoff can still be checked separately.
 
+When an answer is determined, **Find the excerpts that support this answer** finds one sufficient set of checked excerpts. Open each quote to see a chart that could change the answer if that quote's facts were left out of the set. This helps plan shorter wording. Run a new check after rewriting the caption.
+
 ## Try a reader test
 
 1. Reveal an ambiguous caption, add the verified detail, and create before and after links.

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import {answer, captionCoverage, checkCaption, fits, readChart, smallestAnswerShift, supportedDetail, validateClaims} from '../src/check.mjs';
+import {answer, answerSupport, captionCoverage, checkCaption, fits, readChart, smallestAnswerShift, supportedDetail, validateClaims} from '../src/check.mjs';
 import {questionPrompt, readQuestionDraft} from '../src/brief.mjs';
 import {localFacts, localPrompt, reviewCloudClaims} from '../src/draft.mjs';
 import {createPublishCheck, runPublishCheck, suggestPublishRepair} from '../src/publish-check.mjs';
@@ -161,4 +161,38 @@ test('caption coverage agrees with the individual proof across all seven-categor
     }
   }
   assert.deepEqual(captionCoverage(chart, [{...range, max: 57}]), []);
+});
+
+test('an inferred comparison retains both links in its proof and verifies both omission witnesses', () => {
+  const background = 'Rates ranged from 12.2% to 15%.';
+  const southMidwest = 'South had a higher rate than Midwest.';
+  const midwestWest = 'Midwest had a higher rate than West.';
+  const selected = {type: 'pair', ids: [3, 4]};
+  const facts = localFacts(rows, [background, southMidwest, midwestWest].join(' '));
+  const proof = answerSupport(rows, selected, facts);
+  assert.deepEqual(proof.essential.map(item => item.excerpt), [southMidwest, midwestWest]);
+  assert.deepEqual(proof.omitted, [background]);
+  const retained = facts.filter(fact => !proof.omitted.includes(fact.evidence));
+  assert.equal(checkCaption(rows, selected, retained).status, 'implied');
+  for (const {excerpt, alternate, alternateAnswer} of proof.essential) {
+    const remaining = retained.filter(fact => fact.evidence !== excerpt);
+    assert.ok(fits(alternate, remaining));
+    assert.deepEqual(alternateAnswer, answer(alternate, selected));
+    assert.notDeepEqual(alternateAnswer, [3]);
+    assert.equal(checkCaption(rows, selected, remaining).status, 'ambiguous');
+  }
+});
+
+test('support groups multiple facts from one quote and handles a cutoff resolved by the domain', () => {
+  const chart = readChart('category,percent\nNorth,40\nSouth,60');
+  const quote = 'North and South reported 40% and 60%, respectively.';
+  const facts = [
+    {type:'value', id:1, value:40, evidence:quote},
+    {type:'value', id:2, value:60, evidence:quote},
+  ];
+  const pair = {type:'pair', ids:[1, 2]};
+  assert.deepEqual(answerSupport(chart, pair, facts).essential.map(item => item.excerpt), [quote]);
+  assert.deepEqual(answerSupport(chart, {type:'atLeast', cutoff:0}, facts), {essential:[], omitted:[quote]});
+  assert.equal(answerSupport(chart, pair, []), null);
+  assert.equal(answerSupport(chart, pair, [{...facts[0], value:39}, facts[1]]), null);
 });

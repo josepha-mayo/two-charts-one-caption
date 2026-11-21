@@ -243,8 +243,13 @@ dialog p a { color: var(--cool); text-underline-offset: 3px; }
 .unchecked-wording summary { color: var(--gold); cursor: pointer; font-weight: 650; }
 .unchecked-wording p { color: var(--muted); margin-block: 6px; }
 .unchecked-wording ul { padding-inline-start: 20px; overflow-wrap: anywhere; }
-.caption-coverage { margin-top: 14px; border-block-start: 1px solid var(--line); padding-top: 9px; }
-.caption-coverage summary { color: var(--cool); font-weight: 650; min-block-size: 31px; }
+.proof-detail { margin-top: 14px; border-block-start: 1px solid var(--line); padding-top: 9px; }
+.proof-detail > summary { color: var(--cool); font-weight: 650; min-block-size: 31px; }
+#support-excerpts details { max-inline-size: 100%; }
+#support-excerpts q { color: var(--text); }
+#support-excerpts .rate-changes li { border: 0; padding-block: 0; }
+#support-excerpts .rate-changes span { color: var(--gold); }
+#support-omitted { margin-top: 12px; color: var(--muted); }
 .caption-coverage label { font-size: .86rem; margin-inline-end: 6px; }
 .caption-coverage select { max-inline-size: 100%; }
 #coverage-count { color: var(--text); font-weight: 700; margin-block-end: 8px; }
