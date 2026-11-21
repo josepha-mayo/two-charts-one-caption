@@ -113,6 +113,7 @@ node scripts/verify-caption.mjs examples/bls-unemployment/caption-recheck.json e
 ```
 
 Using `revised.csv` with that page flags the old cutoff sentence and the stale March and July table cells.
+The answer comparison shows March leaving the answer when its rate reaches 3.9%. July's rate changed as well, and it remains above the cutoff. When a saved caption explicitly states the old answer, the recheck reports which categories entered or left it. The CLI includes the same comparison in `answerChange` with `--json`.
 
 ### Check a release with several charts
 

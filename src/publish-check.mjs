@@ -78,6 +78,21 @@ export function reviewPublishInputs(rows, caption, check, columns) {
   return {status: 'ready', rows: ordered};
 }
 
+export function reviewedAnswerChange(rows, check, current) {
+  const stated = check.claims.filter(claim => statesAnswer(claim, check.question))
+    .map(claim => claim.type === 'pair' && claim.higher ? [claim.higher] : claim.ids);
+  const [previous, ...others] = stated;
+  // An implied answer has no saved selection. Conflicting exact claims also
+  // cannot establish a single previously reviewed answer.
+  if (!previous || !others.every(ids => sameAnswer(ids, previous)) || sameAnswer(previous, current)) return;
+  return {
+    reviewed: answerText(rows, previous),
+    current: answerText(rows, current),
+    added: current.filter(id => !previous.includes(id)).map(id => rows[id - 1].label),
+    removed: previous.filter(id => !current.includes(id)).map(id => rows[id - 1].label),
+  };
+}
+
 export function runPublishCheck(rows, caption, check, columns) {
   const input = reviewPublishInputs(rows, caption, check, columns);
   if (input.status === 'review_required') return input;
@@ -91,6 +106,8 @@ export function runPublishCheck(rows, caption, check, columns) {
   if (result.status === 'conflict') {
     const values = input.rows.map(row => row.value);
     report.failedFacts = check.claims.filter(claim => !fitsClaim(values, claim)).map(claim => claim.evidence);
+    const change = reviewedAnswerChange(input.rows, check, result.expected);
+    if (change) report.answerChange = change;
   } else if (result.status === 'ambiguous') {
     report.alternateAnswer = answerText(input.rows, result.alternateAnswer);
     report.changedCategories = result.changedCategories;

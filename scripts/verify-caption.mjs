@@ -99,6 +99,11 @@ function printReport(report) {
     for (const evidence of report.failedFacts ?? []) console.log('Stale excerpt:', JSON.stringify(evidence));
   }
   if (report.uncheckedWordingCount) console.log('Unchecked excerpts:', report.uncheckedWordingCount);
+  if (report.answerChange) {
+    console.log('Reviewed answer:', JSON.stringify(report.answerChange.reviewed));
+    for (const label of report.answerChange.added) console.log('Entered the answer:', JSON.stringify(label));
+    for (const label of report.answerChange.removed) console.log('Left the answer:', JSON.stringify(label));
+  }
   for (const text of report.missingReviewedExcerpts ?? []) console.log('Reviewed excerpt missing from the HTML caption:', JSON.stringify(text));
   if (report.table?.matches) console.log('The HTML data table matches the current CSV.');
   for (const {label, sourceRate, tableRate} of report.table?.mismatches ?? []) {

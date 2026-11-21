@@ -46,8 +46,31 @@ test('publication check survives reordered rows and flags exactly the stale cuto
     question: 'Which categories reached at least 70%?',
     sourceAnswer: 'Local',
     failedFacts: ['Only Local and Select Bus Service reached at least 70%.'],
+    answerChange: {reviewed:'Local and Select Bus Service', current:'Local', added:[], removed:['Select Bus Service']},
   });
   assert.doesNotMatch(JSON.stringify(saved), /70\.5|69\.99|private|spreadsheet/);
+});
+
+test('an exact comparison reports a new tie, while conflicting saved answers have no prior selection', () => {
+  const original = readChart('category,percent\nNorth,60\nSouth,40\nWest,55');
+  const tied = readChart('category,percent\nWest,55\nSouth,60\nNorth,60');
+  const question = {type:'pair',ids:[1,2]};
+  const wording = 'North had a higher rate than South.';
+  const saved = createPublishCheck(original, question, wording, localFacts(original, wording));
+  assert.deepEqual(runPublishCheck(tied, wording, saved).answerChange, {
+    reviewed:'North', current:'North and South', added:['South'], removed:[],
+  });
+  const conflicting = wording + ' South had a higher rate than North.';
+  const invalid = createPublishCheck(original, question, conflicting, localFacts(original, conflicting));
+  const result = runPublishCheck(original, conflicting, invalid);
+  assert.equal(result.status,'conflict');
+  assert.equal(result.answerChange,undefined);
+  const brokenNumber = 'North had the highest rate, at 60%.';
+  const ranking = createPublishCheck(original, 'highest', brokenNumber, localFacts(original, brokenNumber));
+  const sameLeader = readChart('category,percent\nNorth,61\nSouth,40\nWest,55');
+  const drift = runPublishCheck(sameLeader, brokenNumber, ranking);
+  assert.equal(drift.status,'conflict');
+  assert.equal(drift.answerChange,undefined);
 });
 
 test('a rate reaching the benchmark invalidates and repairs a saved below claim', () => {

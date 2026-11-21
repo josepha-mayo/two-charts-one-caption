@@ -103,12 +103,14 @@ test('a generated page can fail for changed wording, stale numbers, or an invali
   assert.equal(revised.report.status,'conflict');
   assert.deepEqual(revised.report.failedFacts,['Only January and March fell below 3.9%.']);
   assert.deepEqual(revised.report.table.mismatches.map(row => row.label), ['March','July']);
+  assert.deepEqual(revised.report.answerChange, {reviewed:'January and March', current:'January', added:[], removed:['March']});
 
   writeFileSync(page,checkedPage.replace('Only January and March fell','Only January fell'));
   const changedCaption = run('first-published.csv',...flags);
   assert.equal(changedCaption.code,1);
   assert.match(changedCaption.report.message,/HTML figcaption differs/);
   assert.deepEqual(changedCaption.report.missingReviewedExcerpts,['Only January and March fell below 3.9%.']);
+  assert.equal(changedCaption.report.answerChange,undefined);
   assert.equal(changedCaption.report.table.matches,true);
   writeFileSync(page,checkedPage.replace('<td>3.8%</td>','<td>3.9%</td>'));
   assert.equal(run('first-published.csv','--html').code,0);

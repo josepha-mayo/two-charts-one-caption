@@ -6,7 +6,7 @@ import {
 import {localFacts, cloudPrompt, localPrompt, checkText, answerConstraint, readCloudReview, reviewCloudClaims, unverifiedCaptionExcerpts} from './draft.mjs';
 import {defaultChartColumns, maxCsvBytes, readChartRows, readCsvTable, rowScope} from './csv.mjs';
 import {checkBrief, questionPrompt, questionConstraint, readQuestionDraft} from './brief.mjs';
-import {createPublishCheck, readPublishCheck, reviewPublishInputs, suggestPublishRepair} from './publish-check.mjs';
+import {createPublishCheck, readPublishCheck, reviewedAnswerChange, reviewPublishInputs, suggestPublishRepair} from './publish-check.mjs';
 import {maxEditorialDraftBytes, readEditorialDraft, writeEditorialDraft} from './editorial-draft.mjs';
 import {deviceAvailability} from './device.mjs';
 import {saveOfflineApp} from './offline.mjs';
@@ -266,6 +266,7 @@ function invalidate() {
   result = null;
   staleRepair = null;
   el('stale-repair').hidden = true;
+  el('saved-answer-change').hidden = true;
   el('claim-review').hidden = true;
   el('revision').hidden = true;
   el('revision-proof').hidden = true;
@@ -1498,6 +1499,12 @@ function runSavedCheck(check = savedCheck, feedback = recheckStatus) {
     render(check.claims, [], 'Saved check');
     if (result.status === 'conflict') {
       status.textContent = 'Saved check failed. Review the marked excerpt before publishing.';
+      const change = reviewedAnswerChange(rows, check, result.expected);
+      if (change) {
+        const container = el('saved-answer-change');
+        container.replaceChildren(answerChangeView(change));
+        container.hidden = false;
+      }
       const repair = suggestPublishRepair(rows, caption.value, check, chartSource.columns);
       if (repair) {
         staleRepair = {repair, original: check};
@@ -1626,7 +1633,8 @@ function renderPublishedReport(report, feedback, details) {
   }[report.status];
   details.replaceChildren();
   if (report.question) details.append(make('p', report.question));
-  if (report.sourceAnswer) details.append(make('p', 'Current CSV answer · ' + report.sourceAnswer));
+  if (report.answerChange) details.append(answerChangeView(report.answerChange));
+  else if (report.sourceAnswer) details.append(make('p', 'Current CSV answer · ' + report.sourceAnswer));
   if (report.alternateAnswer) details.append(make('p', 'Alternate answer from the caption · ' + report.alternateAnswer));
   if (report.uncheckedWordingCount) details.append(make('p', 'Excerpts still needing editorial review · ' + report.uncheckedWordingCount));
   const excerpts = report.failedFacts ?? report.missingReviewedExcerpts;
@@ -1665,7 +1673,9 @@ function renderPublishedReport(report, feedback, details) {
     const table = make('table');
     table.createCaption().textContent = 'Rows with different values';
     const headings = table.createTHead().insertRow();
-    for (const label of ['Category', 'Published HTML', 'Current CSV']) {
+    const labels = ['Category', 'Published HTML', 'Current CSV'];
+    if (report.answerChange) labels.push('Answer change');
+    for (const label of labels) {
       const cell = make('th', label);
       cell.scope = 'col';
       headings.append(cell);
@@ -1679,10 +1689,26 @@ function renderPublishedReport(report, feedback, details) {
       row.append(category);
       row.insertCell().textContent = format(tableRate);
       row.insertCell().textContent = format(sourceRate);
+      if (report.answerChange) {
+        row.insertCell().textContent = report.answerChange.added.includes(label) ? 'Entered the answer'
+          : report.answerChange.removed.includes(label) ? 'Left the answer' : 'No change';
+      }
     }
     details.append(table);
   }
   details.hidden = !details.childElementCount;
+}
+
+function answerChangeView({reviewed, current, added, removed}) {
+  const change = make('div', undefined, 'published-answer-change');
+  const answers = make('dl');
+  answers.append(make('dt', 'Reviewed answer'), make('dd', reviewed), make('dt', 'Current answer'), make('dd', current));
+  change.append(answers);
+  const list = make('ul');
+  list.append(...added.map(label => make('li', `${label} entered the answer.`)),
+    ...removed.map(label => make('li', `${label} left the answer.`)));
+  change.append(list);
+  return change;
 }
 
 const publishedExampleDialog = el('published-example-dialog');
