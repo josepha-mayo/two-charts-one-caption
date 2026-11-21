@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "charts": [
+    {
+      "id": "published-cutoff",
+      "check": "caption-recheck.json",
+      "csv": "current.csv",
+      "caption": "caption.txt"
+    },
+    {
+      "id": "simulated-refresh",
+      "check": "caption-recheck.json",
+      "csv": "refreshed.csv",
+      "caption": "caption.txt"
+    }
+  ]
+}

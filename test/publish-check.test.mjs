@@ -313,3 +313,44 @@ test('a saved row group limits the CLI check and catches a changed category with
   writeFileSync(csvPath, csv + '\n72,New route,2024');
   assert.match(JSON.parse(run().stdout).message, /category list changed/);
 });
+
+test('batch checks report every chart and keep aggregate exit codes useful in CI', t => {
+  const directory = mkdtempSync(join(tmpdir(), 'two-charts-release-'));
+  const batchPath = join(directory, 'release.json');
+  const script = fileURLToPath(new URL('../scripts/verify-caption.mjs', import.meta.url));
+  const fixtures = readExample('release.example.json');
+  t.after(() => {
+    unlinkSync(batchPath);
+    rmdirSync(directory);
+  });
+  const demo = spawnSync(process.execPath, [
+    script, '--batch', fileURLToPath(example('release.example.json')), '--json',
+  ], {encoding:'utf8',cwd:directory});
+  assert.equal(demo.status, 1, demo.stderr);
+  const result = JSON.parse(demo.stdout);
+  assert.deepEqual(result.totals, {passed:1, reviewRequired:1, invalid:0});
+  assert.deepEqual(result.checks.map(({id,status})=>[id,status]), [
+    ['published-cutoff','explicit'], ['simulated-refresh','conflict'],
+  ]);
+  assert.deepEqual(result.checks[1].failedFacts, ['Only Local and Select Bus Service reached at least 70%.']);
+
+  const {charts} = JSON.parse(fixtures);
+  const ready = {...charts[0], check:fileURLToPath(example(charts[0].check)),
+    csv:fileURLToPath(example(charts[0].csv)), caption:fileURLToPath(example(charts[0].caption))};
+  const run = entries => {
+    writeFileSync(batchPath, JSON.stringify({version:1, charts:entries}));
+    return spawnSync(process.execPath, [script, '--batch', batchPath, '--json'], {encoding:'utf8',cwd:directory});
+  };
+  assert.equal(run([ready]).status, 0);
+  const mixed = run([{...ready,id:'missing',csv:'missing.csv'}, {...ready,id:'stale',csv:fileURLToPath(example('refreshed.csv'))}, ready]);
+  assert.equal(mixed.status, 2);
+  const mixedResult = JSON.parse(mixed.stdout);
+  assert.equal(mixedResult.status, 'invalid_input');
+  assert.deepEqual(mixedResult.totals, {passed:1, reviewRequired:1, invalid:1});
+  assert.deepEqual(mixedResult.checks.map(({id,status})=>[id,status]), [
+    ['missing','invalid_input'], ['stale','conflict'], ['published-cutoff','explicit'],
+  ]);
+  const invalid = run([ready, ready]);
+  assert.equal(invalid.status, 2);
+  assert.match(JSON.parse(invalid.stdout).message, /unique ID/);
+});

@@ -80,6 +80,16 @@ For a chart made from a row group, the recheck file also binds the group header 
 npm run verify-caption -- check.json latest.csv caption.txt --category-column "Bus service" --percent-column "On-time rate"
 ```
 
+### Check a release with several charts
+
+Use the paths to each chart’s saved check, current CSV, and final caption in a [batch manifest](examples/bus-cutoff/release.example.json). Relative paths start at the manifest’s directory. Each check uses its saved column and group choices, so several captions can use different groups from one CSV.
+
+```sh
+node scripts/verify-caption.mjs --batch examples/bus-cutoff/release.example.json --json
+```
+
+The example reports one passing check and one stale excerpt. Batch mode reports every entry in order. It exits with `0` when all pass, `1` when any needs editorial review, and `2` when one or more inputs are invalid. Add `--require-checked-wording` to apply that policy to every entry.
+
 ## Firebase
 
 The Firebase client is loaded on demand. Configure a Firebase web app with the Gemini Developer API and Firebase App Check. Put the web app’s public configuration and the reCAPTCHA Enterprise site key into `public/firebase.local.json` using the following keys.
