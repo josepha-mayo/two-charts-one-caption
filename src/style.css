@@ -214,6 +214,11 @@ dialog p { color: var(--muted); margin-top: 8px; }
 dialog p a { color: var(--cool); text-underline-offset: 3px; }
 #publication-dialog label { display: block; margin-block: 10px 6px; }
 #publication-dialog .controls { margin-top: 12px; }
+#publication-preview figure { margin: 12px 0; overflow-wrap: anywhere; }
+#publication-preview figcaption { white-space: pre-wrap; }
+#publication-preview table { width: 100%; table-layout: fixed; border-collapse: collapse; }
+#publication-preview caption { text-align: start; margin-block: 6px; color: var(--muted); }
+#publication-preview th, #publication-preview td { padding: 6px; text-align: start; border-block-end: 1px solid var(--line); }
 .cloud-preview { display: grid; grid-template-columns: minmax(0, 1fr); gap: 4px; margin: 14px 0; }
 .cloud-preview dt { color: var(--muted); font-size: .85rem; font-weight: 650; }
 .cloud-preview dd { margin: 0 0 7px; overflow-wrap: anywhere; }

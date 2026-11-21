@@ -10,7 +10,7 @@ import {maxEditorialDraftBytes, readEditorialDraft, writeEditorialDraft} from '.
 import {deviceAvailability} from './device.mjs';
 import {saveOfflineApp} from './offline.mjs';
 import {sampleCsv, sampleCaption, cutoffCaption, sampleSource, foodExample, foodNationalExample, foodPairExample} from './sample.mjs';
-import {comparisonReport, reviewedDescription, reviewedFragment} from './report.mjs';
+import {comparisonReport, reviewedDescription, reviewedFigure, reviewedFragment, reviewedText} from './report.mjs';
 import refreshedSampleCsv from '../examples/bus-cutoff/refreshed.csv?raw';
 import {
   addReaderResponse, createReaderLink, createReaderTest, encodeResponse, readReaderLink,
@@ -1301,13 +1301,15 @@ function canPublish() {
 
 el('export').addEventListener('click', () => {
   if (!canPublish()) return;
-  downloadFile(reviewedDescription(document, caption.value, rows, chartSource.sourceCitation),
+  downloadFile(reviewedDescription(document, caption.value, rows, chartSource),
     'text/html;charset=utf-8', 'chart-description.html');
 });
 
 const publicationDialog = el('publication-dialog');
 const publicationFormat = el('publication-format');
 const publicationContent = el('publication-content');
+const publicationPreview = el('publication-preview');
+const publicationTextBox = el('publication-text-box');
 const publicationCopy = el('publication-copy');
 const publicationStatus = el('publication-status');
 let publicationVersion = 0;
@@ -1315,14 +1317,23 @@ let publicationVersion = 0;
 function showPublicationFormat() {
   publicationVersion += 1;
   publicationStatus.textContent = '';
-  const withTable = publicationFormat.value === 'html';
-  publicationContent.value = withTable
-    ? reviewedFragment(document, caption.value, rows, chartSource.sourceCitation)
-    : caption.value;
-  el('publication-note').textContent = withTable
-    ? 'Paste into an HTML block. This includes the source chart values.'
-    : 'Paste into your publishing system’s caption or description field.';
-  publicationCopy.textContent = withTable ? 'Copy HTML source' : 'Copy caption';
+  const format = publicationFormat.value;
+  const formatted = format === 'formatted';
+  publicationPreview.hidden = !formatted;
+  publicationTextBox.hidden = formatted;
+  publicationPreview.replaceChildren();
+  if (formatted) {
+    publicationPreview.append(reviewedFigure(document, caption.value, rows, chartSource));
+    publicationContent.value = reviewedText(caption.value, rows, chartSource);
+    el('publication-note').textContent = 'Paste into a rich-text editor. This includes the source chart values.';
+    publicationCopy.textContent = 'Copy formatted caption and table';
+  } else {
+    const html = format === 'html';
+    publicationContent.value = html ? reviewedFragment(document, caption.value, rows, chartSource) : caption.value;
+    el('publication-note').textContent = html ? 'Paste into an HTML block. This includes the source chart values.'
+      : 'Paste into your publishing system’s caption or description field.';
+    publicationCopy.textContent = html ? 'Copy HTML source' : 'Copy caption';
+  }
 }
 el('publication').addEventListener('click', () => {
   if (!canPublish()) return;
@@ -1334,22 +1345,34 @@ publicationFormat.addEventListener('change', showPublicationFormat);
 publicationDialog.addEventListener('close', () => {
   publicationVersion += 1;
   publicationContent.value = '';
+  publicationPreview.replaceChildren();
   publicationStatus.textContent = '';
 });
 publicationCopy.addEventListener('click', async () => {
   if (!publicationDialog.open || !canPublish()) return;
   const version = publicationVersion;
-  const withTable = publicationFormat.value === 'html';
+  const format = publicationFormat.value;
+  const formatted = format === 'formatted';
   try {
-    await navigator.clipboard.writeText(publicationContent.value);
+    if (formatted) {
+      const content = new ClipboardItem({
+        'text/html': new Blob([publicationPreview.firstElementChild.outerHTML], {type: 'text/html'}),
+        'text/plain': new Blob([publicationContent.value], {type: 'text/plain'}),
+      });
+      await navigator.clipboard.write([content]);
+    } else await navigator.clipboard.writeText(publicationContent.value);
     if (publicationDialog.open && version === publicationVersion) {
-      publicationStatus.textContent = withTable ? 'HTML source copied.' : 'Caption copied.';
+      publicationStatus.textContent = formatted ? 'Formatted caption and table copied.'
+        : format === 'html' ? 'HTML source copied.' : 'Caption copied.';
     }
   } catch {
     if (publicationDialog.open && version === publicationVersion) {
+      publicationTextBox.hidden = false;
       publicationContent.focus();
       publicationContent.select();
-      publicationStatus.textContent = 'Content selected. Use your browser’s copy command.';
+      publicationStatus.textContent = formatted
+        ? 'Formatted copy unavailable. The plain-text version is selected. Choose HTML with data table for the markup.'
+        : 'Content selected. Use your browser’s copy command.';
     }
   }
 });

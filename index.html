@@ -341,11 +341,15 @@
     <label for="publication-format">Content format</label>
     <select id="publication-format">
       <option value="caption">Caption text</option>
+      <option value="formatted">Formatted caption and table</option>
       <option value="html">HTML with data table</option>
     </select>
     <p id="publication-note"></p>
-    <label for="publication-content">Content to copy</label>
-    <textarea id="publication-content" rows="6" readonly spellcheck="false" aria-describedby="publication-note"></textarea>
+    <div id="publication-preview" hidden></div>
+    <div id="publication-text-box">
+      <label for="publication-content">Content to copy</label>
+      <textarea id="publication-content" rows="6" readonly spellcheck="false" aria-describedby="publication-note"></textarea>
+    </div>
     <form method="dialog" class="controls">
       <button type="button" id="publication-copy" class="primary">Copy caption</button>
       <button type="submit">Close</button>

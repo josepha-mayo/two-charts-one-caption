@@ -84,25 +84,40 @@ function html(doc) {
   return '<!doctype html>' + doc.documentElement.outerHTML;
 }
 
-function reviewedFigure(doc, caption, rows, sourceNote) {
+export function reviewedFigure(doc, caption, rows, {columns, sourceCitation, sourceUrl} = {}) {
   const figure = element(doc, 'figure');
   const description = element(doc, 'figcaption');
   description.append(element(doc, 'p', caption));
-  const {table, body} = dataTable(doc, 'Chart data', ['Category', 'Rate']);
+  const {table, body} = dataTable(doc, 'Chart data', [columns?.category ?? 'Category', columns?.rate ?? 'Rate']);
   for (const {label, value} of rows) labelRow(doc, body, label).insertCell().textContent = `${value}%`;
   figure.append(description, table);
-  if (sourceNote) figure.append(element(doc, 'p', sourceNote));
+  if (sourceCitation) {
+    const attribution = element(doc, 'p');
+    if (sourceUrl?.startsWith('https://')) {
+      const link = element(doc, 'a', sourceCitation);
+      link.href = sourceUrl;
+      link.rel = 'noreferrer';
+      attribution.append(link);
+    } else attribution.textContent = sourceCitation;
+    figure.append(attribution);
+  }
   return figure;
 }
 
-export function reviewedFragment(document, caption, rows, sourceNote) {
-  return reviewedFigure(document, caption, rows, sourceNote).outerHTML;
+export function reviewedFragment(document, caption, rows, source) {
+  return reviewedFigure(document, caption, rows, source).outerHTML;
 }
 
-export function reviewedDescription(document, caption, rows, sourceNote) {
+export function reviewedDescription(document, caption, rows, source) {
   const {doc, main} = reportDocument(document, 'Reviewed chart description');
-  main.append(element(doc, 'h1', 'Chart description'), reviewedFigure(doc, caption, rows, sourceNote));
+  main.append(element(doc, 'h1', 'Chart description'), reviewedFigure(doc, caption, rows, source));
   return html(doc);
+}
+
+export function reviewedText(caption, rows, {columns, sourceCitation} = {}) {
+  const heading = (columns?.rate ?? 'Rate') + ' by ' + (columns?.category ?? 'Category');
+  const table = rows.map(({label, value}) => `${label}: ${value}%`);
+  return [caption, '', heading, ...table, ...(sourceCitation ? ['', sourceCitation] : [])].join('\n');
 }
 
 export function comparisonReport(document, {caption, rows, question, result, claims, describeClaim, sourceNote}) {
