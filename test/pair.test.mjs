@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {answer, checkCaption, fits, readChart, supportedDetail, validateClaims} from '../src/check.mjs';
+import {questionPrompt, readQuestionDraft} from '../src/brief.mjs';
 import {localFacts, localPrompt, reviewCloudClaims} from '../src/draft.mjs';
 import {createPublishCheck, runPublishCheck, suggestPublishRepair} from '../src/publish-check.mjs';
 import {addReaderResponse, createReaderLink, createReaderTest, encodeResponse, readReaderLink, readerCounts} from '../src/reader.mjs';
@@ -9,6 +10,31 @@ import {foodPairExample} from '../src/sample.mjs';
 const {csv, caption, question} = foodPairExample;
 const rows = readChart(csv);
 const rankSentence = 'Midwest had a higher rate than West.';
+
+test('a private note can propose the two fully named categories without giving Chrome the source values', () => {
+  const evidence = 'which of Midwest and WEST had the higher rate';
+  const note = 'Check ' + evidence + '. Keep staffing details private.';
+  const draft = readQuestionDraft({kind:'pair', ids:[1,2], evidence}, note, rows);
+  assert.deepEqual(draft, {question,evidence});
+  const recovered = readQuestionDraft({kind:'pair',evidence:'Did the Midwest lead the West?'},note,rows);
+  assert.deepEqual(recovered,{question,evidence:'Check which of Midwest and WEST had the higher rate.'});
+  assert.throws(() => readQuestionDraft({kind:'pair',evidence:'Invented quote'},
+    note + ' Also compare West and Midwest for the next edition.',rows),/one comparison/);
+  const inputs = JSON.parse(questionPrompt(note, rows).split('\n').at(-1));
+  assert.equal(inputs.brief,note);
+  assert.deepEqual(inputs.categories,['Northeast','Midwest','South','West']);
+  assert.doesNotMatch(questionPrompt(note, rows),/13\.3|12\.9|15\.0|12\.2/);
+});
+
+test('private-note comparisons reject ambiguous category mentions and questions about the size of the gap', () => {
+  const chart = readChart('category,percent\nNorth,10\nNorth East,20\nSouth (A+),30\nHigher Region,40');
+  const read = evidence => readQuestionDraft({kind:'pair',evidence},evidence,chart);
+  assert.deepEqual(read('Did North East have a lower rate than South (A+)?').question,{type:'pair',ids:[2,3]});
+  assert.throws(() => read('Did North East have a higher rate than West?'),/one comparison/);
+  assert.throws(() => read('How much higher was South (A+) than North East?'),/one comparison/);
+  assert.throws(() => read('Compare North, North East and South (A+).'),/one comparison/);
+  assert.throws(() => read('North and Higher Region are in the file.'),/one comparison/);
+});
 
 test('a comparison can resolve the USDA question without stating either of the rates', () => {
   const facts = localFacts(rows, caption);

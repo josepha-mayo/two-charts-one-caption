@@ -55,7 +55,7 @@ let exampleReview;
 let pendingImport;
 let pairSource;
 const aiOperations = {
-  question: {label: 'Question from private note', route: 'on_device', inputs: ['Private note']},
+  question: {label: 'Question from private note', route: 'on_device', inputs: ['Private note', 'Category names']},
   detail: {label: 'Caption detail from source chart', route: 'on_device', inputs: ['Source percentages', 'Category IDs', 'Selected question']},
   review: {label: 'Cloud fact draft', route: 'in_cloud', inputs: ['Caption approved for cloud review', 'Category names', 'Selected question']},
   rewrite: {label: 'Cloud fact draft for rewrite', route: 'in_cloud', inputs: ['Rewrite approved for cloud review', 'Category names', 'Selected question']},
@@ -201,6 +201,10 @@ function updateExampleRefresh() {
 function invalidate() {
   cancelCloudReview();
   stopDeviceInference('detail');
+  if (questionDraft?.chartRows && questionDraft.chartRows !== rows) {
+    clearQuestionDraft();
+    briefStatus.textContent = 'The chart changed. Ask Chrome for a question using the current categories.';
+  }
   if (publicationDialog.open) publicationDialog.close();
   revision += 1;
   candidate = null;
@@ -720,7 +724,7 @@ function clearQuestionDraft() {
 
 brief.addEventListener('input', clearQuestionDraft);
 el('brief-example').addEventListener('click', () => {
-  brief.value = 'Before the report goes to the desk, make sure readers can tell which bus services reached at least 70% on time. Save the internal follow-up for our planning meeting.';
+  brief.value = chartSource.brief ?? 'Before the report goes to the desk, make sure readers can tell which bus services reached at least 70% on time. Save the internal follow-up for our planning meeting.';
   clearQuestionDraft();
   brief.focus();
 });
@@ -734,10 +738,13 @@ el('brief-submit').addEventListener('click', () => {
     return;
   }
   clearQuestionDraft();
-  void runDeviceInference('question', questionPrompt(note), questionConstraint, 'Chrome is reading the note on this device…',
+  const chartRows = rows;
+  void runDeviceInference('question', questionPrompt(note, chartRows), questionConstraint, 'Chrome is reading the note on this device…',
     proposal => {
-      questionDraft = readQuestionDraft(proposal, note);
-      el('brief-question').textContent = questionText(questionDraft.question);
+      const draft = readQuestionDraft(proposal, note, chartRows);
+      if (draft.question.type === 'pair' && rows !== chartRows) throw Error('The chart changed while Chrome was reading the note.');
+      questionDraft = draft.question.type === 'pair' ? {...draft, chartRows} : draft;
+      el('brief-question').textContent = questionText(draft.question, chartRows);
       el('brief-evidence').textContent = questionDraft.evidence;
       el('brief-review').hidden = false;
       briefStatus.textContent = 'Firebase reported on-device inference. Review the question before using it.';

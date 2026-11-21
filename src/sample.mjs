@@ -23,4 +23,5 @@ export const foodPairExample = {
   ...foodExample,
   label: 'Food insecurity in the Midwest and West',
   question: {type: 'pair', ids: [2, 4]},
+  brief: 'Make sure readers can tell whether Midwest or West had the higher household food insecurity rate. Keep the graphics desk’s staffing note internal.',
 };

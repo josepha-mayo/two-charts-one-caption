@@ -473,6 +473,20 @@ test('on-device question drafts preserve a strict below comparison in the note',
   }
 });
 
+test('a paraphrased cutoff can recover a single exact sentence with the same direction', () => {
+  const result = {kind:'atLeast', cutoff:70, evidence:'Local at least 70% on time'};
+  const evidence = 'Check which services reached at least 70% on time.';
+  assert.deepEqual(readQuestionDraft(result, evidence + ' Keep the other notes on this device.'), {
+    question:{type:'atLeast',cutoff:70}, evidence,
+  });
+  for (const note of [
+    'Compare the rates with 70%.',
+    'Find the services below 70%.',
+    'Check which services did not reach at least 70%.',
+    'Find the bus services at or above 70%. Compare all services to a minimum of 70%.',
+  ]) assert.throws(() => readQuestionDraft(result, note), /one exact cutoff/);
+});
+
 test('cloud cutoff claims cannot use the question in place of evidence from the caption', () => {
   const caption = sampleCaption + ' Local had the highest rate, at 71.5%. Express had the lowest rate, at 65.1%.';
   const local = localFacts(sample, caption);
