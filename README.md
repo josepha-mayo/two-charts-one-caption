@@ -103,6 +103,8 @@ The review shows each fact beside its quotation and whether it matches the sourc
 
 If App Check rejects the session or the cloud request fails, the editor moves focus to the browser check for the current caption or rewrite. The draft stays in the editor for that check.
 
+On November 21, 2026, a fresh visible Chrome session obtained production App Check attestation on the permanent host. Gemini returned a draft after the exact approved payload was sent. A separate headless session was rejected before sending a prompt.
+
 After Firebase returns an AI response, open **AI activity in this tab** to see its inference route and the kinds of inputs used. The downloadable JSON records the action, route, input categories, response count, and last response time. Chrome manages the installed model version separately.
 
 The hosted test used Chrome 157.0.8103.79. The source for that browser release maps its enabled Gemma 4 flag to Prompt API v4. The installed asset manifest identifies `gemma4-2b-it` (component version `2026.8.7.929`). On November 21, 2026, a freshly reopened offline tab produced both the private-note question and the source-checked caption detail via Firebase on-device inference. The check observed zero cross-origin requests. The exact Gemini Nano 4 designation for the Web track is awaiting organizer confirmation. [Chromium flags for 157.0.8103.79](https://chromium.googlesource.com/chromium/src/+/refs/tags/157.0.8103.79/chrome/browser/about_flags.cc) · [Firebase Web setup](https://firebase.google.com/docs/ai-logic/hybrid/web/get-started) · [Web track rules](https://firebasehybridaihackathon.devpost.com/rules)
