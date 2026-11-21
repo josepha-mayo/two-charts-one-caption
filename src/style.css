@@ -195,6 +195,9 @@ dialog p a { color: var(--cool); text-underline-offset: 3px; }
 .cloud-exact summary { color: var(--cool); font-size: .9rem; cursor: pointer; }
 #ai-setup-progress { width: 100%; margin-top: 12px; accent-color: var(--mint); }
 #ai-setup-dialog .controls { margin-top: 14px; }
+.offline-copy { border-top: 1px solid var(--line); margin-top: 14px; padding-top: 6px; }
+.offline-copy button { margin-top: 8px; }
+.offline-copy p:empty { display: none; }
 dialog pre { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 43vh; overflow: auto; background: var(--background); padding: 12px; border-radius: 5px; }
 @media (max-width: 660px) {
   .hero, .charts, .test-versions { grid-template-columns: 1fr; gap: 12px; }

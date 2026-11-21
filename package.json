@@ -6,7 +6,7 @@
   "engines": {"node": ">=24"},
   "scripts": {
     "dev": "vite --host 127.0.0.1",
-    "build": "vite build",
+    "build": "vite build && node scripts/build-offline.mjs",
     "test": "node --test",
     "verify-caption": "node scripts/verify-caption.mjs"
   },

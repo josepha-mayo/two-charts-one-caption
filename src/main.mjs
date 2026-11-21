@@ -7,6 +7,7 @@ import {defaultChartColumns, readChartRows, readCsvTable} from './csv.mjs';
 import {checkBrief, questionPrompt, questionConstraint, readQuestionDraft} from './brief.mjs';
 import {createPublishCheck, readPublishCheck, reviewPublishInputs, suggestPublishRepair} from './publish-check.mjs';
 import {deviceAvailability} from './device.mjs';
+import {saveOfflineApp} from './offline.mjs';
 import {sampleCsv, sampleCaption, cutoffCaption, sampleSource, foodExample} from './sample.mjs';
 import {comparisonReport, reviewedDescription} from './report.mjs';
 import refreshedSampleCsv from '../examples/bus-cutoff/refreshed.csv?raw';
@@ -474,7 +475,7 @@ cutoff.addEventListener('input', invalidate);
 
 function connectFirebase() {
   if (firebaseConnection) return firebaseConnection;
-  if (navigator.onLine === false) {
+  if (navigator.onLine === false && !navigator.serviceWorker?.controller) {
     return Promise.reject(Error('Reconnect to load the Firebase client for this tab.'));
   }
   firebaseConnection = import('./firebase.mjs').catch(() => {
@@ -528,6 +529,24 @@ el('ai-setup').addEventListener('click', () => {
   refreshDeviceSetup();
 });
 refreshDevice.addEventListener('click', refreshDeviceSetup);
+
+if (import.meta.env.PROD && 'serviceWorker' in navigator) {
+  el('offline-copy').hidden = false;
+  el('save-offline').addEventListener('click', async event => {
+    const button = event.currentTarget;
+    const feedback = el('offline-copy-status');
+    button.disabled = true;
+    feedback.textContent = 'Saving the app for offline use…';
+    try {
+      await saveOfflineApp(import.meta.env.BASE_URL + 'offline-worker.js');
+      feedback.textContent = 'Offline copy saved. You can reopen this app without a connection.';
+    } catch (error) {
+      feedback.textContent = error.message || 'The offline copy could not be saved. Try again when connected.';
+    } finally {
+      button.disabled = false;
+    }
+  });
+}
 
 prepareDevice.addEventListener('click', async () => {
   deviceSetupPending = true;
@@ -635,6 +654,10 @@ dialog.addEventListener('close', async () => {
   const request = snapshot;
   snapshot = null;
   if (busy || dialog.returnValue !== 'send' || request?.revision !== revision) return;
+  if (navigator.onLine === false) {
+    status.textContent = 'Reconnect to send the cloud request. You can check the caption in this browser while offline.';
+    return;
+  }
   candidate = null;
   el('claim-review').hidden = true;
   const operation = new AbortController();

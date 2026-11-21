@@ -79,6 +79,8 @@ Use **Suggest a question from a private note** to turn an editorial brief into a
 
 Open **Chrome AI setup** while online. If Chrome needs the model, select **Prepare Chrome’s model**. The first download may take several minutes, and you can close the dialog while it runs. The browser verifier and reader links work during setup. Once setup reports the tab is ready for offline use, close the dialog and keep the tab open to try a private note or source-chart repair offline. The setup check loads the Firebase client and public configuration without sending a caption, note, or chart to a model. [Chrome built-in AI requirements](https://developer.chrome.com/docs/ai/get-started) · [Web setup in the official workshop](https://www.youtube.com/watch?v=lEsZMYkftiU&t=840s)
 
+In the hosted app, select **Save app for offline use** from the same setup dialog and wait for **Offline copy saved**. Then you can close the tab and reopen the app offline on that browser. If Chrome’s model is installed and available, the app can also load the Firebase on-device route in the reopened tab. The offline copy contains the public app files and Firebase web configuration. Export a recheck file to keep reviewed work between tabs. Cloud review needs a connection.
+
 Local development on `127.0.0.1` supports the official App Check debug provider with `VITE_CHARTS_APP_CHECK_DEBUG_TOKEN` in a private `.env.development.local` file. Use an app-specific test token and revoke it when done. The production bundle requires a reCAPTCHA Enterprise site key. Keep debug credentials out of public assets and deployment archives.
 
 ## Current scope
