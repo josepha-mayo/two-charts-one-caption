@@ -2,7 +2,7 @@ import {
   answer, answerText, checkCaption, defaultDecimalPlaces, decimalPlaceIssue, fitsClaim, isCutoffClaim, questionText,
   readDecimalPlaces, readQuestion, sameAnswer, statesAnswer, supportedDetail, validateClaims,
 } from './check.mjs';
-import {checkText, localFacts, readQuotedCutoff, readQuotedFact, unverifiedCaptionExcerpts, withQuotedRankValue} from './draft.mjs';
+import {checkText, localFacts, readQuotedCutoff, readQuotedFact, savedCaptionIssue, unverifiedCaptionExcerpts, withQuotedRankValue} from './draft.mjs';
 import {maxChartRows, readColumnNames, rowScope} from './csv.mjs';
 
 function normalizeCaption(text) {
@@ -33,7 +33,7 @@ export function readPublishCheck(check) {
   })), caption, labels.length)
     .map(claim => isCutoffClaim(claim)
       ? readQuotedCutoff(categories, caption, claim) ?? claim
-      : withQuotedRankValue(categories, claim))
+      : withQuotedRankValue(categories, caption, claim))
     .sort((a, b) => caption.indexOf(a.evidence) - caption.indexOf(b.evidence));
   const columns = readColumnNames(check.columns);
   const decimalPlaces = readDecimalPlaces(check.decimalPlaces);
@@ -65,16 +65,8 @@ export function reviewPublishInputs(rows, caption, check, columns) {
   }
   const precisionIssue = decimalPlaceIssue(ordered, check.decimalPlaces);
   if (precisionIssue) return {status: 'review_required', message: precisionIssue};
-  const unsupported = check.claims.find(claim => isCutoffClaim(claim) && !readQuotedCutoff(ordered, draft, claim));
-  if (unsupported) {
-    return {status: 'review_required', message: `Review what this cutoff sentence establishes before publishing. “${unsupported.evidence}”`};
-  }
-  for (const claim of check.claims.filter(fact => fact.type === 'pair')) {
-    const quote = readQuotedFact(ordered, draft, claim.evidence.trim());
-    if (quote?.type !== 'pair' || !sameAnswer(quote.ids, claim.ids) || quote.higher !== claim.higher) {
-      return {status: 'review_required', message: `Review what this comparison establishes before publishing. “${claim.evidence}”`};
-    }
-  }
+  const wordingIssue = savedCaptionIssue(ordered, draft, check.claims);
+  if (wordingIssue) return {status: 'review_required', message: wordingIssue};
   return {status: 'ready', rows: ordered};
 }
 

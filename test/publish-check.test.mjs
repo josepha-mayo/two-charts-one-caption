@@ -132,6 +132,20 @@ test('ranking-only wording survives a rate refresh and its repair keeps the same
   assert.equal(runPublishCheck(newLeader, repaired.caption, repaired.check).status, 'explicit');
 });
 
+test('legacy rank checks restore a missing exact rate and flag a conflicting saved rate', () => {
+  const rows = readChart('category,percent\nNorth,78\nCentral,64\nSouth,48');
+  const caption = 'North had the highest rate, at 78%.';
+  const evidence = caption.slice(0, -1);
+  const claim = {type:'highest', ids:[1], evidence};
+  const reviewed = {version:1, labels:rows.map(row => row.label), question:'highest', caption};
+  const restored = readPublishCheck({...reviewed, claims:[claim]});
+  assert.equal(restored.claims[0].value, 78);
+  assert.equal(runPublishCheck(rows, caption, restored).status, 'explicit');
+  const mismatched = readPublishCheck({...reviewed, claims:[{...claim, value:80}]});
+  assert.equal(mismatched.claims[0].value, 80);
+  assert.match(runPublishCheck(rows, caption, mismatched).message, /saved fact disagrees/);
+});
+
 test('legacy cutoff checks preserve a partial quote and surface unsupported evidence', () => {
   const rows = readChart('category,percent\nNorth,78\nCentral,64\nSouth,48');
   const question = {type: 'atLeast', cutoff: 70};

@@ -76,6 +76,8 @@ To verify both changes, add “July had a rate of 4.3%.” to the original capti
 
 **Save recheck file** records the caption, question, category labels, approved facts, and rate precision. To rerun it in the browser, load the newest CSV and open the file under **Rerun a saved check**. Paste the exact wording you plan to publish, or choose **Review saved caption** to inspect and restore the approved wording. You can run the loaded check again after editing or loading another CSV. Two Charts matches rows by category name, so reordering the CSV is safe. Changed caption text, category names, or rates outside the saved precision need fresh review. Existing files without a precision setting continue to use hundredths. The check file itself may include figures that were approved in the caption.
 
+When the browser or CLI recognizes a factual sentence, the saved fact must match the wording. A missing or contradictory fact holds the check and identifies the excerpt. Other prose stays visible as wording for editorial review.
+
 The same check can run offline in a publishing pipeline. The three inputs are the review file, the current chart data, and the caption from the publishing system.
 
 ```sh
@@ -109,7 +111,7 @@ To verify an existing review, load the saved check under **Rerun a saved check**
 In the [BLS example](https://two-charts-caption-2026.web.app/?example=bls-revision), choose **Try the BLS publication check** and switch from **First-published rates** to **January 2025 revision**. The same example page goes from passing to review required. The check points to the outdated sentence and the two table rows that changed.
 Choose **Open original figure in editor** to start a fresh audit from the example page and try a different question.
 
-When exactly one reviewed answer sentence goes stale and a replacement passes the current chart check, Two Charts offers that sentence and a recheck file for the revised caption. Update the publishing source and table, then use the new file to check the rebuilt page.
+When reviewed answer sentences or exact rates go stale, Two Charts can offer checked replacements and a recheck file for the revised caption. Update the publishing source and table, then use the new file to check the rebuilt page.
 
 In CI, pass the HTML built by your publishing system with `--html`. Both workflows check the text in its semantic `<figcaption>` against the saved wording, then recheck the caption against the current CSV. They read static HTML entities and inline formatting and allow layout whitespace to change. Changed wording requests editorial review and lists any reviewed excerpts missing from the page. If the page has several figures, use `--caption-id` with the exact HTML ID of the figure or its caption.
 

@@ -123,18 +123,18 @@ function matchesFact(claim, fact) {
   return sameAnswer(fact.ids, claim.ids) && (claim.value === undefined || fact.value === claim.value);
 }
 
-export function withQuotedRankValue(rows, claim) {
-  if (claim.type !== 'lowest' && claim.type !== 'highest') return claim;
-  const quote = matchRank(claim.evidence);
-  if (quote?.[0] !== claim.evidence) return claim;
-  const [, subject, verb, type, amount] = quote;
-  if (amount === undefined || type !== claim.type || Number(amount) > 100) return claim;
+export function withQuotedRankValue(rows, caption, claim) {
+  if ((claim.type !== 'lowest' && claim.type !== 'highest') || claim.value !== undefined) return claim;
   try {
-    if (!sameAnswer(readCategoryList(rows, subject, verb === 'had') ?? [], claim.ids)) return claim;
+    const fact = readQuotedFact(rows, caption, claim.evidence.trim());
+    if (fact?.type === claim.type && typeof fact.value === 'number' && fact.value <= 100 && matchesFact(claim, fact)) {
+      return {...claim, value: fact.value};
+    }
   } catch {
+    // An ambiguous category name cannot restore a missing rate.
     return claim;
   }
-  return {...claim, value: Number(amount)};
+  return claim;
 }
 
 export function localPrompt(rows, question) {
@@ -277,6 +277,26 @@ export function unverifiedCaptionExcerpts(rows, caption, claims) {
   return fragments.filter(({fact}) => !fact || !claims.some(claim =>
     claim.type === fact.type && claim.value === fact.value && matchesFact(claim, fact) &&
     matchesQuote(claim.evidence.trim().replace(/\r\n/g, '\n'), fact))).map(({text}) => text);
+}
+
+export function savedCaptionIssue(rows, caption, claims) {
+  const {facts} = scanCaptionFacts(rows, checkText(caption));
+  const reviewed = new Set();
+  for (const claim of claims) {
+    const quote = claim.evidence.trim();
+    const parsed = facts.find(fact => matchesQuote(quote, fact));
+    if (parsed?.type === claim.type && claim.value === parsed.value && matchesFact(claim, parsed)) {
+      reviewed.add(parsed.evidence);
+      continue;
+    }
+    if (isCutoffClaim(claim)) return `Review what this cutoff sentence establishes before publishing. “${claim.evidence}”`;
+    if (claim.type === 'pair') return `Review what this comparison establishes before publishing. “${claim.evidence}”`;
+    if (parsed || facts.some(fact => fact.evidence.includes(quote))) {
+      return `A saved fact disagrees with its quoted wording. Review this excerpt. “${claim.evidence}”`;
+    }
+  }
+  const unreviewed = facts.find(fact => !reviewed.has(fact.evidence));
+  if (unreviewed) return `Review this caption fact before publishing. It is missing from the saved check. “${unreviewed.evidence}”`;
 }
 
 export function localFacts(rows, caption) {

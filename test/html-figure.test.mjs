@@ -18,6 +18,41 @@ const checkedPage = readFileSync(example('published-page.html'), 'utf8');
 const reviewedCaption = readFileSync(example('caption.txt'), 'utf8').trim();
 const julySentence = 'July had a rate of 4.3%.';
 
+test('publication holds when saved facts disagree with or omit checkable caption wording', t => {
+  const directory = mkdtempSync(join(tmpdir(), 'two-charts-wording-'));
+  const checkPath = join(directory, 'check.json'), pagePath = join(directory, 'page.html');
+  t.after(() => {
+    unlinkSync(checkPath);
+    unlinkSync(pagePath);
+    rmdirSync(directory);
+  });
+  const original = JSON.parse(readFileSync(example('caption-recheck.json'), 'utf8'));
+  const altered = (before, after) => ({
+    ...original,
+    caption: original.caption.replace(before, after),
+    claims: original.claims.map(claim => ({...claim, evidence: claim.evidence.replace(before, after)})),
+  });
+  const omitted = {
+    ...altered('July had a rate of 4.3%.', 'July had a rate of 4.2%.'),
+    claims: original.claims.slice(0, 2),
+  };
+  for (const [candidate, expected] of [
+    [altered(julySentence, 'July had a rate of 4.2%.'), /saved fact disagrees.*4\.2%/],
+    [altered('lowest', 'highest'), /saved fact disagrees.*highest rate/],
+    [omitted, /missing from the saved check.*July/],
+  ]) {
+    writeFileSync(checkPath, JSON.stringify(candidate));
+    writeFileSync(pagePath, checkedPage.replace(/<figcaption[^>]*>[\s\S]*?<\/figcaption>/, '<figcaption>' + candidate.caption + '</figcaption>'));
+    const result = spawnSync(process.execPath, [script, checkPath, example('first-published.csv'), pagePath,
+      '--html', '--check-table', '--json'], {encoding:'utf8'});
+    assert.equal(result.status, 1, result.stderr);
+    const report = JSON.parse(result.stdout);
+    assert.equal(report.status, 'review_required');
+    assert.match(report.message, expected);
+    assert.equal(report.table.matches, true);
+  }
+});
+
 test('a rendered figure with two stale statements offers a checked full caption and both edits', () => {
   const original = readChart(readFileSync(example('first-published.csv'), 'utf8'));
   const current = readChart(readFileSync(example('revised.csv'), 'utf8'));
