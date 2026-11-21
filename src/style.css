@@ -93,9 +93,14 @@ select { min-height: 32px; padding: 3px; }
 .witness-answers dd { margin: 3px 0 0; font-weight: 750; line-height: 1.35; overflow-wrap: anywhere; }
 .witness-answers div + div dd { color: var(--gold); }
 .witness h3 { margin: 0; font-size: .8rem; color: var(--muted); }
-#witness-rates { margin: 6px 0 12px; padding: 0; list-style: none; }
-#witness-rates li { display: flex; align-items: baseline; flex-wrap: wrap; gap: 2px 14px; overflow-wrap: anywhere; }
-#witness-rates span { color: var(--gold); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.rate-changes { margin: 6px 0 12px; padding: 0; list-style: none; }
+.rate-changes li { display: flex; align-items: baseline; flex-wrap: wrap; gap: 2px 14px; overflow-wrap: anywhere; }
+.rate-changes span { color: var(--gold); white-space: nowrap; font-variant-numeric: tabular-nums; }
+#shift-analysis { margin-top: 12px; padding-top: 8px; border-block-start: 1px solid var(--line); font-size: .88rem; }
+#shift-analysis summary { color: var(--cool); font-weight: 650; min-height: 30px; }
+#shift-summary { color: var(--muted); max-width: 64ch; }
+#shift-answer { margin-top: 6px; font-weight: 750; }
+#shift-rates { margin-bottom: 0; }
 .charts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; margin: 14px 0; }
 .chart-panel h2 { margin-bottom: 15px; }
 .chart-panel.alternate h2 { color: var(--gold); }

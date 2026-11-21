@@ -80,11 +80,17 @@
         <div><dt>Hypothetical chart</dt><dd id="witness-alternate"></dd></div>
       </dl>
       <h3>Rates that changed</h3>
-      <ul id="witness-rates"></ul>
+      <ul class="rate-changes" id="witness-rates"></ul>
       <div class="controls">
         <button type="button" id="show-fix" class="small">Review the caption fix</button>
         <button type="button" id="download-comparison" class="small">Download proof with chart data</button>
       </div>
+      <details id="shift-analysis">
+        <summary>Find the smallest rate shift</summary>
+        <p id="shift-summary" role="status"></p>
+        <p id="shift-answer"></p>
+        <ul class="rate-changes" id="shift-rates"></ul>
+      </details>
     </section>
     <section aria-label="Chart comparison" class="charts" id="comparison" hidden>
       <article class="chart-panel"><h2 id="source-chart-title">Source chart</h2><div id="actual"></div></article>

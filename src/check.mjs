@@ -167,7 +167,7 @@ function fitPairs(candidate, intervals, edges) {
 // Each named value or cutoff narrows a category's integer interval. For a
 // pair of extremum groups, the smallest permitted minimum and the largest
 // permitted maximum give every interior category the most room.
-function intervalWitness(actual, claims, movable, acceptGroups = () => true, {index, bound, extraEdges = []} = {}) {
+function intervalWitness(actual, claims, movable, acceptGroups = () => true, {index, bound, extraEdges = [], radius = 10000} = {}) {
   const full = (1 << actual.length) - 1;
   const requiredLow = maskOf(claims.find(claim => claim.type === 'lowest')?.ids ?? []);
   const requiredHigh = maskOf(claims.find(claim => claim.type === 'highest')?.ids ?? []);
@@ -195,7 +195,9 @@ function intervalWitness(actual, claims, movable, acceptGroups = () => true, {in
     });
   }
   for (const [i, value] of sourcePoints.entries()) {
-    if (!(movable & (1 << i))) bounds[i] = [value, value];
+    const variation = movable & (1 << i) ? radius : 0;
+    const [lower, upper] = bounds[i];
+    bounds[i] = [Math.max(lower, value - variation), Math.min(upper, value + variation)];
   }
   if (bound) {
     const [lower, upper] = bounds[index];
@@ -246,30 +248,57 @@ function intervalWitness(actual, claims, movable, acceptGroups = () => true, {in
   return null;
 }
 
-function alternateIntervals(actual, claims, expected, question, movable) {
+function alternateIntervals(actual, claims, expected, question, movable, radius) {
   if (typeof question === 'string') {
     const expectedMask = maskOf(expected);
-    return intervalWitness(actual, claims, movable, (low, high) => (question === 'lowest' ? low : high) !== expectedMask);
+    return intervalWitness(actual, claims, movable, (low, high) => (question === 'lowest' ? low : high) !== expectedMask, {radius});
   }
   if (question.type === 'pair') {
     const [first, second] = question.ids;
     if (expected.length === 2) {
-      return intervalWitness(actual, claims, movable, undefined, {extraEdges: [[first - 1, second - 1, 1]]}) ??
-        intervalWitness(actual, claims, movable, undefined, {extraEdges: [[second - 1, first - 1, 1]]});
+      return intervalWitness(actual, claims, movable, undefined, {radius, extraEdges: [[first - 1, second - 1, 1]]}) ??
+        intervalWitness(actual, claims, movable, undefined, {radius, extraEdges: [[second - 1, first - 1, 1]]});
     }
     const winner = expected[0];
     const other = winner === first ? second : first;
-    return intervalWitness(actual, claims, movable, undefined, {extraEdges: [[winner - 1, other - 1, 0]]});
+    return intervalWitness(actual, claims, movable, undefined, {radius, extraEdges: [[winner - 1, other - 1, 0]]});
   }
   const cutoff = points(question.cutoff);
   // A different answer must change the membership of at least one category.
   for (const [i, value] of actual.entries()) {
     if (!(movable & (1 << i))) continue;
     const opposite = value >= question.cutoff ? [0, cutoff - 1] : [cutoff, 10000];
-    const candidate = intervalWitness(actual, claims, movable, undefined, {index: i, bound: opposite});
+    const candidate = intervalWitness(actual, claims, movable, undefined, {index: i, bound: opposite, radius});
     if (candidate) return candidate;
   }
   return null;
+}
+
+export function smallestAnswerShift(rows, question, claims, witness) {
+  const actual = rows.map(row => row.value);
+  const selected = readQuestion(question, rows.length);
+  const expected = answerValues(actual, selected);
+  if (!fits(actual, claims)) return null;
+  const possible = radius => alternateIntervals(actual, claims, expected, selected, (1 << actual.length) - 1, radius);
+  const qualifies = candidate => fits(candidate, claims) && !sameAnswer(answerValues(candidate, selected), expected);
+  let alternate = Array.isArray(witness) && witness.length === actual.length && witness.every(validPercent) && qualifies(witness)
+    ? witness : possible(10000);
+  if (!alternate) return null;
+  let lower = 1;
+  const distance = candidate => Math.max(...candidate.map((value, i) => Math.abs(points(value) - points(actual[i]))));
+  let upper = distance(alternate);
+  // Permitting a larger movement can only add possible charts. Verify the
+  // smallest feasible radius in integer hundredths of a percentage point.
+  while (lower < upper) {
+    const middle = Math.floor((lower + upper) / 2);
+    const candidate = possible(middle);
+    if (candidate) {
+      alternate = candidate;
+      upper = middle;
+    } else lower = middle + 1;
+  }
+  if (!qualifies(alternate) || distance(alternate) !== upper) throw Error('The smallest shift could not be verified.');
+  return {maximumShift: upper / 100, alternate, alternateAnswer: answerValues(alternate, selected)};
 }
 
 function preferWitness(best, alternate, origin, actual) {

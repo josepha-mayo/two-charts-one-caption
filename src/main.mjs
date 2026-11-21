@@ -1,6 +1,6 @@
 import './style.css';
 import {
-  readChart, checkCaption, validateClaims, answerText, isCutoffClaim, sameAnswer, supportedDetail, fitsClaim, questionText, readQuestion,
+  readChart, checkCaption, smallestAnswerShift, validateClaims, answerText, isCutoffClaim, sameAnswer, supportedDetail, fitsClaim, questionText, readQuestion,
 } from './check.mjs';
 import {localFacts, cloudPrompt, localPrompt, checkText, answerConstraint, reviewCloudClaims, unverifiedCaptionExcerpts} from './draft.mjs';
 import {defaultChartColumns, readChartRows, readCsvTable} from './csv.mjs';
@@ -405,7 +405,7 @@ function renderProof(claims, alternate) {
   el('save-recheck').hidden = !claims.length;
   const count = result.changedCategories;
   el('proof-summary').textContent = alternate
-    ? `Every checked fact holds in both charts. Changing ${count === 1 ? 'one category' : `${count} categories`} is the smallest edit that changes the answer.`
+    ? `Every checked fact holds in both charts. ${count === 1 ? 'One category is' : `${count} categories are`} the fewest that must change to get a different answer.`
     : result.status === 'implied'
       ? 'Across all permitted percentage charts, the checked facts force the same answer.'
       : result.status === 'conflict'
@@ -414,20 +414,52 @@ function renderProof(claims, alternate) {
   el('proof').hidden = false;
 }
 
-function renderWitness(selected, expected, alternate, alternateAnswer) {
-  el('witness').hidden = !alternate;
-  if (!alternate) return;
-  el('witness-question').textContent = questionText(selected, rows);
-  el('witness-source').textContent = answerText(rows, expected) + (selected?.type === 'pair' && expected.length === 2 ? ' (tie)' : '');
-  el('witness-alternate').textContent = answerText(rows, alternateAnswer) + (selected?.type === 'pair' && alternateAnswer.length === 2 ? ' (tie)' : '');
+function witnessAnswer(selected, ids) {
+  return answerText(rows, ids) + (selected?.type === 'pair' && ids.length === 2 ? ' (tie)' : '');
+}
+
+function renderRateChanges(list, alternate) {
   const changes = rows.flatMap(({label, value}, i) => {
     if (value === alternate[i]) return [];
     const item = make('li');
     item.append(make('strong', label), make('span', `${value}% to ${alternate[i]}%`));
     return [item];
   });
-  el('witness-rates').replaceChildren(...changes);
+  list.replaceChildren(...changes);
 }
+
+const shiftAnalysis = el('shift-analysis');
+const shiftSummary = el('shift-summary');
+const shiftAnswer = el('shift-answer');
+const shiftRates = el('shift-rates');
+
+function renderWitness(selected, expected, alternate, alternateAnswer) {
+  el('witness').hidden = !alternate;
+  shiftAnalysis.open = false;
+  shiftSummary.textContent = '';
+  shiftAnswer.textContent = '';
+  shiftRates.replaceChildren();
+  if (!alternate) return;
+  el('witness-question').textContent = questionText(selected, rows);
+  el('witness-source').textContent = witnessAnswer(selected, expected);
+  el('witness-alternate').textContent = witnessAnswer(selected, alternateAnswer);
+  renderRateChanges(el('witness-rates'), alternate);
+}
+
+shiftAnalysis.addEventListener('toggle', () => {
+  if (!shiftAnalysis.open || result?.status !== 'ambiguous' || shiftSummary.textContent) return;
+  const selected = selectedQuestion();
+  try {
+    const shift = smallestAnswerShift(rows, selected, reviewed, result.alternate);
+    if (!shift) throw Error('No answer-changing chart found.');
+    const magnitude = `${shift.maximumShift} percentage point${shift.maximumShift === 1 ? '' : 's'}`;
+    shiftSummary.textContent = `Allowing a shift of up to ${magnitude} per category can change the answer. Below that limit, the checked facts still force the source answer.`;
+    shiftAnswer.textContent = `The new answer would be ${witnessAnswer(selected, shift.alternateAnswer)}.`;
+    renderRateChanges(shiftRates, shift.alternate);
+  } catch {
+    shiftSummary.textContent = 'The smallest rate shift could not be verified for this chart.';
+  }
+});
 
 function focusCheckResult() {
   if (result?.status === 'ambiguous') {

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import {answer, checkCaption, fits, readChart, supportedDetail, validateClaims} from '../src/check.mjs';
+import {answer, checkCaption, fits, readChart, smallestAnswerShift, supportedDetail, validateClaims} from '../src/check.mjs';
 import {questionPrompt, readQuestionDraft} from '../src/brief.mjs';
 import {localFacts, localPrompt, reviewCloudClaims} from '../src/draft.mjs';
 import {createPublishCheck, runPublishCheck, suggestPublishRepair} from '../src/publish-check.mjs';
@@ -87,10 +87,13 @@ test('a saved pair comparison survives reordered rows and repairs an outdated co
   assert.equal(runPublishCheck(refreshed, repair.caption, repair.check).status, 'explicit');
 });
 
-test('pair constraints and ranked extrema agree with exhaustive small charts and minimal changed categories', () => {
+test('fewest changed categories and smallest rate shifts agree with exhaustive small charts', () => {
   const domain = [0, 0.01, 0.02, 0.03];
   const vectors = domain.flatMap(a => domain.flatMap(b => domain.flatMap(c => domain.map(d => [a,b,c,d]))));
-  const questions = [{type:'pair',ids:[1,4]}, {type:'pair',ids:[2,3]}, 'highest', {type:'atLeast', cutoff:0.02}];
+  const questions = [
+    {type:'pair',ids:[1,4]}, {type:'pair',ids:[2,3]}, 'highest', 'lowest',
+    {type:'atLeast', cutoff:0.02}, {type:'below', cutoff:0.02},
+  ];
   for (const source of vectors) {
     const chart = source.map((value, i) => ({label:String(i + 1), value}));
     const range = {type:'range', min:Math.min(...source), max:Math.max(...source)};
@@ -110,11 +113,31 @@ test('pair constraints and ranked extrema agree with exhaustive small charts and
         const alternatives = eligible.filter(values => String(answer(values, selected)) !== String(expected));
         const result = checkCaption(chart, selected, claims);
         assert.equal(result.status === 'ambiguous', alternatives.length > 0);
+        const shift = smallestAnswerShift(chart, selected, claims, result.alternate);
+        const maxDistance = values => Math.max(...values.map((value, i) => Math.abs(Math.round((value - source[i]) * 100))));
+        assert.equal(shift?.maximumShift ?? null, alternatives.length ? Math.min(...alternatives.map(maxDistance)) / 100 : null);
         if (!alternatives.length) continue;
+        assert.ok(fits(shift.alternate, claims));
+        assert.equal(maxDistance(shift.alternate) / 100, shift.maximumShift);
+        assert.deepEqual(shift.alternateAnswer, answer(shift.alternate, selected));
+        assert.notDeepEqual(shift.alternateAnswer, expected);
         const moved = values => values.filter((value, i) => value !== source[i]).length;
         assert.equal(result.changedCategories, Math.min(...alternatives.map(moved)));
         assert.ok(fits(result.alternate, claims));
       }
     }
   }
+});
+
+test('two rates moving 10 points each can tie when a one-category edit takes at least 20 points', () => {
+  const chart = readChart('category,percent\nNorth,40\nSouth,60');
+  const question = {type: 'pair', ids: [1, 2]};
+  const witness = checkCaption(chart, question, []);
+  assert.equal(witness.changedCategories, 1);
+  assert.ok(Math.max(...witness.alternate.map((value, i) => Math.abs(value - chart[i].value))) >= 20);
+  assert.deepEqual(smallestAnswerShift(chart, question, [], witness.alternate), {
+    maximumShift: 10,
+    alternate: [50, 50],
+    alternateAnswer: [1, 2],
+  });
 });
