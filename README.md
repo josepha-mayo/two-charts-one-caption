@@ -130,6 +130,29 @@ node scripts/verify-caption.mjs --batch examples/bus-cutoff/release.example.json
 
 The example reports one passing check and one stale excerpt. Batch mode reports every entry in order. It exits with `0` when all pass, `1` when any needs editorial review, and `2` when one or more inputs are invalid. Add `--require-checked-wording` to apply that policy to every entry.
 
+### Hold a publication in GitHub Actions
+
+Run the caption action after creating the CSV and publication files. The manifest and the files it references must be inside the checkout. This workflow sends a failed release back for review. In a publishing job, place the upload or deploy step after the caption check.
+
+```yaml
+name: Check chart captions
+on: [pull_request, push]
+permissions:
+  contents: read
+jobs:
+  captions:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: josepha-mayo/two-charts-one-caption@f3c9096282b6559b64f6a1c1e743a8c4c4c4eef9
+        with:
+          manifest: reports/release.json
+```
+
+The job summary shows each chart's result. The verifier step log contains the flagged caption excerpts and table differences. Set `require-checked-wording: 'true'` to request review for wording without a checked fact. The [BLS release example](examples/bls-unemployment/release.example.json) checks the same HTML against both the first-published and revised CSVs. The original passes, while the revision requests editorial review.
+
 ## Firebase
 
 The recorded Firebase example shows the approved on-device question, the three caption facts kept after cloud review, and the source-checked sentence Chrome proposed offline. **Rerun the caption check** computes the original and revised answers using the browser verifier and the public bus data. It works without a model download. [Recorded review](https://two-charts-caption-2026.web.app/?demo=firebase-proof)

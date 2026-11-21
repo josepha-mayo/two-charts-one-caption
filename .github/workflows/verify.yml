@@ -38,8 +38,8 @@ jobs:
             manifest.charts = manifest.charts.slice(0, 1);
             fs.writeFileSync("examples/bls-unemployment/release-passing.json", JSON.stringify(manifest), {flag: "wx"});
           '
-      - name: Pass the original BLS figure
-        uses: ./
+      - name: Pass the original BLS figure with the published action
+        uses: josepha-mayo/two-charts-one-caption@f3c9096282b6559b64f6a1c1e743a8c4c4c4eef9
         with:
           manifest: examples/bls-unemployment/release-passing.json
       - name: Block a stale figure after the BLS data revision
