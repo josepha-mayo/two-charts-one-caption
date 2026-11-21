@@ -109,6 +109,7 @@
       <p id="detail"></p>
       <div class="controls">
         <button type="button" class="primary" id="apply">Add this detail and recheck</button>
+        <button type="button" id="open-rewrite">Test my own rewrite</button>
         <button type="button" id="nano">Ask Chrome Nano for the detail</button>
         <button type="button" id="export">Download reviewed text and data</button>
       </div>
@@ -270,6 +271,26 @@
     <form method="dialog" class="controls">
       <button type="submit" value="cancel">Keep current test</button>
       <button type="submit" value="replace">Replace test</button>
+    </form>
+  </dialog>
+  <dialog id="rewrite-dialog" aria-labelledby="rewrite-title">
+    <h2 id="rewrite-title">Test your rewrite</h2>
+    <p id="rewrite-question"></p>
+    <div class="rewrite-drafts">
+      <section aria-labelledby="rewrite-original-title">
+        <h3 id="rewrite-original-title">Current caption</h3>
+        <blockquote id="rewrite-original" tabindex="0"></blockquote>
+      </section>
+      <label for="rewrite-caption">Your rewrite
+        <textarea id="rewrite-caption" rows="5" maxlength="1800" aria-describedby="rewrite-help"></textarea>
+      </label>
+    </div>
+    <p id="rewrite-help">Check your wording against the same chart and question in this browser.</p>
+    <p id="rewrite-status" role="status"></p>
+    <form method="dialog" class="controls">
+      <button type="button" id="check-rewrite">Check rewrite</button>
+      <button type="submit" value="use" id="use-rewrite" class="primary" disabled>Use checked rewrite</button>
+      <button type="submit" value="cancel">Cancel</button>
     </form>
   </dialog>
   <dialog id="open-reader-file-dialog" aria-labelledby="open-reader-file-title" aria-describedby="open-reader-file-note">

@@ -188,6 +188,14 @@ footer { color: var(--muted); font-size: .81rem; margin-top: 14px; }
 footer a { color: var(--cool); text-underline-offset: 3px; }
 dialog { color: var(--text); background: var(--panel); width: min(680px, calc(100% - 28px)); border: 1px solid #7180a2; border-radius: 9px; padding: 20px; }
 dialog::backdrop { background: #090d18c9; }
+.rewrite-drafts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-block: 12px; }
+.rewrite-drafts h3, .rewrite-drafts label { font-size: .88rem; font-weight: 650; margin: 0; }
+#rewrite-original { margin: 6px 0 0; padding: 10px; border-inline-start: 3px solid var(--gold); background: var(--background); }
+#rewrite-original, #rewrite-caption { max-height: 26vh; overflow: auto; overflow-wrap: anywhere; }
+#rewrite-caption { display: block; margin-top: 6px; font-weight: 400; }
+#rewrite-dialog .controls { margin-top: 12px; }
+#rewrite-status:not(:empty) { color: var(--gold); }
+#rewrite-status[data-state="resolved"] { color: var(--mint); }
 dialog p { color: var(--muted); margin-top: 8px; }
 dialog p a { color: var(--cool); text-underline-offset: 3px; }
 .cloud-preview { display: grid; grid-template-columns: minmax(0, 1fr); gap: 4px; margin: 14px 0; }
@@ -203,6 +211,6 @@ dialog p a { color: var(--cool); text-underline-offset: 3px; }
 .offline-copy p:empty { display: none; }
 dialog pre { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 43vh; overflow: auto; background: var(--background); padding: 12px; border-radius: 5px; }
 @media (max-width: 660px) {
-  .hero, .charts, .test-versions { grid-template-columns: 1fr; gap: 12px; }
+  .hero, .charts, .test-versions, .rewrite-drafts { grid-template-columns: 1fr; gap: 12px; }
   .controls button { flex: 1 1 auto; }
 }

@@ -199,7 +199,7 @@ function invalidate() {
 }
 
 function syncActions() {
-  for (const id of ['check', 'cloud-preview', 'load', 'csv-file', 'example', 'example-select', 'nano', 'apply', 'confirm-facts',
+  for (const id of ['check', 'cloud-preview', 'load', 'csv-file', 'example', 'example-select', 'nano', 'apply', 'confirm-facts', 'open-rewrite',
     'brief-example', 'brief-submit', 'brief-apply', 'recheck-file', 'save-recheck', 'run-recheck',
     'review-saved-caption', 'apply-stale-repair', 'example-refresh', 'csv-category', 'csv-percent',
     'use-csv-columns']) el(id).disabled = busy;
@@ -360,12 +360,16 @@ function browserCheck(guess) {
   }
   try {
     const text = checkText(caption.value);
-    render(validateClaims(localFacts(rows, text), text, rows.length));
+    render(localCaptionClaims(text));
   } catch (error) {
     status.textContent = error.message;
     status.dataset.state = 'conflict';
   }
   focusCheckResult();
+}
+
+function localCaptionClaims(text) {
+  return validateClaims(localFacts(rows, text), text, rows.length);
 }
 
 el('example').addEventListener('click', () => loadSample(el('example-select').value));
@@ -748,6 +752,19 @@ el('nano').addEventListener('click', async () => {
   }
 });
 
+function applyCaptionRevision(text, claims, comparison) {
+  if (comparison) {
+    pendingReaderTest = comparison;
+    renderReaderTest();
+  }
+  caption.value = text;
+  revision += 1;
+  readerAnswer = undefined;
+  render(claims);
+  if (pendingReaderTest) el('start-reader-test').focus();
+  else focusCheckResult();
+}
+
 el('apply').addEventListener('click', () => {
   if (!result || !reviewed) return;
   const selected = selectedQuestion();
@@ -758,22 +775,83 @@ el('apply').addEventListener('click', () => {
     status.textContent = 'Shorten the caption before adding the detail.';
     return;
   }
-  if (result.status === 'ambiguous') {
-    pendingReaderTest = {rows, question: selected, expected: result.expected, before, after: text};
-    renderReaderTest();
-  }
-  caption.value = text;
-  revision += 1;
-  readerAnswer = undefined;
   const fact = typeof selected === 'string'
     ? {type: selected, value: rows[result.expected[0] - 1].value}
     : selected;
-  render([...reviewed, {...fact, ids: result.expected, evidence}]);
-  if (pendingReaderTest) el('start-reader-test').focus();
-  else {
-    status.setAttribute('tabindex', '-1');
-    status.focus();
+  const comparison = result.status === 'ambiguous'
+    ? {rows, question: selected, expected: result.expected, before, after: text}
+    : null;
+  applyCaptionRevision(text, [...reviewed, {...fact, ids: result.expected, evidence}], comparison);
+});
+
+const rewriteDialog = el('rewrite-dialog');
+const rewriteCaption = el('rewrite-caption');
+const rewriteStatus = el('rewrite-status');
+let rewriteContext;
+let checkedRewrite;
+
+function clearRewriteCheck() {
+  checkedRewrite = null;
+  rewriteStatus.textContent = '';
+  rewriteStatus.removeAttribute('data-state');
+  el('use-rewrite').disabled = true;
+}
+
+el('open-rewrite').addEventListener('click', () => {
+  if (!result || result.status === 'conflict') return;
+  const before = checkText(caption.value);
+  rewriteContext = {revision, before, question: selectedQuestion()};
+  el('rewrite-original').textContent = before;
+  rewriteCaption.value = before;
+  el('rewrite-question').textContent = questionText(rewriteContext.question);
+  clearRewriteCheck();
+  rewriteDialog.returnValue = 'cancel';
+  rewriteDialog.showModal();
+  rewriteCaption.focus();
+});
+rewriteCaption.addEventListener('input', clearRewriteCheck);
+el('check-rewrite').addEventListener('click', () => {
+  clearRewriteCheck();
+  if (rewriteContext?.revision !== revision) {
+    rewriteStatus.textContent = 'The chart or question changed. Reopen the rewrite to check it again.';
+    return;
   }
+  try {
+    const text = checkText(rewriteCaption.value);
+    if (text === rewriteContext.before) throw Error('Change the wording before checking the rewrite.');
+    const claims = localCaptionClaims(text);
+    const result = checkCaption(rows, rewriteContext.question, claims);
+    if (result.status === 'conflict') {
+      const values = rows.map(row => row.value);
+      const conflict = claims.find(claim => !fitsClaim(values, claim));
+      rewriteStatus.textContent = `This sentence conflicts with the source chart. “${conflict.evidence}”`;
+      return;
+    }
+    const sourceAnswer = answerText(rows, result.expected);
+    if (result.status === 'ambiguous') {
+      const alternate = answerText(rows, result.alternateAnswer);
+      rewriteStatus.textContent = `The source chart answers “${sourceAnswer}.” The same rewrite also fits a chart that answers “${alternate}.”`;
+      return;
+    }
+    checkedRewrite = {text, claims, expected: result.expected};
+    rewriteStatus.textContent = result.status === 'explicit'
+      ? `The rewrite directly establishes the answer “${sourceAnswer}.”`
+      : `The checked facts force the answer “${sourceAnswer}.” Readers still need to work it out.`;
+    rewriteStatus.dataset.state = 'resolved';
+    el('use-rewrite').disabled = false;
+  } catch (error) {
+    rewriteStatus.textContent = error.message;
+  }
+});
+rewriteDialog.addEventListener('close', () => {
+  const context = rewriteContext;
+  const checked = checkedRewrite;
+  rewriteContext = null;
+  clearRewriteCheck();
+  if (rewriteDialog.returnValue !== 'use' || context?.revision !== revision || !checked) return;
+  applyCaptionRevision(checked.text, checked.claims, {
+    rows, question: context.question, expected: checked.expected, before: context.before, after: checked.text,
+  });
 });
 
 function downloadFile(content, type, name) {
