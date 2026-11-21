@@ -82,7 +82,7 @@ export function suggestPublishRepair(rows, caption, check) {
   const currentQuestion = check.question;
   const sameQuestion = typeof currentQuestion === 'string'
     ? claim.type === currentQuestion
-    : claim.type === 'atLeast' && claim.cutoff === currentQuestion.cutoff;
+    : claim.type === currentQuestion.type && claim.cutoff === currentQuestion.cutoff;
   if (!sameQuestion) return;
 
   const text = caption.replace(/\r\n/g, '\n');

@@ -1,4 +1,4 @@
-import {isCutoffClaim, readCategoryList, readQuestion, sameAnswer, validateClaims} from './check.mjs';
+import {cutoffDirection, isCutoffClaim, readCategoryList, readQuestion, sameAnswer, validateClaims} from './check.mjs';
 
 const MAX_CAPTION = 1800;
 const percent = String.raw`\d{1,3}(?:\.\d{1,2})?`;
@@ -11,11 +11,11 @@ function subjectMatcher(prefix, suffix) {
   return text => quoted.exec(text) ?? legacy.exec(text);
 }
 const matchRank = subjectMatcher('', ` (had|shared) the (lowest|highest) rate, at (${percent})%\\.(?=\\s|$)`);
-const cutoffVerb = '(?:reached at least|were at or above|met or exceeded)';
+const cutoffVerb = '(reached at least|were at or above|met or exceeded|fell below|were below)';
 const cutoffEnding = `(${percent})(?:%| percent)(?:\\.(?=\\s|$)|$)`;
 const matchCutoff = subjectMatcher('(Only )?', ` ${cutoffVerb} ${cutoffEnding}`);
 const allCutoffPattern = new RegExp(`^All categories ${cutoffVerb} ${cutoffEnding}`);
-const emptyCutoffPattern = new RegExp(`^No categories reached (?:at least )?${cutoffEnding}`);
+const emptyCutoffPattern = new RegExp(`^No categories (reached(?: at least)?|fell below|were below) ${cutoffEnding}`);
 const matchValue = subjectMatcher('', ` had a rate of (${percent})%\\.(?=\\s|$)`);
 
 export const answerConstraint = {
@@ -36,8 +36,9 @@ export function cloudPrompt(rows, question, caption) {
     'Return JSON {supported:boolean,claims:array,alternatives:array}.',
     'Supported factual claims: {type:"range",min:number,max:number,evidence:string},',
     '{type:"value",id:number,value:number,evidence:string}, or',
-    '{type:"lowest"|"highest",ids:number[],value?:number,evidence:string}, or {type:"atLeast"|"atLeastSome",cutoff:number,ids:number[],evidence:string}.',
+    '{type:"lowest"|"highest",ids:number[],value?:number,evidence:string}, or {type:"atLeast"|"atLeastSome"|"below"|"belowSome",cutoff:number,ids:number[],evidence:string}.',
     'Use atLeast for explicit complete cutoff answers, such as “Only North reached at least 70%.” Use atLeastSome for positive cutoff statements that do not exclude other categories, such as “North reached at least 70%.”',
+    'Use below for complete strict cutoff answers, such as “Only North fell below 70%.” Use belowSome for “North fell below 70%.” An exact match to the cutoff does not count as below.',
     'For cutoff evidence quote the whole sentence. Use an empty array only for an explicit no-category claim. An extremum assertion names all tied categories.',
     'When the extremum quote states an exact rate, include it in the rank claim as value. Do not duplicate it as a separate value claim.',
     'Evidence is an exact quote from the caption. The question is separate and cannot supply facts. Do not extract an answer by treating the question as caption text.',
@@ -73,7 +74,8 @@ export function reviewCloudClaims(rows, caption, candidates) {
       else {
         represented.add(parsed.evidence);
         let origin = 'matched';
-        if (claim.type === 'atLeast' && parsed.type === 'atLeastSome') origin = 'narrowed';
+        const direction = cutoffDirection(claim);
+        if (direction && claim.type === direction && parsed.type !== direction) origin = 'narrowed';
         else if (claim.value === undefined && parsed.value !== undefined) origin = 'rate-restored';
         accepted.push({claim: {...parsed, evidence: claim.evidence}, origin});
       }
@@ -93,7 +95,7 @@ export function reviewCloudClaims(rows, caption, candidates) {
 
 function matchesFact(claim, fact) {
   if (isCutoffClaim(fact)) {
-    return isCutoffClaim(claim) && fact.cutoff === claim.cutoff && sameAnswer(fact.ids, claim.ids);
+    return cutoffDirection(claim) === cutoffDirection(fact) && fact.cutoff === claim.cutoff && sameAnswer(fact.ids, claim.ids);
   }
   if (fact.type !== claim.type) return false;
   if (fact.type === 'range') return fact.min === claim.min && fact.max === claim.max;
@@ -119,7 +121,9 @@ export function localPrompt(rows, question) {
   const selected = readQuestion(question);
   const task = typeof selected === 'string'
     ? `Select every ID tied for the ${selected} percentage.`
-    : `Select every ID whose percentage is greater than or equal to ${selected.cutoff}. Include exact matches.`;
+    : selected.type === 'below'
+      ? `Select every ID whose percentage is strictly less than ${selected.cutoff}. Exclude exact matches.`
+      : `Select every ID whose percentage is greater than or equal to ${selected.cutoff}. Include exact matches.`;
   return [
     task,
     'Use the source chart below. Return only JSON with an "ids" array of matching integer IDs. Use an empty array if none match.',
@@ -128,16 +132,21 @@ export function localPrompt(rows, question) {
   ].join('\n');
 }
 
+function thresholdDirection(verb) {
+  return verb.endsWith('below') ? 'below' : 'atLeast';
+}
+
 function readCutoffFact(rows, text) {
   const none = emptyCutoffPattern.exec(text);
-  if (none) return {type: 'atLeast', cutoff: Number(none[1]), ids: [], evidence: none[0]};
+  if (none) return {type: thresholdDirection(none[1]), cutoff: Number(none[2]), ids: [], evidence: none[0]};
   const all = allCutoffPattern.exec(text);
-  if (all) return {type: 'atLeast', cutoff: Number(all[1]), ids: rows.map((_, index) => index + 1), evidence: all[0]};
+  if (all) return {type: thresholdDirection(all[1]), cutoff: Number(all[2]), ids: rows.map((_, index) => index + 1), evidence: all[0]};
   const cutoff = matchCutoff(text);
   if (!cutoff) return;
-  const [, only, subjects, figure] = cutoff;
+  const [, only, subjects, verb, figure] = cutoff;
+  const direction = thresholdDirection(verb);
   const ids = readCategoryList(rows, subjects);
-  if (ids) return {type: only ? 'atLeast' : 'atLeastSome', cutoff: Number(figure), ids, evidence: cutoff[0]};
+  if (ids) return {type: only ? direction : direction + 'Some', cutoff: Number(figure), ids, evidence: cutoff[0]};
 }
 
 function matchesQuote(quote, fact) {

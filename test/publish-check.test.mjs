@@ -7,6 +7,7 @@ import {fileURLToPath} from 'node:url';
 import test from 'node:test';
 import {readChart, supportedDetail} from '../src/check.mjs';
 import {localFacts} from '../src/draft.mjs';
+import {foodNationalExample} from '../src/sample.mjs';
 import {createPublishCheck, readPublishCheck, runPublishCheck, suggestPublishRepair} from '../src/publish-check.mjs';
 
 const example = name => new URL(`../examples/bus-cutoff/${name}`, import.meta.url);
@@ -47,6 +48,24 @@ test('publication check survives reordered rows and flags exactly the stale cuto
     failedFacts: ['Only Local and Select Bus Service reached at least 70%.'],
   });
   assert.doesNotMatch(JSON.stringify(saved), /70\.5|69\.99|private|spreadsheet/);
+});
+
+test('a rate reaching the benchmark invalidates and repairs a saved below claim', () => {
+  const {csv, caption, question} = foodNationalExample;
+  const rows = readChart(csv);
+  const claim = supportedDetail(rows, question, [1, 2, 4]);
+  const published = `${caption} ${claim}`;
+  const saved = createPublishCheck(rows, question, published, localFacts(rows, published));
+  assert.equal(runPublishCheck(rows, published, saved).status, 'explicit');
+
+  const hypothetical = rows.map(row => row.label === 'Midwest' ? {...row, value: 13.7} : row);
+  const conflict = runPublishCheck(hypothetical, published, saved);
+  assert.equal(conflict.status, 'conflict');
+  assert.deepEqual(conflict.failedFacts, [claim]);
+  const repaired = suggestPublishRepair(hypothetical, published, saved);
+  assert.equal(repaired.after, 'Only Northeast and West fell below 13.7%.');
+  assert.equal(repaired.caption, `${caption} ${repaired.after}`);
+  assert.equal(runPublishCheck(hypothetical, repaired.caption, repaired.check).status, 'explicit');
 });
 
 test('changed captions and categories require review, while unrelated data changes can pass', () => {

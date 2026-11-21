@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {readChart, checkCaption, validateClaims, answer, answerText, readCategoryList, supportedDetail, fits} from '../src/check.mjs';
 import {localFacts, cloudPrompt, localPrompt, reviewCloudClaims} from '../src/draft.mjs';
 import {questionPrompt, readQuestionDraft} from '../src/brief.mjs';
-import {sampleCsv, sampleCaption, cutoffCaption, foodExample} from '../src/sample.mjs';
+import {sampleCsv, sampleCaption, cutoffCaption, foodExample, foodNationalExample} from '../src/sample.mjs';
 import {
   addReaderResponse, createReaderLink, createReaderTest, encodeResponse, readReaderLink,
   readReaderTestFile, readerCounts, readerResponseId, restoreReaderTest, saveReaderTest, writeReaderTestFile,
@@ -54,6 +54,41 @@ test('the USDA example preserves both caption facts while changing the highest-r
   const after = checkCaption(rows, question, validateClaims(localFacts(rows, revised), revised, rows.length));
   assert.equal(after.status, 'explicit');
   assert.deepEqual(after.expected, before.expected);
+});
+
+test('the USDA national benchmark excludes an exact match from the below group', () => {
+  const {csv, caption, question} = foodNationalExample;
+  const rows = readChart(csv);
+  const claims = localFacts(rows, caption);
+  const before = checkCaption(rows, question, claims);
+  assert.equal(before.status, 'ambiguous');
+  assert.deepEqual(before.expected, [1, 2, 4]);
+  assert.deepEqual(before.alternate, [12.2, 13.7, 15, 12.9]);
+  assert.deepEqual(before.alternateAnswer, [1, 4]);
+  assert.ok(fits(before.alternate, claims));
+  const revised = caption + ' ' + supportedDetail(rows, question, before.expected);
+  assert.equal(checkCaption(rows, question, localFacts(rows, revised)).status, 'explicit');
+  const link = new URL(createReaderLink('https://example.test/', rows, question, revised));
+  assert.deepEqual(readReaderLink(link.hash).question, question);
+});
+
+test('below claims keep partial membership open and reject the opposite direction', () => {
+  const rows = readChart('category,percent\nNorth,69.99\nSouth,70\nEast,72');
+  const partial = 'North fell below 70%.';
+  const question = {type: 'below', cutoff: 70};
+  const facts = localFacts(rows, partial);
+  assert.deepEqual(facts, [{type:'belowSome', cutoff:70, ids:[1], evidence:partial}]);
+  assert.equal(checkCaption(rows, question, facts).status, 'ambiguous');
+  const complete = reviewCloudClaims(rows, partial, [{...question, ids:[1], evidence:partial}]);
+  assert.deepEqual(complete.claims, facts);
+  assert.equal(complete.narrowed, 1);
+  const reversed = reviewCloudClaims(rows, partial, [{type:'atLeast', cutoff:70, ids:[1], evidence:partial}]);
+  assert.equal(reversed.excluded, 1);
+  assert.deepEqual(reversed.claims, facts);
+  assert.equal(supportedDetail(rows, {...question, cutoff:0}, []), 'No categories fell below 0%.');
+  assert.deepEqual(answer([0, 99.99, 100], {...question, cutoff:100}), [1,2]);
+  assert.match(localPrompt(rows, question), /strictly less than 70/);
+  assert.match(cloudPrompt(rows, question, partial), /"type":"below"/);
 });
 
 test('caption repairs keep colliding category names distinct and round-trip all selections', () => {
@@ -377,22 +412,27 @@ test('interval checks agree with exhaustive search for coupled cutoff and rankin
   for (const source of vectors) {
     const rows = source.map((value, i) => ({label: String(i + 1), value}));
     const range = {type: 'range', min: Math.min(...source), max: Math.max(...source)};
-    const question = {type: 'atLeast', cutoff: 0.02};
+    const questions = [{type: 'atLeast', cutoff: 0.02}, {type: 'below', cutoff: 0.02}, 'lowest', 'highest'];
     const otherCutoff = {type: 'atLeast', cutoff: 0.01};
     const high = {type: 'highest', ids: answer(source, 'highest')};
     const low = {type: 'lowest', ids: answer(source, 'lowest')};
     const atLeast = {...otherCutoff, ids: answer(source, otherCutoff)};
     const pin = {type: 'value', id: 2, value: source[1]};
-    for (const testedQuestion of [question, 'lowest', 'highest']) {
+    const below = {type: 'below', cutoff: 0.01, ids: source.flatMap((value, i) => value < 0.01 ? [i + 1] : [])};
+    const cutoffClaims = [atLeast, below];
+    if (below.ids.length) cutoffClaims.push({...below, type: 'belowSome', ids: below.ids.slice(0, 1)});
+    for (const testedQuestion of questions) {
       const expected = answer(source, testedQuestion);
-      for (const claims of [[range, atLeast], [range, atLeast, high], [range, atLeast, low, pin]]) {
-        const differs = values => String(answer(values, testedQuestion)) !== String(expected);
-        const found = vectors.some(values => fits(values, claims) && differs(values));
-        const result = checkCaption(rows, testedQuestion, claims);
-        assert.equal(result.status === 'ambiguous', found);
-        if (found) {
-          assert.ok(fits(result.alternate, claims));
-          assert.ok(differs(result.alternate));
+      for (const claim of cutoffClaims) {
+        for (const claims of [[range, claim], [range, claim, high], [range, claim, low, pin]]) {
+          const differs = values => String(answer(values, testedQuestion)) !== String(expected);
+          const found = vectors.some(values => fits(values, claims) && differs(values));
+          const result = checkCaption(rows, testedQuestion, claims);
+          assert.equal(result.status === 'ambiguous', found);
+          if (found) {
+            assert.ok(fits(result.alternate, claims));
+            assert.ok(differs(result.alternate));
+          }
         }
       }
     }
@@ -414,13 +454,23 @@ test('an editor can confirm a quoted cutoff without publishing the private brief
 });
 
 test('an explicit strict or opposite threshold cannot be approved as an inclusive minimum', () => {
-  for (const condition of ['more than 70%', 'below 70 percent', 'at most 70%', '>70%']) {
+  for (const condition of ['more than 70%', 'below 70 percent', 'at most 70%', '>70%', '<=70%', '≤70%']) {
     const evidence = `Which categories have a rate ${condition}?`;
     assert.throws(() => readQuestionDraft({kind: 'atLeast', cutoff: 70, evidence}, evidence), /inclusive minimum/);
   }
   const evidence = 'Show rates at or above 70%.';
   assert.deepEqual(readQuestionDraft({kind: 'atLeast', cutoff: 70, evidence}, evidence).question,
     {type: 'atLeast', cutoff: 70});
+});
+
+test('on-device question drafts preserve a strict below comparison in the note', () => {
+  const supported = 'Find which regions fell below 13.7%.';
+  assert.deepEqual(readQuestionDraft({kind:'below', cutoff:13.7, evidence:supported}, supported),
+    {question:{type:'below', cutoff:13.7}, evidence:supported});
+  for (const comparison of ['at or below', 'not below', 'no less than', 'at least', '<=', '≤']) {
+    const evidence = 'Which regions were ' + comparison + ' 13.7%?';
+    assert.throws(() => readQuestionDraft({kind:'below', cutoff:13.7, evidence}, evidence), /strict comparison/);
+  }
 });
 
 test('cloud cutoff claims cannot use the question in place of evidence from the caption', () => {

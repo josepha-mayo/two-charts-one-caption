@@ -11,3 +11,10 @@ export const foodExample = {
   sourceUrl: 'https://ers.usda.gov/sites/default/files/_laserfiche/publications/113623/ERR-358.pdf?v=71497',
   sourceCitation: 'USDA Economic Research Service · Household Food Security in the United States in 2024, Table 2',
 };
+
+export const foodNationalExample = {
+  ...foodExample,
+  label: 'Food insecurity vs. national estimate',
+  question: {type: 'below', cutoff: 13.7},
+  sourceCitation: 'USDA Economic Research Service · Household Food Security in the United States in 2024, Table 2 and the national estimate',
+};

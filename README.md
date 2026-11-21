@@ -2,7 +2,7 @@
 
 Check whether a chart description answers the question a reader needs to ask. The browser finds an alternative that changes the answer while preserving the checked facts and changing as few categories as possible. The revised description and an HTML data table can be downloaded once the selected answer is explicit.
 
-[Try the 70% cutoff demo](https://two-charts-caption-2026--judge-preview-nh1ldqbu.web.app/?example=cutoff) · [Try the regional food insecurity demo](https://two-charts-caption-2026--judge-preview-nh1ldqbu.web.app/?example=food)
+[Try the 70% bus cutoff](https://two-charts-caption-2026--judge-preview-nh1ldqbu.web.app/?example=cutoff) · [Compare food insecurity with the national rate](https://two-charts-caption-2026--judge-preview-nh1ldqbu.web.app/?example=food-national)
 
 ## Run locally
 
@@ -19,6 +19,8 @@ The bus example uses the median on-time rates in [Table 3 of the NYC Comptroller
 Open `/?example=cutoff` to ask which bus services reach a hypothetical 70% editorial cutoff. The caption gives the range and names the best and worst performers. Select Bus Service can still move below 70% while all three statements remain true. A sentence such as “Local reached at least 70%.” establishes a lower bound for Local. Adding “Only” makes the list complete and constrains every other category. Reader links keep the same cutoff and offer separate responses for “none” and “the caption doesn’t say.”
 
 Open `/?example=food` to ask which regions had the highest reported household food insecurity rate in 2024. South leads in the published estimates. In the hypothetical chart, raising Midwest from 13.3% to 15% creates a tie while keeping the caption’s range and named lowest region true. [USDA Economic Research Service report, Table 2](https://ers.usda.gov/sites/default/files/_laserfiche/publications/113623/ERR-358.pdf?v=71497)
+
+Open `/?example=food-national` to ask which regional estimates fell below the national estimate of 13.7%. Northeast, Midwest, and West do in the published data. In the hypothetical chart, Midwest moves from 13.3% to 13.7%, so it drops out of the answer while the caption’s range and lowest region still hold. **Below** excludes an exact match. **At or above** includes it. [USDA national and regional estimates](https://www.ers.usda.gov/media/9161/err-358.pdf?v=35619)
 
 ## Share the comparison
 

@@ -6,20 +6,30 @@ const validPercent = value =>
 
 const listFormat = new Intl.ListFormat('en', {style: 'long', type: 'conjunction'});
 const categoryLists = new WeakMap();
+const cutoffDirections = new Map([
+  ['atLeast', 'atLeast'], ['atLeastSome', 'atLeast'], ['below', 'below'], ['belowSome', 'below'],
+]);
+
+export function cutoffDirection(claim) {
+  return cutoffDirections.get(claim?.type);
+}
 
 export function isCutoffClaim(claim) {
-  return claim.type === 'atLeast' || claim.type === 'atLeastSome';
+  return cutoffDirections.has(claim?.type);
 }
 
 export function readQuestion(question) {
   if (question === 'lowest' || question === 'highest') return question;
-  if (question?.type === 'atLeast' && validPercent(question.cutoff)) return {type: 'atLeast', cutoff: question.cutoff};
+  if ((question?.type === 'atLeast' || question?.type === 'below') && validPercent(question.cutoff)) {
+    return {type: question.type, cutoff: question.cutoff};
+  }
   throw Error('Choose a ranking or enter a cutoff from 0% to 100%, with up to two decimal places.');
 }
 
 export function questionText(question) {
-  return typeof question === 'string'
-    ? `Which categories had the ${question} rate?`
+  if (typeof question === 'string') return `Which categories had the ${question} rate?`;
+  return question.type === 'below'
+    ? `Which categories fell below ${question.cutoff}%?`
     : `Which categories reached at least ${question.cutoff}%?`;
 }
 
@@ -28,9 +38,13 @@ export function answer(values, question) {
   return answerValues(values, selected);
 }
 
+function meetsCutoff(value, {type, cutoff}) {
+  return type === 'below' ? value < cutoff : value >= cutoff;
+}
+
 function answerValues(values, question) {
   if (typeof question !== 'string') {
-    return values.flatMap((value, index) => value >= question.cutoff ? [index + 1] : []);
+    return values.flatMap((value, index) => meetsCutoff(value, question) ? [index + 1] : []);
   }
   const extreme = question === 'lowest' ? Math.min(...values) : Math.max(...values);
   return values.flatMap((value, index) => value === extreme ? [index + 1] : []);
@@ -58,7 +72,7 @@ export function validateClaims(claims, caption, size) {
       (claim.value === undefined || validPercent(claim.value));
     if ((isRank || isCutoff) && Array.isArray(claim.ids)) {
       const ids = [...new Set(claim.ids)].sort((a, b) => a - b);
-      if ((ids.length || type === 'atLeast') && ids.length === claim.ids.length &&
+      if ((ids.length || (isCutoff && type === cutoffDirection(claim))) && ids.length === claim.ids.length &&
           ids.every(id => Number.isInteger(id) && id >= 1 && id <= size)) {
         if (isCutoff) return {type, cutoff: claim.cutoff, ids, evidence};
         return claim.value === undefined ? {type, ids, evidence} : {type, ids, value: claim.value, evidence};
@@ -75,9 +89,14 @@ export function fits(values, claims) {
 export function fitsClaim(values, claim) {
   if (claim.type === 'range') return Math.min(...values) === claim.min && Math.max(...values) === claim.max;
   if (claim.type === 'value') return values[claim.id - 1] === claim.value;
-  if (claim.type === 'atLeastSome') return claim.ids.every(id => values[id - 1] >= claim.cutoff);
-  const question = claim.type === 'atLeast' ? claim : claim.type;
-  return sameAnswer(answer(values, question), claim.ids) &&
+  const direction = cutoffDirection(claim);
+  if (direction) {
+    const question = {type: direction, cutoff: claim.cutoff};
+    return claim.type === direction
+      ? sameAnswer(answerValues(values, question), claim.ids)
+      : claim.ids.every(id => meetsCutoff(values[id - 1], question));
+  }
+  return sameAnswer(answer(values, claim.type), claim.ids) &&
     (claim.value === undefined || values[claim.ids[0] - 1] === claim.value);
 }
 
@@ -106,9 +125,14 @@ function intervalWitness(actual, claims, movable, acceptGroups, changedIndex, ch
   }
   for (const claim of claims.filter(isCutoffClaim)) {
     const cutoff = points(claim.cutoff);
+    const direction = cutoffDirection(claim);
     bounds.forEach(([lower, upper], i) => {
-      if (claim.ids.includes(i + 1)) bounds[i] = [Math.max(lower, cutoff), upper];
-      else if (claim.type === 'atLeast') bounds[i] = [lower, Math.min(upper, cutoff - 1)];
+      const named = claim.ids.includes(i + 1);
+      if (!named && claim.type !== direction) return;
+      // Hundredths of a point keep an exact match out of the below group.
+      bounds[i] = named === (direction === 'atLeast')
+        ? [Math.max(lower, cutoff), upper]
+        : [lower, Math.min(upper, cutoff - 1)];
     });
   }
   for (const [i, value] of sourcePoints.entries()) {
@@ -313,6 +337,9 @@ export function supportedDetail(rows, question, ids) {
   const subjects = answerText(rows, ids);
   if (typeof question !== 'string') {
     const cutoff = `${question.cutoff}%`;
+    if (question.type === 'below') {
+      return ids.length ? `Only ${subjects} fell below ${cutoff}.` : `No categories fell below ${cutoff}.`;
+    }
     return ids.length ? `Only ${subjects} reached at least ${cutoff}.` : `No categories reached ${cutoff}.`;
   }
   const value = rows[ids[0] - 1].value;

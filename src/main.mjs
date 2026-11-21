@@ -1,6 +1,6 @@
 import './style.css';
 import {
-  readChart, checkCaption, validateClaims, answerText, sameAnswer, supportedDetail, fitsClaim, questionText, readQuestion,
+  readChart, checkCaption, validateClaims, answerText, cutoffDirection, sameAnswer, supportedDetail, fitsClaim, questionText, readQuestion,
 } from './check.mjs';
 import {localFacts, cloudPrompt, localPrompt, checkText, answerConstraint, reviewCloudClaims} from './draft.mjs';
 import {defaultChartColumns, readChartRows, readCsvTable} from './csv.mjs';
@@ -8,7 +8,7 @@ import {checkBrief, questionPrompt, questionConstraint, readQuestionDraft} from 
 import {createPublishCheck, readPublishCheck, reviewPublishInputs, suggestPublishRepair} from './publish-check.mjs';
 import {deviceAvailability} from './device.mjs';
 import {saveOfflineApp} from './offline.mjs';
-import {sampleCsv, sampleCaption, cutoffCaption, sampleSource, foodExample} from './sample.mjs';
+import {sampleCsv, sampleCaption, cutoffCaption, sampleSource, foodExample, foodNationalExample} from './sample.mjs';
 import {comparisonReport, reviewedDescription} from './report.mjs';
 import refreshedSampleCsv from '../examples/bus-cutoff/refreshed.csv?raw';
 import {
@@ -24,7 +24,7 @@ const csv = el('csv');
 const dialog = el('dialog');
 const status = el('status');
 const requestedExample = new URLSearchParams(location.search).get('example');
-const startingExample = ['cutoff', 'food'].includes(requestedExample) ? requestedExample : 'bus';
+const startingExample = ['cutoff', 'food', 'food-national'].includes(requestedExample) ? requestedExample : 'bus';
 let rows, result, reviewed, candidate, snapshot;
 let firebaseConnection;
 let cloudOperation;
@@ -90,7 +90,8 @@ function recordAIResponse(operation) {
 }
 
 function selectedQuestion() {
-  return readQuestion(question.value === 'atLeast' ? {type: 'atLeast', cutoff: cutoff.valueAsNumber} : question.value);
+  const type = question.value;
+  return readQuestion(cutoffDirection({type}) ? {type, cutoff: cutoff.valueAsNumber} : type);
 }
 
 function setQuestion(selected) {
@@ -99,6 +100,14 @@ function setQuestion(selected) {
 }
 
 const deltaFormat = new Intl.NumberFormat('en', {signDisplay: 'always', maximumFractionDigits: 2});
+
+function cutoffText({type, cutoff}) {
+  return type === 'below' ? `Below ${cutoff}%` : `At or above ${cutoff}%`;
+}
+
+function noCutoffMatches(type) {
+  return type === 'below' ? 'None fall below the cutoff' : 'None reach the cutoff';
+}
 
 function chart(target, values, ids, selected, compareToSource = false) {
   const axis = make('div', undefined, 'axis');
@@ -131,7 +140,7 @@ function chart(target, values, ids, selected, compareToSource = false) {
   target.replaceChildren(axis, list);
   const summary = typeof selected === 'string'
     ? (selected === 'lowest' ? 'Lowest' : 'Highest')
-    : `At or above ${selected.cutoff}%`;
+    : cutoffText(selected);
   target.append(make('p', `${summary}: ${answerText(rows, ids)}`, 'answer'));
 }
 
@@ -183,7 +192,7 @@ function invalidate() {
   el('recheck-source').textContent = `Data in use · ${chartSource.label}`;
   el('source-chart-title').textContent = chartSource === refreshedExample ? 'Simulated data refresh' : 'Source chart';
   updateExampleRefresh();
-  const showCutoff = question.value === 'atLeast';
+  const showCutoff = Boolean(cutoffDirection({type: question.value}));
   el('cutoff-label').hidden = !showCutoff;
   try {
     el('studio-question').textContent = `${questionText(selectedQuestion())} Select all that apply.`;
@@ -203,7 +212,7 @@ function invalidate() {
   });
   el('reader-choices').replaceChildren(
     ...checks.map(({option}) => option), reveal,
-    ...(showCutoff ? [choiceButton('None reach the cutoff', () => browserCheck([]))] : []), unknown,
+    ...(showCutoff ? [choiceButton(noCutoffMatches(question.value), () => browserCheck([]))] : []), unknown,
   );
 }
 
@@ -245,13 +254,13 @@ function renderSource() {
 
 function loadSample(key) {
   clearCsvMapping();
-  chartSource = key === 'food' ? foodExample : originalExample;
+  chartSource = key === 'food-national' ? foodNationalExample : key === 'food' ? foodExample : originalExample;
   exampleReview = null;
   el('example-select').value = key;
   csv.value = chartSource.csv;
   caption.value = key === 'cutoff' ? cutoffCaption : chartSource.caption;
-  question.value = key === 'cutoff' ? 'atLeast' : chartSource.question;
   cutoff.value = '70';
+  setQuestion(key === 'cutoff' ? {type: 'atLeast', cutoff: 70} : chartSource.question);
   rows = readChart(chartSource.csv);
   el('csv-status').textContent = '';
   renderSource();
@@ -262,7 +271,9 @@ function describeClaim(claim) {
   if (claim.type === 'range') return `Range ${claim.min}%–${claim.max}%`;
   if (claim.type === 'value') return `${rows[claim.id - 1].label} is ${claim.value}%`;
   if (claim.type === 'atLeast') return `At or above ${claim.cutoff}%: ${answerText(rows, claim.ids)}`;
+  if (claim.type === 'below') return `${cutoffText(claim)}: ${answerText(rows, claim.ids)}`;
   if (claim.type === 'atLeastSome') return `${answerText(rows, claim.ids)} reached at least ${claim.cutoff}%`;
+  if (claim.type === 'belowSome') return `${answerText(rows, claim.ids)} fell below ${claim.cutoff}%`;
   const rate = claim.value === undefined ? '' : ` (${claim.value}%)`;
   return `${claim.type === 'lowest' ? 'Lowest' : 'Highest'}: ${answerText(rows, claim.ids)}${rate}`;
 }
@@ -341,7 +352,7 @@ function render(claims, alternatives = [], note = 'Browser check') {
     ambiguous: `${guess}Both charts fit the checked facts. Their answers differ. ${note}${result.origin === 'browser' && note !== 'Browser check' ? ' · witness found by browser' : ''}.`,
     explicit: expected.length
       ? `The reviewed description now names ${names}. The alternate answer cannot satisfy that fact.`
-      : 'The reviewed description now establishes that no category reaches the cutoff.',
+      : `The reviewed description now establishes that no category ${selected.type === 'below' ? 'falls below' : 'reaches'} the cutoff.`,
     conflict: 'A checked fact contradicts the source chart. Revise the caption or its interpretation.',
     implied: `The checked facts force the same answer: ${names}. You can still state it directly for readers.`,
   };
@@ -1348,6 +1359,7 @@ function mountReader(packet) {
   });
   const none = el('reader-none');
   none.hidden = typeof packet.question === 'string';
+  none.textContent = noCutoffMatches(packet.question.type);
   none.addEventListener('click', () => record([]));
   el('reader-unknown').addEventListener('click', () => record(null));
   el('reader-copy').addEventListener('click', async () => {
