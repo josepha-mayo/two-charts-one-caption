@@ -15,13 +15,14 @@ import {compareFigureRows, readFigures, runPublishedFigureCheck} from '../src/pu
 const example = name => fileURLToPath(new URL('../examples/bls-unemployment/' + name, import.meta.url));
 const script = fileURLToPath(new URL('../scripts/verify-caption.mjs', import.meta.url));
 const checkedPage = readFileSync(example('published-page.html'), 'utf8');
-const reviewedCaption = 'January had the lowest rate, at 3.7%. Only January and March fell below 3.9%.';
+const reviewedCaption = readFileSync(example('caption.txt'), 'utf8').trim();
+const julySentence = 'July had a rate of 4.3%.';
 
 test('a rendered figure with two stale statements offers a checked full caption and both edits', () => {
   const original = readChart(readFileSync(example('first-published.csv'), 'utf8'));
   const current = readChart(readFileSync(example('revised.csv'), 'utf8'));
-  const caption = reviewedCaption + ' July had a rate of 4.3%.';
-  const page = checkedPage.replace('</figcaption>', ' July had a rate of 4.3%.</figcaption>');
+  const caption = reviewedCaption;
+  const page = checkedPage;
   const saved = createPublishCheck(original, {type:'below', cutoff:3.9}, caption, localFacts(original, caption), undefined, 1);
   const options = {suggestRepair:true};
   const report = runPublishedFigureCheck(readFigures(page).read({checkTable:true}), current, saved, undefined, options);
@@ -93,15 +94,17 @@ test('read the exported table shape and report changed or missing rows by label'
 });
 
 test('a checked replacement closes the publication check after the caption and table are updated', () => {
-  const saved = readPublishCheck(JSON.parse(readFileSync(example('caption-recheck.json'), 'utf8')));
+  const full = JSON.parse(readFileSync(example('caption-recheck.json'), 'utf8'));
+  const saved = readPublishCheck({...full, caption:full.caption.replace(' ' + julySentence, ''), claims:full.claims.slice(0, 2)});
   const rows = readChart(readFileSync(example('revised.csv'), 'utf8'));
-  const figure = readFigures(checkedPage).read({checkTable: true});
+  const page = checkedPage.replace(' ' + julySentence, '');
+  const figure = readFigures(page).read({checkTable: true});
   const options = {suggestRepair: true};
   const stale = runPublishedFigureCheck(figure, rows, saved, undefined, options);
   assert.equal(stale.status, 'conflict');
   assert.equal(stale.captionRepair.sentence, 'Only January fell below 3.9%.');
   const revisedCheck = readPublishCheck(stale.captionRepair.check);
-  const rebuilt = checkedPage.replace('Only January and March fell below&nbsp;3.9%.', stale.captionRepair.sentence)
+  const rebuilt = page.replace('Only January and March fell below&nbsp;3.9%.', stale.captionRepair.sentence)
     .replace('<td>3.8%</td>', '<td>3.9%</td>').replace('<td>4.3%</td>', '<td>4.2%</td>');
   const result = runPublishedFigureCheck(readFigures(rebuilt).read({checkTable: true}), rows, revisedCheck, undefined, options);
   assert.equal(result.status, 'explicit');
@@ -205,7 +208,7 @@ test('a generated page can fail for changed wording, stale numbers, or an invali
   const revised = run('revised.csv',...flags);
   assert.equal(revised.code,1);
   assert.equal(revised.report.status,'conflict');
-  assert.deepEqual(revised.report.failedFacts,['Only January and March fell below 3.9%.']);
+  assert.deepEqual(revised.report.failedFacts,['Only January and March fell below 3.9%.', julySentence]);
   assert.deepEqual(revised.report.table.mismatches.map(row => row.label), ['March','July']);
   assert.deepEqual(revised.report.answerChange, {reviewed:'January and March', current:'January', added:[], removed:['March']});
 

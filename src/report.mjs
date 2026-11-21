@@ -85,13 +85,16 @@ function html(doc) {
   return '<!doctype html>' + doc.documentElement.outerHTML;
 }
 
-export function reviewedFigure(doc, caption, rows, {columns, sourceCitation, sourceUrl} = {}) {
+export function reviewedFigure(doc, caption, rows, {columns, sourceCitation, sourceUrl, decimalPlaces} = {}) {
   const figure = element(doc, 'figure');
   const description = element(doc, 'figcaption');
   description.append(element(doc, 'p', caption));
   const title = columns?.filter ? `Chart data · ${rowScope(columns.filter)}` : 'Chart data';
   const {table, body} = dataTable(doc, title, [columns?.category ?? 'Category', columns?.rate ?? 'Rate']);
-  for (const {label, value} of rows) labelRow(doc, body, label).insertCell().textContent = `${value}%`;
+  for (const {label, value} of rows) {
+    const rate = decimalPlaces === undefined ? String(value) : value.toFixed(decimalPlaces);
+    labelRow(doc, body, label).insertCell().textContent = rate + '%';
+  }
   figure.append(description, table);
   if (sourceCitation) {
     const attribution = element(doc, 'p');

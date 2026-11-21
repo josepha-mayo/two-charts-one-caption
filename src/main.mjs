@@ -34,6 +34,7 @@ const route = new URLSearchParams(location.search);
 const requestedExample = route.get('example');
 const openExampleReaderAnswer = route.get('demo') === 'reader-answer';
 const openRecordedFirebase = route.get('demo') === 'firebase-proof';
+const openBlsPublicationRevision = route.get('demo') === 'publication-revision';
 let rows, result, reviewed, candidate, snapshot;
 let firebaseConnection;
 let cloudOperation;
@@ -79,7 +80,9 @@ const examples = new Map([
   ['bus', originalExample], ['cutoff', originalExample], ['food', foodExample],
   ['food-national', foodNationalExample], ['food-pair', foodPairExample], ['bls-revision', unemploymentExample],
 ]);
-const startingExample = openExampleReaderAnswer || openRecordedFirebase ? 'cutoff' : examples.has(requestedExample) ? requestedExample : 'bus';
+const startingExample = openBlsPublicationRevision ? 'bls-revision'
+  : openExampleReaderAnswer || openRecordedFirebase ? 'cutoff'
+  : examples.has(requestedExample) ? requestedExample : 'bus';
 const exampleRefreshes = [
   {before: originalExample, after: refreshedExample, question: {type: 'atLeast', cutoff: 70},
     apply: 'Try a simulated data refresh', restore: 'Restore original example data'},
@@ -1685,7 +1688,7 @@ el('published-page-file').addEventListener('change', async event => {
       select.options[0].disabled = true;
     }
     el('published-figure-choice').hidden = figures.count === 1;
-    publishedPage = {figures, runPublishedFigureCheck};
+    publishedPage = {figures, readFigures, runPublishedFigureCheck};
     fileName.textContent = file.name;
     fileName.hidden = false;
     feedback.textContent = figures.count === 1 ? 'One figure found.' : `${figures.count} figures found. Choose a figure.`;
@@ -1728,14 +1731,15 @@ el('check-published-page').addEventListener('click', () => {
     const selected = el('published-figure').value;
     const checkTable = el('published-table').checked;
     const figure = publishedPage.figures.read({captionIndex: Number(selected), checkTable});
-    const report = publishedPage.runPublishedFigureCheck(figure, rows, savedCheck, chartSource.columns, {suggestRepair: true});
-    renderPublishedReport(report, feedback, el('published-page-result'));
+    const {readFigures, runPublishedFigureCheck} = publishedPage;
+    const report = runPublishedFigureCheck(figure, rows, savedCheck, chartSource.columns, {suggestRepair: true});
+    renderPublishedReport(report, feedback, el('published-page-result'), {rows, source: chartSource, readFigures, runPublishedFigureCheck});
   } catch (error) {
     feedback.textContent = error.message;
   }
 });
 
-function renderPublishedReport(report, feedback, details) {
+function renderPublishedReport(report, feedback, details, publication) {
   feedback.textContent = report.message ?? {
     explicit: 'Pass. The reviewed facts still answer the question.',
     implied: 'Pass. The reviewed facts still imply the answer.',
@@ -1749,12 +1753,13 @@ function renderPublishedReport(report, feedback, details) {
   if (report.alternateAnswer) details.append(make('p', 'Alternate answer from the caption · ' + report.alternateAnswer));
   if (report.uncheckedWordingCount) details.append(make('p', 'Excerpts still needing editorial review · ' + report.uncheckedWordingCount));
   const excerpts = report.failedFacts ?? report.missingReviewedExcerpts;
-  if (excerpts?.length) {
+  if (excerpts?.length && !report.captionRepair?.changes) {
     details.append(make('p', report.failedFacts ? 'Outdated excerpts' : 'Reviewed excerpts missing from the page'));
     const list = make('ul');
     list.append(...excerpts.map(text => make('li', text)));
     details.append(list);
   }
+  let repairView;
   if (report.captionRepair) {
     const {sentence, changes, caption, check} = report.captionRepair;
     const wording = sentence ?? caption;
@@ -1780,6 +1785,27 @@ function renderPublishedReport(report, feedback, details) {
       JSON.stringify(check, null, 2) + '\n', 'application/json', 'revised-caption-recheck.json',
     ));
     actions.append(copy, download);
+    if (publication && report.table && !unverifiedCaptionExcerpts(
+      check.labels.map(label => ({label})), check.caption, check.claims).length) {
+      const figureDownload = make('button', 'Download checked replacement figure');
+      figureDownload.type = 'button';
+      figureDownload.addEventListener('click', () => {
+        try {
+          const {rows: currentRows, source, readFigures, runPublishedFigureCheck} = publication;
+          const html = reviewedDescription(document, check.caption, currentRows, {...source, decimalPlaces: check.decimalPlaces});
+          const figure = readFigures(html).read({checkTable: true});
+          const verified = runPublishedFigureCheck(figure, currentRows, check, source.columns);
+          if (!['explicit', 'implied'].includes(verified.status) || !verified.table?.matches || verified.uncheckedWordingCount) {
+            throw Error('The revised figure did not match its checked caption and table.');
+          }
+          downloadFile(html, 'text/html;charset=utf-8', 'checked-replacement-figure.html');
+          copyStatus.textContent = 'Replacement figure checked against the current CSV.';
+        } catch {
+          copyStatus.textContent = 'The replacement figure could not be verified against this CSV.';
+        }
+      });
+      actions.prepend(figureDownload);
+    }
     repair.append(make('strong', sentence ? 'Checked replacement sentence' : 'Checked replacement sentences'));
     if (sentence) repair.append(make('p', sentence));
     else {
@@ -1787,7 +1813,7 @@ function renderPublishedReport(report, feedback, details) {
       repair.append(...captionChanges(changes), fullCaption);
     }
     repair.append(actions, copyStatus);
-    details.append(repair);
+    repairView = repair;
   }
   if (report.table?.matches) details.append(make('p', 'All published table values match the current CSV.'));
   if (report.table?.mismatches.length) {
@@ -1817,6 +1843,7 @@ function renderPublishedReport(report, feedback, details) {
     }
     details.append(table);
   }
+  if (repairView) details.append(repairView);
   details.hidden = !details.childElementCount;
 }
 
@@ -1841,13 +1868,16 @@ const openBlsFigure = el('open-bls-figure');
 
 async function showPublishedExampleResult() {
   try {
-    const {checkBlsPage} = await import('./published-example.mjs');
+    const {checkBlsPage, readFigures, runPublishedFigureCheck} = await import('./published-example.mjs');
     if (!publishedExampleDialog.open) return;
-    const {caption, report} = checkBlsPage(el('published-example-revised').checked);
+    const usingRevision = el('published-example-revised').checked;
+    const {caption, report, rows: exampleRows} = checkBlsPage(usingRevision);
     publishedExampleCaption.textContent = caption;
     publishedExampleCaption.hidden = false;
     publishedExampleInputs.hidden = false;
-    renderPublishedReport(report, publishedExampleStatus, publishedExampleResult);
+    const source = usingRevision ? revisedUnemployment : unemploymentExample;
+    renderPublishedReport(report, publishedExampleStatus, publishedExampleResult,
+      {rows: exampleRows, source, readFigures, runPublishedFigureCheck});
     publishedExampleStatus.dataset.state = report.status;
     openBlsFigure.hidden = false;
   } catch {
@@ -1855,14 +1885,15 @@ async function showPublishedExampleResult() {
   }
 }
 
-el('open-published-example').addEventListener('click', () => {
-  el('published-example-original').checked = true;
+function showPublishedExample(useRevision = false) {
+  el(useRevision ? 'published-example-revised' : 'published-example-original').checked = true;
   publishedExampleInputs.hidden = publishedExampleCaption.hidden = publishedExampleResult.hidden = openBlsFigure.hidden = true;
   publishedExampleStatus.removeAttribute('data-state');
   publishedExampleStatus.textContent = 'Reading the original example page…';
   publishedExampleDialog.showModal();
   void showPublishedExampleResult();
-});
+}
+el('open-published-example').addEventListener('click', () => showPublishedExample());
 publishedExampleInputs.addEventListener('change', showPublishedExampleResult);
 openBlsFigure.addEventListener('click', async () => {
   try {
@@ -2465,6 +2496,9 @@ try {
     } else if (openRecordedFirebase) {
       el('open-recorded-firebase').focus();
       showRecordedFirebase();
+    } else if (openBlsPublicationRevision) {
+      el('open-published-example').focus();
+      showPublishedExample(true);
     }
   }
 } catch {

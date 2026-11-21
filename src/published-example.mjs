@@ -15,5 +15,7 @@ export function readBlsFigure() {
 
 export function checkBlsPage(useRevision) {
   const rows = readChart(useRevision ? revised : firstPublished);
-  return {caption: figure.text, report: runPublishedFigureCheck(figure, rows, check, undefined, {suggestRepair: true})};
+  return {caption: figure.text, rows, report: runPublishedFigureCheck(figure, rows, check, undefined, {suggestRepair: true})};
 }
+
+export {readFigures, runPublishedFigureCheck};

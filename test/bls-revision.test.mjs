@@ -14,8 +14,9 @@ test('the published BLS revision invalidates just the previously checked cutoff 
   const revised = readChart(fixture('revised.csv'));
   assert.equal(first.length, 12);
   assert.deepEqual(first.flatMap(({label, value}, i) => value === revised[i].value ? [] : [label]), ['March', 'July']);
-  const check = readPublishCheck(JSON.parse(fixture('caption-recheck.json')));
-  const caption = fixture('caption.txt').trim();
+  const saved = JSON.parse(fixture('caption-recheck.json'));
+  const caption = saved.caption.replace(' July had a rate of 4.3%.', '');
+  const check = readPublishCheck({...saved, caption, claims: saved.claims.slice(0, 2)});
   const original = runPublishCheck(first, caption, check);
   assert.equal(original.status, 'explicit');
   assert.equal(original.decimalPlaces, 1);
@@ -40,8 +41,7 @@ test('the published BLS revision invalidates just the previously checked cutoff 
 test('the live BLS rates can update the cutoff answer and a separate July figure together', () => {
   const original = readChart(fixture('first-published.csv'));
   const current = readChart(fixture('revised.csv')).reverse();
-  const previous = fixture('caption.txt').trim();
-  const text = previous + '\n\nJuly had a rate of 4.3%.';
+  const text = fixture('caption.txt').trim().replace(' July', '\n\nJuly');
   const question = {type:'below', cutoff:3.9};
   const check = createPublishCheck(original, question, text, localFacts(original, text), undefined, 1);
   const expected = [

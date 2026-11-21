@@ -2,7 +2,7 @@
 
 Check whether a chart description answers the question a reader needs to ask. The browser finds an alternative that changes the answer while preserving the checked facts and changing as few categories as possible. The revised description and an HTML data table can be downloaded once the selected answer is explicit.
 
-[Try the 70% bus cutoff](https://two-charts-caption-2026.web.app/?example=cutoff) · [Replay the recorded Firebase result](https://two-charts-caption-2026.web.app/?demo=firebase-proof) · [Compare food insecurity with the national rate](https://two-charts-caption-2026.web.app/?example=food-national)
+[Try the 70% bus cutoff](https://two-charts-caption-2026.web.app/?example=cutoff) · [Replay the recorded Firebase result](https://two-charts-caption-2026.web.app/?demo=firebase-proof) · [Check the BLS data revision](https://two-charts-caption-2026.web.app/?demo=publication-revision)
 
 ## Run locally
 
@@ -117,7 +117,9 @@ Add `--check-table` to check a two-column data table in the same figure against 
 node scripts/verify-caption.mjs examples/bls-unemployment/caption-recheck.json examples/bls-unemployment/first-published.csv examples/bls-unemployment/published-page.html --html --caption-id unemployment-rates --check-table
 ```
 
-Using `revised.csv` with that page flags the old cutoff sentence and the stale March and July table cells.
+Using `revised.csv` with that page flags the cutoff sentence, the quoted July figure, and the March and July table cells. [Open the same check in the browser](https://two-charts-caption-2026.web.app/?demo=publication-revision).
+
+**Download checked replacement figure** creates a standalone HTML figure with the reviewed wording and all current table values. The browser reads the generated HTML and verifies the caption and table again before saving it. You can use **Download check for revised caption** alongside it to check that file against the same CSV in CI.
 The answer comparison shows March leaving the answer when its rate reaches 3.9%. July's rate changed as well, and it remains above the cutoff. When a saved caption explicitly states the old answer, the recheck reports which categories entered or left it. The CLI includes the same comparison in `answerChange` with `--json`.
 
 ### Check a release with several charts
