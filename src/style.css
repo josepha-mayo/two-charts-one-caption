@@ -194,6 +194,9 @@ select { min-height: 32px; padding: 3px; }
 .published-report th, .published-report td { border-bottom: 1px solid var(--line); text-align: start; padding: 5px 6px; }
 .published-report th[scope="row"] { font-weight: 500; }
 .published-report td { font-variant-numeric: tabular-nums; }
+.published-replacement { border-inline-start: 3px solid var(--mint); padding: 6px 10px; margin-block: 10px; }
+.published-replacement > p:not(:empty) { margin-top: 6px; }
+.published-replacement .controls { margin-block: 8px 0; }
 #published-example-caption { margin: 14px 0; padding: 8px 12px; border-inline-start: 3px solid var(--cool); }
 #published-example-inputs { border: 1px solid var(--line); border-radius: 6px; padding: 4px 12px; margin: 0 0 12px; }
 #published-example-inputs label { display: flex; align-items: center; gap: 8px; min-height: 44px; cursor: pointer; }

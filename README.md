@@ -96,6 +96,8 @@ To check generated HTML in the browser, open the saved check under **Rerun a sav
 
 In the [BLS example](https://two-charts-caption-2026.web.app/?example=bls-revision), choose **Try the BLS publication check** and switch from **First-published rates** to **January 2025 revision**. The same example page goes from passing to review required. The check points to the outdated sentence and the two table rows that changed.
 
+When exactly one reviewed answer sentence goes stale and a replacement passes the current chart check, Two Charts offers that sentence and a recheck file for the revised caption. Update the publishing source and table, then use the new file to check the rebuilt page.
+
 In CI, pass the HTML built by your publishing system with `--html`. Both workflows check the text in its semantic `<figcaption>` against the saved wording, then recheck the caption against the current CSV. They read static HTML entities and inline formatting and allow layout whitespace to change. Changed wording requests editorial review and lists any reviewed excerpts missing from the page. If the page has several figures, use `--caption-id` with the exact HTML ID of the figure or its caption.
 
 Add `--check-table` to check a two-column data table in the same figure against the CSV. Use a header row, category names in the first column, and percentage values in the second, as in **HTML with data table**. The CLI reports changed, missing, and extra rates by category. The check reads the generated markup. For content created by script or hidden by CSS, verify the rendered page in a browser.

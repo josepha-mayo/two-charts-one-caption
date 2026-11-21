@@ -5,7 +5,9 @@ import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import test from 'node:test';
 import {fileURLToPath} from 'node:url';
-import {compareFigureRows, readFigures} from '../src/published-html.mjs';
+import {readChart} from '../src/check.mjs';
+import {readPublishCheck} from '../src/publish-check.mjs';
+import {compareFigureRows, readFigures, runPublishedFigureCheck} from '../src/published-html.mjs';
 
 const example = name => fileURLToPath(new URL('../examples/bls-unemployment/' + name, import.meta.url));
 const script = fileURLToPath(new URL('../scripts/verify-caption.mjs', import.meta.url));
@@ -57,6 +59,24 @@ test('read the exported table shape and report changed or missing rows by label'
   assert.throws(() => readFigures(span).read({checkTable:true}), /two-column data table/);
   const hidden = checkedPage.replace('<table>','<table aria-hidden="true">');
   assert.throws(() => readFigures(hidden).read({checkTable:true}), /exactly one data table/);
+});
+
+test('a checked replacement closes the publication check after the caption and table are updated', () => {
+  const saved = readPublishCheck(JSON.parse(readFileSync(example('caption-recheck.json'), 'utf8')));
+  const rows = readChart(readFileSync(example('revised.csv'), 'utf8'));
+  const figure = readFigures(checkedPage).read({checkTable: true});
+  const options = {suggestRepair: true};
+  const stale = runPublishedFigureCheck(figure, rows, saved, undefined, options);
+  assert.equal(stale.status, 'conflict');
+  assert.equal(stale.captionRepair.sentence, 'Only January fell below 3.9%.');
+  const revisedCheck = readPublishCheck(stale.captionRepair.check);
+  const rebuilt = checkedPage.replace('Only January and March fell below&nbsp;3.9%.', stale.captionRepair.sentence)
+    .replace('<td>3.8%</td>', '<td>3.9%</td>').replace('<td>4.3%</td>', '<td>4.2%</td>');
+  const result = runPublishedFigureCheck(readFigures(rebuilt).read({checkTable: true}), rows, revisedCheck, undefined, options);
+  assert.equal(result.status, 'explicit');
+  assert.equal(result.table.matches, true);
+  assert.equal(result.captionRepair, undefined);
+  assert.equal(runPublishedFigureCheck({...figure,text:'Changed independently.'}, rows, saved, undefined, options).captionRepair, undefined);
 });
 
 test('a generated page can fail for changed wording, stale numbers, or an invalid target', t => {

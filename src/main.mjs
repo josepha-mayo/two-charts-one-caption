@@ -1591,7 +1591,7 @@ el('check-published-page').addEventListener('click', () => {
     const selected = el('published-figure').value;
     const checkTable = el('published-table').checked;
     const figure = publishedPage.figures.read({captionIndex: Number(selected), checkTable});
-    const report = publishedPage.runPublishedFigureCheck(figure, rows, savedCheck, chartSource.columns);
+    const report = publishedPage.runPublishedFigureCheck(figure, rows, savedCheck, chartSource.columns, {suggestRepair: true});
     renderPublishedReport(report, feedback, el('published-page-result'));
   } catch (error) {
     feedback.textContent = error.message;
@@ -1616,6 +1616,30 @@ function renderPublishedReport(report, feedback, details) {
     const list = make('ul');
     list.append(...excerpts.map(text => make('li', text)));
     details.append(list);
+  }
+  if (report.captionRepair) {
+    const {sentence, check} = report.captionRepair;
+    const repair = make('div', undefined, 'published-replacement');
+    const actions = make('div', undefined, 'controls');
+    const copy = make('button', 'Copy replacement sentence');
+    const download = make('button', 'Download check for revised caption');
+    copy.type = download.type = 'button';
+    const copyStatus = make('p');
+    copyStatus.setAttribute('role', 'status');
+    copy.addEventListener('click', async () => {
+      try {
+        await navigator.clipboard.writeText(sentence);
+        copyStatus.textContent = 'Replacement sentence copied.';
+      } catch {
+        copyStatus.textContent = 'Select the replacement sentence to copy it.';
+      }
+    });
+    download.addEventListener('click', () => downloadFile(
+      JSON.stringify(check, null, 2) + '\n', 'application/json', 'revised-caption-recheck.json',
+    ));
+    actions.append(copy, download);
+    repair.append(make('strong', 'Checked replacement sentence'), make('p', sentence), actions, copyStatus);
+    details.append(repair);
   }
   if (report.table?.matches) details.append(make('p', 'All published table values match the current CSV.'));
   if (report.table?.mismatches.length) {

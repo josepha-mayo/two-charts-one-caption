@@ -1,6 +1,6 @@
 import {parse} from 'parse5';
 import {readChartRows} from './csv.mjs';
-import {runPublishCheck} from './publish-check.mjs';
+import {runPublishCheck, suggestPublishRepair} from './publish-check.mjs';
 
 export const maxHtmlBytes = 1_000_000;
 const htmlNamespace = 'http://www.w3.org/1999/xhtml';
@@ -137,7 +137,7 @@ export function compareFigureRows(source, published) {
   });
 }
 
-export function runPublishedFigureCheck(figure, rows, check, columns) {
+export function runPublishedFigureCheck(figure, rows, check, columns, {suggestRepair = false} = {}) {
   const caption = normalizeCaptionSpacing(check.caption);
   const report = figure.text === caption
     ? runPublishCheck(rows, check.caption, check, columns)
@@ -155,6 +155,10 @@ export function runPublishedFigureCheck(figure, rows, check, columns) {
       report.status = 'review_required';
       report.message = 'The figure’s HTML data table differs from the current CSV.';
     }
+  }
+  if (suggestRepair && report.status === 'conflict') {
+    const repair = suggestPublishRepair(rows, check.caption, check, columns);
+    if (repair) report.captionRepair = {sentence: repair.after, check: repair.check};
   }
   return report;
 }
