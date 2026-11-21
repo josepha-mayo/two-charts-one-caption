@@ -423,9 +423,17 @@
       <label><input type="radio" name="example-reader-caption" id="reader-answer-example-after"> Revised caption</label>
     </fieldset>
     <blockquote id="reader-answer-caption"></blockquote>
+    <fieldset id="reader-answer-example-selection" hidden>
+      <legend>Which services did the reader select?</legend>
+      <div id="reader-answer-example-options" class="choices"></div>
+    </fieldset>
     <p id="reader-answer-context"></p>
     <p id="reader-answer-status" role="status"></p>
     <div id="reader-answer-chart" role="region" aria-label="Hypothetical chart" hidden></div>
+    <section id="reader-answer-blocking" aria-labelledby="reader-answer-blocking-title" hidden>
+      <h3 id="reader-answer-blocking-title">Caption wording that rules out this answer</h3>
+      <ul id="reader-answer-blocking-excerpts"></ul>
+    </section>
     <details class="unchecked-wording" id="reader-answer-wording" hidden>
       <summary>Wording to review</summary>
       <p>The hypothetical chart uses the facts the browser could check.</p>

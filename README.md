@@ -52,9 +52,9 @@ Select **Save reader test** to continue later or on another browser. Under **Ope
 
 **See differing answers** groups incorrect selections by caption version and shows which categories readers missed or added. The text summary includes the same counts.
 
-Select a response count to test that answer against the caption the reader saw, using the chart and rate precision currently loaded. If the answer fits the checked facts, Two Charts shows a hypothetical chart that gives it. Wording outside those checks stays visible for editorial review.
+Select a response count to test that answer against the caption the reader saw, using the chart and rate precision currently loaded. If the answer fits the checked facts, Two Charts shows a hypothetical chart that gives it. If it doesn't fit, Two Charts quotes a set of excerpts that together rule it out. Each excerpt is necessary within that set. Wording outside those checks stays visible for editorial review.
 
-[Try the bus reader-answer demo](https://two-charts-caption-2026.web.app/?demo=reader-answer). It starts with the example answer “Local only” and lets you switch between the original and revised captions.
+[Try the bus reader-answer demo](https://two-charts-caption-2026.web.app/?demo=reader-answer). It starts with the example answer “Local only.” Switch between the original and revised captions or change the selected services to see which wording supports or rules out the new answer.
 
 To load another chart, choose or paste a UTF-8 CSV up to 64 KB with a header. The two-column formats `category,percent` and `service,percent` load directly. For other layouts, choose the category and percentage columns. If the sheet contains several reporting periods or series, choose a separate row group column and one value. That group supplies the 2 to 12 chart rows. Values match exactly after trimming surrounding whitespace. Use percentages such as `71.5` or `71.5%`, with up to two decimal places.
 

@@ -1,6 +1,6 @@
 import './style.css';
 import {
-  readChart, checkCaption, captionCoverage, answer, answerSupport, chartForAnswer, smallestAnswerShift, validateClaims, answerText, isCutoffClaim, sameAnswer, supportedDetail, fitsClaim, questionText, readQuestion,
+  readChart, checkCaption, captionCoverage, answer, answerSupport, explainReaderAnswer, smallestAnswerShift, validateClaims, answerText, isCutoffClaim, sameAnswer, supportedDetail, fitsClaim, questionText, readQuestion,
   decimalPlaceIssue, ratePrecisionText, readDecimalPlaces,
 } from './check.mjs';
 import {localFacts, cloudPrompt, localPrompt, checkText, answerConstraint, readCloudReview, reviewCloudClaims, unverifiedCaptionExcerpts} from './draft.mjs';
@@ -1917,8 +1917,11 @@ function checkReaderAnswer(test, variant, selection, label, title, exampleRows) 
   const status = el('reader-answer-status');
   const hypothetical = el('reader-answer-chart');
   const wording = el('reader-answer-wording');
+  const blocking = el('reader-answer-blocking');
+  const excerpts = el('reader-answer-blocking-excerpts');
   const savedCaption = test[variant].caption;
   el('reader-answer-example-choice').hidden = !exampleRows;
+  el('reader-answer-example-selection').hidden = !exampleRows;
   el('reader-answer-version').textContent = exampleRows ? `Example answer · ${label}` : `${title} · Reader chose ${label}`;
   el('reader-answer-question').textContent = questionText(test.question, test.labels.map(name => ({label: name})));
   el('reader-answer-caption').textContent = savedCaption;
@@ -1927,6 +1930,8 @@ function checkReaderAnswer(test, variant, selection, label, title, exampleRows) 
     : 'This check uses the chart and rate precision currently loaded.';
   hypothetical.hidden = true;
   hypothetical.replaceChildren();
+  blocking.hidden = true;
+  excerpts.replaceChildren();
   renderUncheckedWording(wording, [], false);
   try {
     const currentRows = exampleRows ?? rows;
@@ -1944,13 +1949,22 @@ function checkReaderAnswer(test, variant, selection, label, title, exampleRows) 
     renderUncheckedWording(wording, unchecked, true);
     if (!claims.length) throw Error('The browser could not read a checkable fact in this caption.');
     const precision = exampleRows ? readDecimalPlaces() : selectedPrecision();
-    const alternate = chartForAnswer(source, test.question, claims, selection, precision);
+    const {alternate, blockingExcerpts} = explainReaderAnswer(source, test.question, claims, selection, precision);
     if (alternate) {
-      status.textContent = 'This hypothetical chart gives the reader’s answer and keeps every checked fact true.';
-      chart(hypothetical, alternate, selection, test.question, sharedChartScale(rates, alternate, test.question), true, source);
+      const matchesSource = sameAnswer(selection, test.expected);
+      status.textContent = matchesSource
+        ? 'The source chart gives this answer and keeps every checked fact true.'
+        : 'This hypothetical chart gives the reader’s answer and keeps every checked fact true.';
+      hypothetical.setAttribute('aria-label', matchesSource ? 'Source chart' : 'Hypothetical chart');
+      const values = matchesSource ? rates : alternate;
+      chart(hypothetical, values, selection, test.question, sharedChartScale(rates, values, test.question), !matchesSource, source);
       hypothetical.hidden = false;
+    } else if (blockingExcerpts.length) {
+      status.textContent = 'The reader’s answer conflicts with the checked facts.';
+      excerpts.replaceChildren(...blockingExcerpts.map(excerpt => make('li', excerpt)));
+      blocking.hidden = false;
     } else {
-      status.textContent = 'The reader’s answer conflicts with the checked facts at the current chart precision.';
+      status.textContent = 'The cutoff and chart precision rule out this answer, even without the caption.';
     }
   } catch (error) {
     status.textContent = error.message;
@@ -1961,9 +1975,12 @@ function checkReaderAnswer(test, variant, selection, label, title, exampleRows) 
 let readerAnswerExample;
 
 function showExampleReaderAnswer() {
-  const {source, test, selection} = readerAnswerExample;
+  const {source, test, options} = readerAnswerExample;
+  const selection = options.flatMap((input, index) => input.checked ? [index + 1] : []);
+  const names = answerText(source, selection);
+  const label = selection.length === 1 ? `${names} only` : names;
   const variant = el('reader-answer-example-after').checked ? 'after' : 'before';
-  checkReaderAnswer(test, variant, selection, 'Local only', undefined, source);
+  checkReaderAnswer(test, variant, selection, label, undefined, source);
 }
 
 function startReaderAnswerExample() {
@@ -1971,8 +1988,9 @@ function startReaderAnswerExample() {
     const source = readChart(sampleCsv);
     const question = {type: 'atLeast', cutoff: 70};
     const expected = answer(source.map(row => row.value), question);
-    const selection = [source.findIndex(row => row.label === 'Local') + 1];
-    readerAnswerExample = {source, selection, test: {
+    const options = source.map(({label}) => categoryChoice(label, 'challenge-option'));
+    el('reader-answer-example-options').replaceChildren(...options.map(({option}) => option));
+    readerAnswerExample = {source, options: options.map(({input}) => input), test: {
       labels: source.map(row => row.label),
       question,
       expected,
@@ -1980,12 +1998,14 @@ function startReaderAnswerExample() {
       after: {caption: cutoffCaption + ' ' + supportedDetail(source, question, expected)},
     }};
   }
+  readerAnswerExample.options.forEach((input, index) => { input.checked = readerAnswerExample.source[index].label === 'Local'; });
   el('reader-answer-example-before').checked = true;
   showExampleReaderAnswer();
 }
 
 el('open-reader-answer-example').addEventListener('click', startReaderAnswerExample);
 el('reader-answer-example-choice').addEventListener('change', showExampleReaderAnswer);
+el('reader-answer-example-selection').addEventListener('change', showExampleReaderAnswer);
 
 function renderReaderDifferences(test, labels) {
   const details = el('reader-differences');

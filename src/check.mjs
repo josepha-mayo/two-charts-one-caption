@@ -321,6 +321,22 @@ export function chartForAnswer(rows, question, claims, ids, places = defaultDeci
   return alternate;
 }
 
+export function explainReaderAnswer(rows, question, claims, ids, places = defaultDecimalPlaces) {
+  const findChart = facts => chartForAnswer(rows, question, facts, ids, places);
+  const alternate = findChart(claims);
+  if (alternate) return {alternate, blockingExcerpts: []};
+
+  // Remove whole excerpts. One sentence can supply several facts, and an
+  // excerpt that is necessary now remains necessary as other facts are removed.
+  const excerpts = [...new Set(claims.map(claim => claim.evidence))];
+  const retained = new Set(excerpts);
+  for (const excerpt of excerpts) {
+    retained.delete(excerpt);
+    if (findChart(claims.filter(claim => retained.has(claim.evidence)))) retained.add(excerpt);
+  }
+  return {alternate: null, blockingExcerpts: excerpts.filter(excerpt => retained.has(excerpt))};
+}
+
 export function smallestAnswerShift(rows, question, claims, witness, places = defaultDecimalPlaces) {
   const grid = rateGrid(rows, places);
   const actual = rows.map(row => row.value);

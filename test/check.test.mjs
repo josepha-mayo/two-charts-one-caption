@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {readChart, chartForAnswer, checkCaption, validateClaims, answer, answerText, readCategoryList, supportedDetail, fits} from '../src/check.mjs';
+import {readChart, chartForAnswer, explainReaderAnswer, checkCaption, validateClaims, answer, answerText, readCategoryList, supportedDetail, fits} from '../src/check.mjs';
 import {localFacts, cloudPrompt, localPrompt, readCloudReview, reviewCloudClaims} from '../src/draft.mjs';
 import {questionPrompt, readQuestionDraft} from '../src/brief.mjs';
 import {sampleCsv, sampleCaption, cutoffCaption, foodExample, foodNationalExample} from '../src/sample.mjs';
@@ -444,6 +444,28 @@ test('specific reader answers yield a chart exactly when the checked facts allow
     }
   }
   assert.throws(() => chartForAnswer(rows, {type:'pair',ids:[1,3]}, claims, [2], 0), /valid reader answer/);
+});
+
+test('explain a rejected reader answer with a sufficient set of exact, individually necessary excerpts', () => {
+  const rows = readChart('category,percent\nNorth,40\nSouth,50\nWest,75');
+  const question = {type:'pair', ids:[1,2]};
+  const north = 'North had a rate of 40%.';
+  const south = 'South had a rate of 50%.';
+  const claims = localFacts(rows, north + ' West had a rate of 75%. ' + south);
+  assert.equal(claims.length, 3);
+  const proof = explainReaderAnswer(rows, question, claims, [1,2]);
+  assert.deepEqual(proof, {alternate: null, blockingExcerpts: [north, south]});
+  const retained = claims.filter(claim => proof.blockingExcerpts.includes(claim.evidence));
+  assert.equal(chartForAnswer(rows, question, retained, [1,2]), null);
+  for (const excerpt of proof.blockingExcerpts) {
+    const reduced = retained.filter(claim => claim.evidence !== excerpt);
+    const witness = chartForAnswer(rows, question, reduced, [1,2]);
+    assert(fits(witness, reduced));
+    assert.deepEqual(answer(witness, question), [1,2]);
+  }
+  assert.equal(explainReaderAnswer(rows, question, claims, [2]).blockingExcerpts.length, 0);
+  assert.deepEqual(explainReaderAnswer(rows, {type:'atLeast', cutoff:0}, claims, []),
+    {alternate: null, blockingExcerpts: []});
 });
 
 test('empty cutoff answers differ from uncertainty, and reader links preserve the inclusive cutoff', () => {
