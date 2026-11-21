@@ -8,13 +8,35 @@ import {fileURLToPath} from 'node:url';
 import {unzipSync, strFromU8} from 'fflate';
 import {createReleaseBundle} from '../src/ci-bundle.mjs';
 import {readChart} from '../src/check.mjs';
-import {readPublishCheck} from '../src/publish-check.mjs';
+import {localFacts} from '../src/draft.mjs';
+import {createPublishCheck, readPublishCheck} from '../src/publish-check.mjs';
 import {compareFigureRows, readFigures, runPublishedFigureCheck} from '../src/published-html.mjs';
 
 const example = name => fileURLToPath(new URL('../examples/bls-unemployment/' + name, import.meta.url));
 const script = fileURLToPath(new URL('../scripts/verify-caption.mjs', import.meta.url));
 const checkedPage = readFileSync(example('published-page.html'), 'utf8');
 const reviewedCaption = 'January had the lowest rate, at 3.7%. Only January and March fell below 3.9%.';
+
+test('a rendered figure with two stale statements offers a checked full caption and both edits', () => {
+  const original = readChart(readFileSync(example('first-published.csv'), 'utf8'));
+  const current = readChart(readFileSync(example('revised.csv'), 'utf8'));
+  const caption = reviewedCaption + ' July had a rate of 4.3%.';
+  const page = checkedPage.replace('</figcaption>', ' July had a rate of 4.3%.</figcaption>');
+  const saved = createPublishCheck(original, {type:'below', cutoff:3.9}, caption, localFacts(original, caption), undefined, 1);
+  const options = {suggestRepair:true};
+  const report = runPublishedFigureCheck(readFigures(page).read({checkTable:true}), current, saved, undefined, options);
+  assert.equal(report.status, 'conflict');
+  assert.deepEqual(report.captionRepair.changes, [
+    {before:'Only January and March fell below 3.9%.', after:'Only January fell below 3.9%.'},
+    {before:'July had a rate of 4.3%.', after:'July had a rate of 4.2%.'},
+  ]);
+  const changedPage = page.replace(/<figcaption[^>]*>[\s\S]*?<\/figcaption>/, '<figcaption>' + report.captionRepair.caption + '</figcaption>');
+  const figure = readFigures(changedPage).read({checkTable:true});
+  assert.equal(runPublishedFigureCheck(figure, current, report.captionRepair.check).status, 'review_required');
+  const newTable = changedPage.replace('<td>3.8%</td>', '<td>3.9%</td>').replace('<td>4.3%</td>', '<td>4.2%</td>');
+  const updated = readFigures(newTable).read({checkTable:true});
+  assert.equal(runPublishedFigureCheck(updated, current, report.captionRepair.check).status, 'explicit');
+});
 
 test('read the selected semantic caption with HTML entities, line breaks and inline formatting', () => {
   const {read} = readFigures([

@@ -163,7 +163,9 @@ export function runPublishedFigureCheck(figure, rows, check, columns, {suggestRe
   }
   if (suggestRepair && report.status === 'conflict') {
     const repair = suggestPublishRepair(rows, check.caption, check, columns);
-    if (repair) report.captionRepair = {sentence: repair.after, check: repair.check};
+    if (repair) report.captionRepair = repair.changes.length === 1
+      ? {sentence: repair.after, check: repair.check}
+      : {changes: repair.changes, caption: repair.caption, check: repair.check};
   }
   return report;
 }

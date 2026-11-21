@@ -37,6 +37,32 @@ test('the published BLS revision invalidates just the previously checked cutoff 
   assert.equal(draft.decimalPlaces, 1);
 });
 
+test('the live BLS rates can update the cutoff answer and a separate July figure together', () => {
+  const original = readChart(fixture('first-published.csv'));
+  const current = readChart(fixture('revised.csv')).reverse();
+  const previous = fixture('caption.txt').trim();
+  const text = previous + '\n\nJuly had a rate of 4.3%.';
+  const question = {type:'below', cutoff:3.9};
+  const check = createPublishCheck(original, question, text, localFacts(original, text), undefined, 1);
+  const expected = [
+    {before:'Only January and March fell below 3.9%.', after:'Only January fell below 3.9%.'},
+    {before:'July had a rate of 4.3%.', after:'July had a rate of 4.2%.'},
+  ];
+  assert.deepEqual(runPublishCheck(current, text, check).failedFacts, expected.map(({before}) => before));
+  const repair = suggestPublishRepair(current, text, check);
+  assert.deepEqual(repair.changes, expected);
+  assert.equal(repair.caption, 'January had the lowest rate, at 3.7%. Only January fell below 3.9%.\n\nJuly had a rate of 4.2%.');
+  assert.equal(runPublishCheck(current, repair.caption, repair.check).status, 'explicit');
+  assert.deepEqual(repair.check.claims[0], check.claims[0]);
+  assert.equal(repair.check.decimalPlaces, 1);
+  const duplicate = text + ' July had a rate of 4.3%.';
+  const ambiguous = readPublishCheck({...check, caption: duplicate});
+  assert.equal(suggestPublishRepair(current, duplicate, ambiguous), undefined);
+  const padded = text.replace('4.3%.', '4.30%.');
+  const paddedCheck = createPublishCheck(original, question, padded, localFacts(original, padded), undefined, 1);
+  assert.match(suggestPublishRepair(current, padded, paddedCheck).caption, /July had a rate of 4\.20%\.$/);
+});
+
 test('a complete year maintains exact proof when eleven categories must change together', () => {
   const rows = readChart(fixture('first-published.csv')).map((row, i) => ({...row, value: i === 11 ? 10 : 20}));
   const ids = Array.from({length: 11}, (_, index) => index + 1);

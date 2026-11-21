@@ -124,28 +124,47 @@ export function suggestPublishRepair(rows, caption, check, columns) {
 
   const values = input.rows.map(row => row.value);
   const stale = check.claims.filter(claim => !fitsClaim(values, claim));
-  if (stale.length !== 1) return;
-
-  const [claim] = stale;
-  const currentQuestion = check.question;
-  if (!statesAnswer(claim, currentQuestion)) return;
+  if (!stale.length) return;
 
   const text = caption.replace(/\r\n/g, '\n');
   try {
-    const parsed = readQuotedFact(input.rows, check.caption, claim.evidence.trim());
-    if (!parsed || parsed.type !== claim.type || !sameAnswer(parsed.ids, claim.ids) ||
-        parsed.value !== claim.value || parsed.cutoff !== claim.cutoff || parsed.higher !== claim.higher) return;
-    const before = parsed.evidence;
-    const start = text.indexOf(before);
-    if (text.indexOf(before, start + 1) !== -1) return;
+    const replacements = new Map();
+    for (const claim of stale) {
+      const parsed = readQuotedFact(input.rows, check.caption, claim.evidence.trim());
+      if (!parsed || parsed.type !== claim.type || parsed.value !== claim.value) return;
+      const before = parsed.evidence;
+      const start = text.indexOf(before);
+      if (start < 0 || text.indexOf(before, start + 1) !== -1) return;
 
-    const after = supportedDetail(input.rows, currentQuestion, answer(values, currentQuestion), {includeRate: claim.value !== undefined});
-    const [updatedFact] = localFacts(input.rows, after);
-    const nextCaption = text.slice(0, start) + after + text.slice(start + before.length);
-    const nextClaims = check.claims.map(fact => fact === claim ? updatedFact : fact);
-    const revised = createPublishCheck(input.rows, currentQuestion, nextCaption, nextClaims, check.columns, check.decimalPlaces);
-    if (runPublishCheck(input.rows, nextCaption, revised, columns).status !== 'explicit') return;
-    return {before, after, caption: nextCaption, check: revised};
+      let after;
+      if (parsed.type === 'value' && parsed.id === claim.id) {
+        const current = values[claim.id - 1];
+        after = before.replace(/\d+(?:\.(\d+))?%\.$/, (_, fraction = '') => {
+          const places = Math.max(fraction.length, String(current).split('.')[1]?.length ?? 0);
+          return current.toFixed(places) + '%.';
+        });
+      } else if (statesAnswer(claim, check.question) && sameAnswer(parsed.ids, claim.ids) &&
+          parsed.cutoff === claim.cutoff && parsed.higher === claim.higher) {
+        after = supportedDetail(input.rows, check.question, answer(values, check.question), {includeRate: claim.value !== undefined});
+      } else return;
+
+      const [fact] = localFacts(input.rows, after);
+      if (fact?.type !== parsed.type || !fitsClaim(values, fact)) return;
+      replacements.set(claim, {start, before, after, fact});
+    }
+    const ordered = [...replacements.values()].sort((a, b) => a.start - b.start);
+    let nextCaption = '', end = 0;
+    for (const {start, before, after} of ordered) {
+      if (start < end) return;
+      nextCaption += text.slice(end, start) + after;
+      end = start + before.length;
+    }
+    nextCaption += text.slice(end);
+    const nextClaims = check.claims.map(fact => replacements.get(fact)?.fact ?? fact);
+    const revised = createPublishCheck(input.rows, check.question, nextCaption, nextClaims, check.columns, check.decimalPlaces);
+    if (!['explicit', 'implied'].includes(runPublishCheck(input.rows, nextCaption, revised, columns).status)) return;
+    const changes = ordered.map(({before, after}) => ({before, after}));
+    return {...(changes.length === 1 && changes[0]), changes, caption: nextCaption, check: revised};
   } catch {
     // An ambiguous category name or quote cannot safely be replaced here.
   }

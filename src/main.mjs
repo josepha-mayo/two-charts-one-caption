@@ -1556,6 +1556,18 @@ editorialFileDialog.addEventListener('close', () => {
   syncActions();
 });
 
+function captionChanges(changes) {
+  return changes.map(({before, after}) => {
+    const pair = make('dl', undefined, 'caption-change');
+    const previous = make('dd');
+    const current = make('dd');
+    previous.append(make('q', before));
+    current.append(make('q', after));
+    pair.append(make('dt', 'Before'), previous, make('dt', 'With current data'), current);
+    return pair;
+  });
+}
+
 function runSavedCheck(check = savedCheck, feedback = recheckStatus) {
   if (!check) return;
   if (!caption.value.trim()) {
@@ -1576,7 +1588,7 @@ function runSavedCheck(check = savedCheck, feedback = recheckStatus) {
     invalidate();
     render(check.claims, [], 'Saved check');
     if (result.status === 'conflict') {
-      status.textContent = 'Saved check failed. Review the marked excerpt before publishing.';
+      status.textContent = 'Saved check failed. Review the marked wording before publishing.';
       const change = reviewedAnswerChange(rows, check, result.expected);
       if (change) {
         const container = el('saved-answer-change');
@@ -1586,10 +1598,14 @@ function runSavedCheck(check = savedCheck, feedback = recheckStatus) {
       const repair = suggestPublishRepair(rows, caption.value, check, chartSource.columns);
       if (repair) {
         staleRepair = {repair, original: check};
-        el('stale-before').textContent = repair.before;
-        el('stale-after').textContent = repair.after;
+        const count = repair.changes.length;
+        el('stale-repair-title').textContent = count === 1 ? 'Update the stale sentence' : 'Update ' + count + ' stale sentences';
+        el('stale-changes').replaceChildren(...captionChanges(repair.changes));
+        el('apply-stale-repair').textContent = count === 1 ? 'Replace sentence and recheck' : 'Replace sentences and recheck';
         el('stale-repair').hidden = false;
-        status.textContent = 'One answer sentence no longer matches the data. Review the proposed replacement below.';
+        status.textContent = count === 1
+          ? 'One answer sentence no longer matches the data. Review the proposed replacement below.'
+          : count + ' sentences no longer match the data. Review both versions before applying the changes.';
       }
     }
     if (result.status === 'explicit' || result.status === 'implied') {
@@ -1740,27 +1756,37 @@ function renderPublishedReport(report, feedback, details) {
     details.append(list);
   }
   if (report.captionRepair) {
-    const {sentence, check} = report.captionRepair;
+    const {sentence, changes, caption, check} = report.captionRepair;
+    const wording = sentence ?? caption;
+    const copyLabel = sentence ? 'Copy replacement sentence' : 'Copy revised caption';
+    const fullCaption = sentence ? null : make('details');
     const repair = make('div', undefined, 'published-replacement');
     const actions = make('div', undefined, 'controls');
-    const copy = make('button', 'Copy replacement sentence');
+    const copy = make('button', copyLabel);
     const download = make('button', 'Download check for revised caption');
     copy.type = download.type = 'button';
     const copyStatus = make('p');
     copyStatus.setAttribute('role', 'status');
     copy.addEventListener('click', async () => {
       try {
-        await navigator.clipboard.writeText(sentence);
-        copyStatus.textContent = 'Replacement sentence copied.';
+        await navigator.clipboard.writeText(wording);
+        copyStatus.textContent = sentence ? 'Replacement sentence copied.' : 'Revised caption copied.';
       } catch {
-        copyStatus.textContent = 'Select the replacement sentence to copy it.';
+        if (fullCaption) fullCaption.open = true;
+        copyStatus.textContent = sentence ? 'Select the replacement sentence to copy it.' : 'Select the revised caption to copy it.';
       }
     });
     download.addEventListener('click', () => downloadFile(
       JSON.stringify(check, null, 2) + '\n', 'application/json', 'revised-caption-recheck.json',
     ));
     actions.append(copy, download);
-    repair.append(make('strong', 'Checked replacement sentence'), make('p', sentence), actions, copyStatus);
+    repair.append(make('strong', sentence ? 'Checked replacement sentence' : 'Checked replacement sentences'));
+    if (sentence) repair.append(make('p', sentence));
+    else {
+      fullCaption.append(make('summary', 'View revised caption'), make('p', caption));
+      repair.append(...captionChanges(changes), fullCaption);
+    }
+    repair.append(actions, copyStatus);
     details.append(repair);
   }
   if (report.table?.matches) details.append(make('p', 'All published table values match the current CSV.'));
@@ -1857,8 +1883,9 @@ el('apply-stale-repair').addEventListener('click', () => {
   if (savedCheck === original) savedCheck = repair.check;
   if (exampleReview?.check === original) exampleReview = {check: repair.check};
   runSavedCheck(repair.check, status);
-  if (result?.status === 'explicit') {
-    status.textContent = 'Sentence updated. All reviewed facts match the current data. Save the recheck file to keep this wording.';
+  if (result && ['explicit', 'implied'].includes(result.status)) {
+    const message = repair.changes.length === 1 ? 'Sentence updated.' : 'Sentences updated.';
+    status.textContent = message + ' All reviewed facts match the current data. Save the recheck file to keep this wording.';
   }
 });
 el('example-refresh').addEventListener('click', () => {
