@@ -223,6 +223,55 @@ function chart(target, values, ids, selected, scale, compareToSource = false, so
   target.append(make('p', `${summary}: ${answerText(sourceRows, ids)}`, 'answer'));
 }
 
+const comparisonTableToggle = el('comparison-table-view');
+const comparisonTable = el('comparison-table');
+let preferComparisonTable = false;
+
+function renderComparisonView() {
+  const hasWitness = Boolean(result?.alternate);
+  const showTable = hasWitness && preferComparisonTable;
+  el('comparison-controls').hidden = !hasWitness;
+  el('chart-graphics').hidden = showTable;
+  comparisonTable.hidden = !showTable;
+  comparisonTableToggle.setAttribute('aria-pressed', String(showTable));
+  comparisonTable.replaceChildren();
+  if (!showTable) return;
+
+  const {expected, alternate, alternateAnswer} = result;
+  const table = make('table');
+  table.createCaption().textContent = 'Rates and answers in both charts';
+  table.setAttribute('aria-describedby', 'witness-question');
+  const headings = table.createTHead().insertRow();
+  for (const label of ['Category', 'Source rate', 'Hypothetical rate', 'In the answer']) {
+    const cell = make('th', label);
+    cell.scope = 'col';
+    headings.append(cell);
+  }
+  const body = table.createTBody();
+  rows.forEach(({label, value}, index) => {
+    const id = index + 1;
+    const sourceAnswer = expected.includes(id);
+    const otherAnswer = alternateAnswer.includes(id);
+    const membership = sourceAnswer ? (otherAnswer ? 'Both charts' : 'Source only')
+      : otherAnswer ? 'Hypothetical only' : 'Neither chart';
+    const row = body.insertRow();
+    const category = make('th', label);
+    category.scope = 'row';
+    row.append(category);
+    row.insertCell().textContent = value + '%';
+    row.insertCell().textContent = alternate[index] + '%';
+    row.insertCell().textContent = membership;
+    row.classList.toggle('answer-changed', sourceAnswer !== otherAnswer);
+  });
+  comparisonTable.append(table);
+}
+
+comparisonTableToggle.addEventListener('click', () => {
+  if (!result?.alternate) return;
+  preferComparisonTable = !preferComparisonTable;
+  renderComparisonView();
+});
+
 function choiceButton(label, onClick, primary = false) {
   const button = make('button', label, primary ? 'primary' : '');
   button.type = 'button';
@@ -276,6 +325,7 @@ function invalidate() {
   el('revision-proof').hidden = true;
   el('proof').hidden = true;
   el('comparison').hidden = true;
+  renderComparisonView();
   el('witness').hidden = true;
   if (pendingReaderTest) {
     pendingReaderTest = null;
@@ -732,6 +782,7 @@ function render(claims, alternatives = [], note = 'Browser check') {
   if (alternate) chart(el('alternate'), alternate, alternateAnswer, selected, scale, true);
   else el('alternate').replaceChildren(make('p', state === 'explicit' || state === 'implied'
     ? 'The checked facts decide this question.' : 'No alternate is shown for this check.', 'empty'));
+  renderComparisonView();
   if (state !== 'conflict') {
     el('detail').textContent = detailFor(selected, expected);
   }

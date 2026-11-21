@@ -108,9 +108,15 @@
         <ul class="rate-changes" id="shift-rates"></ul>
       </details>
     </section>
-    <section aria-label="Chart comparison" class="charts" id="comparison" hidden>
-      <article class="chart-panel"><h2 id="source-chart-title">Source chart</h2><div id="actual"></div></article>
-      <article class="chart-panel alternate"><h2>Another possible chart</h2><div id="alternate"></div></article>
+    <section aria-label="Chart comparison" id="comparison" hidden>
+      <div class="controls comparison-controls" id="comparison-controls" hidden>
+        <button type="button" id="comparison-table-view" aria-pressed="false" aria-controls="chart-graphics comparison-table">Table view</button>
+      </div>
+      <div class="charts" id="chart-graphics">
+        <article class="chart-panel"><h2 id="source-chart-title">Source chart</h2><div id="actual"></div></article>
+        <article class="chart-panel alternate"><h2>Another possible chart</h2><div id="alternate"></div></article>
+      </div>
+      <div class="chart-panel comparison-table" id="comparison-table" hidden></div>
     </section>
     <section class="caption-panel proof" id="proof" aria-labelledby="proof-title" hidden>
       <div class="caption-head">
