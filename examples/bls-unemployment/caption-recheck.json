@@ -1,5 +1,6 @@
 {
   "version": 1,
+  "decimalPlaces": 1,
   "labels": ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"],
   "question": {"type": "below", "cutoff": 3.9},
   "caption": "January had the lowest rate, at 3.7%. Only January and March fell below 3.9%.",

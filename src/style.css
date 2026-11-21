@@ -49,8 +49,9 @@ button:focus-visible, select:focus-visible, textarea:focus-visible, a:focus-visi
 .controls label { font-size: .92rem; }
 select { min-height: 32px; padding: 3px; }
 .question-controls { margin-block: 2px 8px; }
-#cutoff-label, #pair-first-label, #pair-second-label { display: inline-flex; align-items: center; gap: 8px; }
+#cutoff-label, #pair-first-label, #pair-second-label, #rate-precision-label { display: inline-flex; align-items: center; gap: 8px; }
 .question-controls label, .question-controls select { min-width: 0; max-width: 100%; }
+#rate-precision-status { color: var(--gold); }
 #pair-first, #pair-second { overflow: hidden; text-overflow: ellipsis; }
 #cutoff { max-width: 7ch; min-height: 36px; font: inherit; padding: 3px 5px; }
 #cutoff:focus-visible { outline: 3px solid var(--cool); outline-offset: 3px; }

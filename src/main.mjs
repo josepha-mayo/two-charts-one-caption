@@ -1,6 +1,7 @@
 import './style.css';
 import {
   readChart, checkCaption, captionCoverage, answerSupport, smallestAnswerShift, validateClaims, answerText, isCutoffClaim, sameAnswer, supportedDetail, fitsClaim, questionText, readQuestion,
+  decimalPlaceIssue, ratePrecisionText, readDecimalPlaces,
 } from './check.mjs';
 import {localFacts, cloudPrompt, localPrompt, checkText, answerConstraint, reviewCloudClaims, unverifiedCaptionExcerpts} from './draft.mjs';
 import {defaultChartColumns, maxCsvBytes, readChartRows, readCsvTable, rowScope} from './csv.mjs';
@@ -23,6 +24,8 @@ const el = id => document.getElementById(id);
 const caption = el('caption');
 const question = el('question');
 const cutoff = el('cutoff');
+const ratePrecision = el('rate-precision');
+const selectedPrecision = () => Number(ratePrecision.value);
 const pairInputs = [el('pair-first'), el('pair-second')];
 const csv = el('csv');
 const dialog = el('dialog');
@@ -34,6 +37,7 @@ let cloudOperation;
 let deviceOperation;
 let revision = 0;
 let busy = false;
+let precisionIssue;
 let readerAnswer;
 let pendingReaderTest, readerTest, tabStorage;
 let savedCheck, staleRepair;
@@ -56,6 +60,7 @@ const unemploymentExample = {
   csv: firstUnemploymentCsv,
   caption: 'January had the lowest rate, at 3.7%.',
   question: {type: 'below', cutoff: 3.9},
+  decimalPlaces: 1,
   brief: 'Before the chart goes live, check which months fell below a 3.9% unemployment rate. Keep this editing note private.',
   sourceUrl: 'https://www.bls.gov/news.release/archives/empsit_01102025.htm',
   sourceCitation: 'U.S. Bureau of Labor Statistics · Seasonally adjusted 2024 rates as first published, Table A and December release',
@@ -277,6 +282,10 @@ function invalidate() {
     : chartSource === revisedUnemployment ? 'Revised BLS rates'
     : group ? 'Source chart · ' + group : 'Source chart';
   updateExampleRefresh();
+  precisionIssue = decimalPlaceIssue(rows, selectedPrecision());
+  el('rate-precision-status').textContent = precisionIssue ?? '';
+  el('rate-precision-status').hidden = !precisionIssue;
+  ratePrecision.setAttribute('aria-invalid', String(Boolean(precisionIssue)));
   const showCutoff = isCutoffClaim({type: question.value});
   el('cutoff-label').hidden = !showCutoff;
   const showPair = question.value === 'pair';
@@ -307,17 +316,20 @@ function invalidate() {
     ...checks.map(({option}) => option), reveal,
     ...(showCutoff ? [choiceButton(noCutoffMatches(question.value), () => browserCheck([]))] : []), unknown,
   );
+  syncActions();
 }
 
 function syncActions() {
-  for (const id of ['check', 'cloud-preview', 'load', 'csv-file', 'example', 'example-select', 'nano', 'apply', 'open-rewrite',
+  for (const id of ['load', 'csv-file', 'example', 'example-select', 'nano', 'apply', 'open-rewrite',
     'brief-example', 'brief-submit', 'brief-apply', 'recheck-file', 'save-recheck', 'run-recheck',
     'save-editor-draft', 'editor-draft-file',
     'review-saved-caption', 'apply-stale-repair', 'example-refresh', 'csv-category', 'csv-percent', 'csv-group', 'csv-group-value',
     'use-csv-columns', 'check-rewrite', 'rewrite-cloud-preview', 'publication', 'export']) el(id).disabled = busy;
   el('confirm-facts').disabled = busy || !candidate?.claims.length;
   el('confirm-rewrite-facts').disabled = busy || !rewriteCandidate?.claims.length;
-  for (const control of el('reader-choices').querySelectorAll('button, input')) control.disabled = busy;
+  const checkDisabled = busy || Boolean(precisionIssue);
+  el('check').disabled = el('cloud-preview').disabled = checkDisabled;
+  for (const control of el('reader-choices').querySelectorAll('button, input')) control.disabled = checkDisabled;
   for (const [target, controls] of Object.entries(cloudReviewControls)) {
     el(controls.cancel).hidden = cloudOperation?.target !== target;
   }
@@ -412,6 +424,7 @@ function loadSample(key) {
   csv.value = chartSource.csv;
   caption.value = key === 'cutoff' ? cutoffCaption : chartSource.caption;
   cutoff.value = '70';
+  ratePrecision.value = String(readDecimalPlaces(chartSource.decimalPlaces));
   rows = readChart(chartSource.csv);
   setQuestion(key === 'cutoff' ? {type: 'atLeast', cutoff: 70} : chartSource.question);
   el('csv-status').textContent = '';
@@ -447,6 +460,7 @@ function renderProof(claims, alternate) {
     return item;
   });
   el('proof-facts').replaceChildren(...entries);
+  el('proof-precision').textContent = ratePrecisionText(selectedPrecision());
   el('save-recheck').hidden = !claims.length || result.status === 'conflict';
   const count = result.changedCategories;
   el('proof-summary').textContent = alternate
@@ -496,7 +510,7 @@ function renderCoverage() {
 coveragePanel.addEventListener('toggle', () => {
   if (!coveragePanel.open || coveragePanel.hidden || !reviewed || coverage) return;
   try {
-    coverage = captionCoverage(rows, reviewed);
+    coverage = captionCoverage(rows, reviewed, selectedPrecision());
     const gaps = coverage.filter(entry => entry.status === 'ambiguous').length;
     const determined = coverage.length - gaps;
     coverageCount.textContent = `${determined} of ${coverage.length} questions have a determined answer.`;
@@ -535,7 +549,7 @@ supportPanel.addEventListener('toggle', () => {
   if (!supportPanel.open || !canPublish() || supportSummary.textContent) return;
   try {
     const selected = selectedQuestion();
-    const proof = answerSupport(rows, selected, reviewed);
+    const proof = answerSupport(rows, selected, reviewed, selectedPrecision());
     if (!proof) throw Error('The answer support could not be verified.');
     const count = proof.essential.length;
     supportSummary.textContent = count
@@ -586,7 +600,7 @@ shiftAnalysis.addEventListener('toggle', () => {
   if (!shiftAnalysis.open || result?.status !== 'ambiguous' || shiftSummary.textContent) return;
   const selected = selectedQuestion();
   try {
-    const shift = smallestAnswerShift(rows, selected, reviewed, result.alternate);
+    const shift = smallestAnswerShift(rows, selected, reviewed, result.alternate, selectedPrecision());
     if (!shift) throw Error('No answer-changing chart found.');
     const magnitude = `${shift.maximumShift} percentage point${shift.maximumShift === 1 ? '' : 's'}`;
     shiftSummary.textContent = `Allowing a shift of up to ${magnitude} per category can change the answer. Below that limit, the checked facts still force the source answer.`;
@@ -624,7 +638,7 @@ function render(claims, alternatives = [], note = 'Browser check') {
   el('revision-proof').hidden = true;
   reviewed = claims;
   const selected = selectedQuestion();
-  result = checkCaption(rows, selected, claims, alternatives);
+  result = checkCaption(rows, selected, claims, alternatives, selectedPrecision());
   const {expected, alternate, alternateAnswer} = result;
   const sourceValues = rows.map(row => row.value);
   const scale = sharedChartScale(sourceValues, alternate, selected);
@@ -870,6 +884,7 @@ el('csv-file').addEventListener('change', async event => {
 caption.addEventListener('input', invalidate);
 question.addEventListener('change', invalidate);
 cutoff.addEventListener('input', invalidate);
+ratePrecision.addEventListener('change', invalidate);
 for (const input of pairInputs) input.addEventListener('change', invalidate);
 
 function connectFirebase() {
@@ -1283,7 +1298,7 @@ function readChangedRewrite() {
 }
 
 function checkRewrite(text, claims, alternatives = []) {
-  const result = checkCaption(rows, rewriteContext.question, claims, alternatives);
+  const result = checkCaption(rows, rewriteContext.question, claims, alternatives, selectedPrecision());
   if (result.status === 'conflict') {
     const values = rows.map(row => row.value);
     const conflict = claims.find(claim => !fitsClaim(values, claim));
@@ -1362,7 +1377,7 @@ el('download-ai-activity').addEventListener('click', () => {
 el('save-recheck').addEventListener('click', () => {
   if (!result || result.status === 'conflict' || !reviewed?.length) return;
   try {
-    const saved = createPublishCheck(rows, selectedQuestion(), caption.value, reviewed, chartSource.columns);
+    const saved = createPublishCheck(rows, selectedQuestion(), caption.value, reviewed, chartSource.columns, selectedPrecision());
     downloadFile(JSON.stringify(saved, null, 2) + '\n', 'application/json', 'caption-recheck.json');
   } catch (error) {
     status.textContent = error.message;
@@ -1381,9 +1396,10 @@ el('save-editor-draft').addEventListener('click', () => {
   try {
     const selected = selectedQuestion();
     const columns = chartSource.columns;
-    const review = reviewed?.length ? createPublishCheck(rows, selected, caption.value, reviewed, columns) : null;
+    const decimalPlaces = selectedPrecision();
+    const review = reviewed?.length ? createPublishCheck(rows, selected, caption.value, reviewed, columns, decimalPlaces) : null;
     const draft = writeEditorialDraft({
-      rows, caption: caption.value, question: selected, sourceNote: chartSource.sourceCitation, review, columns,
+      rows, caption: caption.value, question: selected, sourceNote: chartSource.sourceCitation, review, columns, decimalPlaces,
     });
     downloadFile(draft, 'application/json', 'two-charts-editorial-draft.json');
     editorialFileStatus.textContent = 'Draft downloaded. It contains the selected chart values.';
@@ -1406,7 +1422,7 @@ el('editor-draft-file').addEventListener('change', async event => {
     const chart = readChart(draft.csv);
     if (busy || document.querySelector('dialog[open]')) throw Error('Finish the current action, then choose the draft again.');
     previewedEditorialFile = {draft, chart, name: file.name};
-    el('editor-draft-question').textContent = `${questionText(draft.question, chart)} · ${chart.length} categories`;
+    el('editor-draft-question').textContent = `${questionText(draft.question, chart)} · ${chart.length} categories · ${ratePrecisionText(draft.decimalPlaces)}`;
     el('editor-draft-caption').textContent = draft.caption || 'Empty caption';
     el('editor-draft-data').open = false;
     el('editor-draft-categories').replaceChildren(...chart.map(({label, value}) => make('li', `${label} · ${value}%`)));
@@ -1427,6 +1443,7 @@ editorialFileDialog.addEventListener('close', () => {
   el('editor-draft-categories').replaceChildren();
   if (!preview || editorialFileDialog.returnValue !== 'open') return;
   const {draft, chart, name} = preview;
+  ratePrecision.value = String(readDecimalPlaces(draft.decimalPlaces));
   setQuestion(draft.question, chart);
   applyChart(chart, draft.csv, {label: 'Editorial draft', sourceCitation: draft.sourceNote}, draft.columns);
   caption.value = draft.caption;
@@ -1452,6 +1469,7 @@ function runSavedCheck(check = savedCheck, feedback = recheckStatus) {
       return;
     }
     rows = input.rows;
+    ratePrecision.value = String(readDecimalPlaces(check.decimalPlaces));
     setQuestion(check.question);
     invalidate();
     render(check.claims, [], 'Saved check');
@@ -1522,7 +1540,7 @@ el('example-refresh').addEventListener('click', () => {
   const restoring = chartSource === refresh.after;
   try {
     const demo = restoring ? exampleReview : {
-      check: createPublishCheck(rows, selectedQuestion(), caption.value, reviewed),
+      check: createPublishCheck(rows, selectedQuestion(), caption.value, reviewed, chartSource.columns, selectedPrecision()),
       readerTest: pendingReaderTest,
     };
     const source = restoring ? refresh.before : refresh.after;
@@ -1559,6 +1577,7 @@ el('download-comparison').addEventListener('click', () => {
     caption: checkText(caption.value), question: selectedQuestion(), rows, result,
     claims: reviewed, describeClaim,
     includeRate: includeRankRate.checked,
+    decimalPlaces: selectedPrecision(),
     sourceNote: [chartSource.sourceCitation, chartSource.columns?.filter && rowScope(chartSource.columns.filter)].filter(Boolean).join(' · '),
   });
   downloadFile(report, 'text/html;charset=utf-8', 'caption-comparison.html');

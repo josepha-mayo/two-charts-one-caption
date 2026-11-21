@@ -1,7 +1,7 @@
 import {open} from 'node:fs/promises';
 import {dirname, resolve} from 'node:path';
 import {parseArgs} from 'node:util';
-import {readChart} from '../src/check.mjs';
+import {ratePrecisionText, readChart} from '../src/check.mjs';
 import {maxCsvBytes} from '../src/csv.mjs';
 import {readPublishCheck, runPublishCheck} from '../src/publish-check.mjs';
 
@@ -72,6 +72,7 @@ function printReport(report) {
       : report.status === 'conflict' ? 'FAIL. The reviewed caption conflicts with the current chart.'
         : 'FAIL. The reviewed facts leave a different answer possible.');
     console.log(report.question);
+    if (report.decimalPlaces !== undefined) console.log(ratePrecisionText(report.decimalPlaces));
     console.log('Current source answer:', JSON.stringify(report.sourceAnswer));
     if (report.alternateAnswer) console.log('Alternate answer:', JSON.stringify(report.alternateAnswer));
     for (const evidence of report.failedFacts ?? []) console.log('Stale excerpt:', JSON.stringify(evidence));

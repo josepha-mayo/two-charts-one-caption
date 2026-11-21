@@ -1,5 +1,6 @@
 import {
-  answer, answerText, checkCaption, fitsClaim, isCutoffClaim, questionText, readQuestion, sameAnswer, statesAnswer, supportedDetail, validateClaims,
+  answer, answerText, checkCaption, defaultDecimalPlaces, decimalPlaceIssue, fitsClaim, isCutoffClaim, questionText,
+  readDecimalPlaces, readQuestion, sameAnswer, statesAnswer, supportedDetail, validateClaims,
 } from './check.mjs';
 import {checkText, localFacts, readQuotedCutoff, readQuotedFact, unverifiedCaptionExcerpts, withQuotedRankValue} from './draft.mjs';
 import {maxChartRows, readColumnNames, rowScope} from './csv.mjs';
@@ -9,8 +10,10 @@ function normalizeCaption(text) {
   return checkText(text.replace(/\r\n/g, '\n'));
 }
 
-export function createPublishCheck(rows, question, caption, claims, columns) {
-  return readPublishCheck({version: 1, labels: rows.map(row => row.label), question, caption, claims, columns});
+export function createPublishCheck(rows, question, caption, claims, columns, decimalPlaces) {
+  const issue = decimalPlaceIssue(rows, decimalPlaces);
+  if (issue) throw Error(issue);
+  return readPublishCheck({version: 1, labels: rows.map(row => row.label), question, caption, claims, columns, decimalPlaces});
 }
 
 export function readPublishCheck(check) {
@@ -33,7 +36,9 @@ export function readPublishCheck(check) {
       : withQuotedRankValue(categories, claim))
     .sort((a, b) => caption.indexOf(a.evidence) - caption.indexOf(b.evidence));
   const columns = readColumnNames(check.columns);
-  return {version: 1, labels, question, caption, claims, ...(columns && {columns})};
+  const decimalPlaces = readDecimalPlaces(check.decimalPlaces);
+  return {version: 1, labels, question, caption, claims, ...(columns && {columns}),
+    ...(decimalPlaces !== defaultDecimalPlaces && {decimalPlaces})};
 }
 
 export function reviewPublishInputs(rows, caption, check, columns) {
@@ -58,6 +63,8 @@ export function reviewPublishInputs(rows, caption, check, columns) {
   if (ordered.length !== rows.length || ordered.some(row => row === undefined)) {
     return {status: 'review_required', message: 'The category list changed. Review the chart and caption again.'};
   }
+  const precisionIssue = decimalPlaceIssue(ordered, check.decimalPlaces);
+  if (precisionIssue) return {status: 'review_required', message: precisionIssue};
   const unsupported = check.claims.find(claim => isCutoffClaim(claim) && !readQuotedCutoff(ordered, draft, claim));
   if (unsupported) {
     return {status: 'review_required', message: `Review what this cutoff sentence establishes before publishing. “${unsupported.evidence}”`};
@@ -74,11 +81,12 @@ export function reviewPublishInputs(rows, caption, check, columns) {
 export function runPublishCheck(rows, caption, check, columns) {
   const input = reviewPublishInputs(rows, caption, check, columns);
   if (input.status === 'review_required') return input;
-  const result = checkCaption(input.rows, check.question, check.claims);
+  const result = checkCaption(input.rows, check.question, check.claims, [], check.decimalPlaces);
   const report = {
     status: result.status,
     question: questionText(check.question, input.rows),
     sourceAnswer: answerText(input.rows, result.expected),
+    ...(check.decimalPlaces !== undefined && {decimalPlaces: check.decimalPlaces}),
   };
   if (result.status === 'conflict') {
     const values = input.rows.map(row => row.value);
@@ -118,7 +126,7 @@ export function suggestPublishRepair(rows, caption, check, columns) {
     const [updatedFact] = localFacts(input.rows, after);
     const nextCaption = text.slice(0, start) + after + text.slice(start + before.length);
     const nextClaims = check.claims.map(fact => fact === claim ? updatedFact : fact);
-    const revised = createPublishCheck(input.rows, currentQuestion, nextCaption, nextClaims, check.columns);
+    const revised = createPublishCheck(input.rows, currentQuestion, nextCaption, nextClaims, check.columns, check.decimalPlaces);
     if (runPublishCheck(input.rows, nextCaption, revised, columns).status !== 'explicit') return;
     return {before, after, caption: nextCaption, check: revised};
   } catch {

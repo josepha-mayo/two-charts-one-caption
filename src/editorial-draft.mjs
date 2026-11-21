@@ -1,5 +1,5 @@
 import {readChart, readColumnNames} from './csv.mjs';
-import {readQuestion} from './check.mjs';
+import {defaultDecimalPlaces, readDecimalPlaces, readQuestion} from './check.mjs';
 import {readPublishCheck, reviewPublishInputs} from './publish-check.mjs';
 
 const schema = 'two-charts/editorial-draft/v1';
@@ -20,17 +20,20 @@ function validate(file) {
   const columns = readColumnNames(file.columns);
   const rows = readChart(csv);
   const question = readQuestion(file.question, rows.length);
+  const decimalPlaces = readDecimalPlaces(file.decimalPlaces);
   const check = review === null ? null : readPublishCheck(review);
   if (check && (JSON.stringify(question) !== JSON.stringify(check.question) ||
+      decimalPlaces !== readDecimalPlaces(check.decimalPlaces) ||
       reviewPublishInputs(rows, caption, check, columns).status !== 'ready')) {
-    throw Error('The saved review does not match this draft’s caption, categories, and question.');
+    throw Error('The saved review does not match this draft’s caption, categories, question, and rate precision.');
   }
-  return {schema, caption, csv: chartCsv(rows), sourceNote, question, review: check, ...(columns && {columns})};
+  return {schema, caption, csv: chartCsv(rows), sourceNote, question, review: check, ...(columns && {columns}),
+    ...(decimalPlaces !== defaultDecimalPlaces && {decimalPlaces})};
 }
 
-export function writeEditorialDraft({rows, caption, question, sourceNote = '', review = null, columns}) {
+export function writeEditorialDraft({rows, caption, question, sourceNote = '', review = null, columns, decimalPlaces}) {
   const csv = chartCsv(rows);
-  const draft = validate({schema, caption, csv, question, sourceNote, review, columns});
+  const draft = validate({schema, caption, csv, question, sourceNote, review, columns, decimalPlaces});
   return JSON.stringify(draft, null, 2) + '\n';
 }
 

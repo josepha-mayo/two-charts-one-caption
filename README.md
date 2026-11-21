@@ -52,6 +52,8 @@ Select **Save reader test** to continue later or on another browser. Under **Ope
 
 To load another chart, choose or paste a UTF-8 CSV up to 64 KB with a header. The two-column formats `category,percent` and `service,percent` load directly. For other layouts, choose the category and percentage columns. If the sheet contains several reporting periods or series, choose a separate row group column and one value. That group supplies the 2 to 12 chart rows. Values match exactly after trimming surrounding whitespace. Use percentages such as `71.5` or `71.5%`, with up to two decimal places.
 
+Set **Rate precision** to match the published values. With one decimal place, hypothetical rates and the smallest answer shift are calculated in tenths of a percentage point. You can still ask about a cutoff between grid values, such as 3.85%. The BLS example starts at one decimal place. Imported charts can use whole percentages, tenths, or hundredths. A value that falls outside the selected precision needs review before checking.
+
 Open **Save or open an editorial draft** to keep the loaded chart, wording, question, and any currently reviewed facts in one file. Reopen it in another browser or in a saved offline copy of Two Charts. The editor shows a preview and runs any saved review against the restored chart. The draft contains the selected chart values. Unused spreadsheet columns, private editor notes, and reader responses stay out of the file.
 
 ## Recheck before publishing
@@ -62,7 +64,7 @@ In the 70% example, resolve the caption and choose **Try a simulated data refres
 
 In the [BLS revision example](https://two-charts-caption-2026.web.app/?example=bls-revision), check which months fell below 3.9% across a full year of seasonally adjusted U.S. unemployment rates. Add the verified answer and select **Load the published BLS revision**. March moves from 3.8% to exactly 3.9% and drops out of the answer. July also changes, but stays above the cutoff. The review points to the one sentence that needs to change. The fixtures use the original and revised values from Table A and the first December estimate from the same release. [BLS December 2024 release](https://www.bls.gov/news.release/archives/empsit_01102025.htm)
 
-**Save recheck file** records the caption, question, category labels, and approved facts. To rerun it in the browser, load the newest CSV and open the file under **Rerun a saved check**. Paste the exact wording you plan to publish, or choose **Review saved caption** to inspect and restore the approved wording. You can run the loaded check again after editing or loading another CSV. Two Charts matches rows by category name, so reordering the CSV is safe. Changed caption text or category names need fresh review. The check file itself may include figures that were approved in the caption.
+**Save recheck file** records the caption, question, category labels, approved facts, and rate precision. To rerun it in the browser, load the newest CSV and open the file under **Rerun a saved check**. Paste the exact wording you plan to publish, or choose **Review saved caption** to inspect and restore the approved wording. You can run the loaded check again after editing or loading another CSV. Two Charts matches rows by category name, so reordering the CSV is safe. Changed caption text, category names, or rates outside the saved precision need fresh review. Existing files without a precision setting continue to use hundredths. The check file itself may include figures that were approved in the caption.
 
 The same check can run offline in a publishing pipeline. The three inputs are the review file, the current chart data, and the caption from the publishing system.
 
@@ -141,7 +143,7 @@ Local development on `127.0.0.1` supports the official App Check debug provider 
 
 ## Current scope
 
-Two to twelve categories with percentage values and one question about rank, a cutoff, or the order of two named categories. The verifier supports ranges, individual values, extrema, cutoff lists, and pair comparisons. It treats percentages as exact within the app’s two-decimal domain. Gemini’s interpretation of free-form text requires review. The browser checks the approved claims and selected question.
+Two to twelve categories with percentage values and one question about rank, a cutoff, or the order of two named categories. The verifier supports ranges, individual values, extrema, cutoff lists, and pair comparisons. It treats published rates as exact at the selected precision. Gemini’s interpretation of free-form text requires review. The browser checks the approved claims and selected question.
 
 ## License
 

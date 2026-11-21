@@ -1,4 +1,4 @@
-import {answerText, fitsClaim, questionText, supportedDetail} from './check.mjs';
+import {answerText, fitsClaim, questionText, ratePrecisionText, supportedDetail} from './check.mjs';
 import {rowScope} from './csv.mjs';
 
 const reportStyle = `
@@ -123,7 +123,7 @@ export function reviewedText(caption, rows, {columns, sourceCitation} = {}) {
   return [caption, '', heading, ...table, ...(sourceCitation ? ['', sourceCitation] : [])].join('\n');
 }
 
-export function comparisonReport(document, {caption, rows, question, result, claims, describeClaim, sourceNote, includeRate}) {
+export function comparisonReport(document, {caption, rows, question, result, claims, describeClaim, sourceNote, includeRate, decimalPlaces}) {
   const {doc, main} = reportDocument(document, 'Chart caption comparison');
   const header = element(doc, 'header');
   header.append(element(doc, 'p', 'Two Charts, One Caption'), element(doc, 'h1', 'Same caption, different answers'));
@@ -162,7 +162,8 @@ export function comparisonReport(document, {caption, rows, question, result, cla
   }
   const changed = result.changedCategories === 1 ? '1 category' : `${result.changedCategories} categories`;
   main.append(header, element(doc, 'h2', 'Question checked'), element(doc, 'p', questionText(question, rows)), answers,
-    element(doc, 'p', `Changing ${changed} is enough to change the answer. The second chart is hypothetical.`), table,
+    element(doc, 'p', `Changing ${changed} is enough to change the answer. The second chart is hypothetical.`),
+    element(doc, 'p', ratePrecisionText(decimalPlaces)), table,
     element(doc, 'h2', 'Caption under review'), element(doc, 'blockquote', caption),
     element(doc, 'h2', 'Checked caption facts'), claims.length ? facts : element(doc, 'p', '0 quantitative facts were approved.'),
     element(doc, 'h2', 'Suggested sentence'), element(doc, 'blockquote', supportedDetail(rows, question, result.expected, {includeRate})));

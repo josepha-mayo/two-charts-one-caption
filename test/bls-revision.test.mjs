@@ -18,6 +18,7 @@ test('the published BLS revision invalidates just the previously checked cutoff 
   const caption = fixture('caption.txt').trim();
   const original = runPublishCheck(first, caption, check);
   assert.equal(original.status, 'explicit');
+  assert.equal(original.decimalPlaces, 1);
   assert.equal(original.sourceAnswer, 'January and March');
   const after = runPublishCheck(revised, caption, check);
   assert.equal(after.status, 'conflict');
@@ -26,12 +27,14 @@ test('the published BLS revision invalidates just the previously checked cutoff 
   assert.equal(repair.before, 'Only January and March fell below 3.9%.');
   assert.equal(repair.after, 'Only January fell below 3.9%.');
   assert.equal(repair.check.claims[0].evidence, check.claims[0].evidence);
+  assert.equal(repair.check.decimalPlaces, 1);
   assert.equal(runPublishCheck(revised, repair.caption, repair.check).status, 'explicit');
   const draft = readEditorialDraft(writeEditorialDraft({
-    rows: revised, caption: repair.caption, question: check.question, review: repair.check,
+    rows: revised, caption: repair.caption, question: check.question, review: repair.check, decimalPlaces: 1,
   }));
   assert.deepEqual(readChart(draft.csv), revised);
   assert.deepEqual(draft.review, repair.check);
+  assert.equal(draft.decimalPlaces, 1);
 });
 
 test('a complete year maintains exact proof when eleven categories must change together', () => {

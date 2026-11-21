@@ -45,7 +45,15 @@
         <label id="cutoff-label" for="cutoff" hidden>Cutoff (%) <input type="number" id="cutoff" min="0" max="100" step="0.01" value="70" inputmode="decimal"></label>
         <label id="pair-first-label" for="pair-first" hidden>First category <select id="pair-first"></select></label>
         <label id="pair-second-label" for="pair-second" hidden>Second category <select id="pair-second"></select></label>
+        <label id="rate-precision-label" for="rate-precision">Rate precision
+          <select id="rate-precision" aria-describedby="rate-precision-status">
+            <option value="0">Whole percentages</option>
+            <option value="1">1 decimal place</option>
+            <option value="2" selected>2 decimal places</option>
+          </select>
+        </label>
       </div>
+      <p id="rate-precision-status" role="status" hidden></p>
       <p id="studio-question"></p>
       <details class="brief-panel" id="brief-panel">
         <summary>Suggest a question from a private note</summary>
@@ -103,6 +111,7 @@
         <button type="button" id="save-recheck" class="small">Save recheck file</button>
       </div>
       <p id="proof-summary"></p>
+      <p id="proof-precision" class="muted"></p>
       <ul id="proof-facts"></ul>
       <details class="proof-detail" id="answer-support" hidden>
         <summary>Find the excerpts that support this answer</summary>

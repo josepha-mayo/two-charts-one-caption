@@ -4,6 +4,40 @@ export {readChart} from './csv.mjs';
 const validPercent = value =>
   typeof value === 'number' && Number.isFinite(value) && value >= 0 && value <= 100 &&
   value === Number(value.toFixed(2));
+const points = percent => Math.round(percent * 100);
+export const defaultDecimalPlaces = 2;
+
+export function readDecimalPlaces(value = defaultDecimalPlaces) {
+  if (![0, 1, 2].includes(value)) throw Error('Choose 0, 1, or 2 decimal places for the chart rates.');
+  return value;
+}
+
+export function decimalPlaceIssue(rows, places = defaultDecimalPlaces) {
+  const step = 10 ** (2 - readDecimalPlaces(places));
+  const mismatch = rows.find(({value}) => !validPercent(value) || points(value) % step !== 0);
+  if (mismatch) {
+    const limit = places === 0 ? 'whole percentages' : `up to ${places} decimal place${places === 1 ? '' : 's'}`;
+    return `${mismatch.label} is ${mismatch.value}%. This check uses ${limit}. Review the chart’s published precision.`;
+  }
+}
+
+export function ratePrecisionText(places) {
+  return `Rate precision · ${10 ** -readDecimalPlaces(places)} percentage-point steps`;
+}
+
+function rateGrid(rows, places) {
+  const issue = decimalPlaceIssue(rows, places);
+  if (issue) throw Error(issue);
+  const step = 10 ** (2 - readDecimalPlaces(places));
+  return {
+    max: 10000 / step,
+    tick: value => points(value) / step,
+    rate: tick => tick * step / 100,
+    // The first grid value at or above the editorial cutoff.
+    cutoff: value => Math.ceil(points(value) / step),
+    includes: value => validPercent(value) && points(value) % step === 0,
+  };
+}
 
 const listFormat = new Intl.ListFormat('en', {style: 'long', type: 'conjunction'});
 const categoryLists = new WeakMap();
@@ -134,9 +168,7 @@ export function fitsClaim(values, claim) {
     (claim.value === undefined || values[claim.ids[0] - 1] === claim.value);
 }
 
-const points = percent => Math.round(percent * 100);
-
-// Each edge means that "to" is at least "from" plus this many hundredths.
+// Each edge means that "to" is at least "from" plus this many grid steps.
 function pairEdges({ids: [first, second], higher}) {
   if (higher === 0) return [[first - 1, second - 1, 0], [second - 1, first - 1, 0]];
   const lower = higher === first ? second : first;
@@ -188,11 +220,11 @@ function fitRange(intervals, edges, min, max) {
   return null;
 }
 
-function intervalWitness(actual, claims, movable, {index, bound, extraEdges = [], radius = 10000} = {}) {
+function intervalWitness(actual, claims, movable, grid, {index, bound, extraEdges = [], radius = grid.max} = {}) {
   const range = claims.find(claim => claim.type === 'range');
-  const minBound = range ? points(range.min) : 0;
-  const maxBound = range ? points(range.max) : 10000;
-  const sourcePoints = actual.map(points);
+  const minBound = range ? grid.tick(range.min) : 0;
+  const maxBound = range ? grid.tick(range.max) : grid.max;
+  const sourcePoints = actual.map(grid.tick);
   const bounds = actual.map(() => [minBound, maxBound]);
   const edges = [
     ...claims.filter(claim => claim.type === 'pair').flatMap(pairEdges),
@@ -202,16 +234,16 @@ function intervalWitness(actual, claims, movable, {index, bound, extraEdges = []
   ];
   for (const claim of claims) {
     if (claim.value === undefined) continue;
-    const pinned = points(claim.value);
+    const pinned = grid.tick(claim.value);
     for (const id of claim.type === 'value' ? [claim.id] : claim.ids) bounds[id - 1] = [pinned, pinned];
   }
   for (const claim of claims.filter(isCutoffClaim)) {
-    const cutoff = points(claim.cutoff);
+    const cutoff = grid.cutoff(claim.cutoff);
     const direction = cutoffDirection(claim);
     bounds.forEach(([lower, upper], i) => {
       const named = claim.ids.includes(i + 1);
       if (!named && claim.type !== direction) return;
-      // Hundredths of a point keep an exact match out of the below group.
+      // The preceding tick is the largest rate strictly below the cutoff.
       bounds[i] = named === (direction === 'atLeast')
         ? [Math.max(lower, cutoff), upper]
         : [lower, Math.min(upper, cutoff - 1)];
@@ -229,21 +261,21 @@ function intervalWitness(actual, claims, movable, {index, bound, extraEdges = []
   if (bounds.some(([lower, upper]) => lower > upper)) return null;
   const reachesEndpoints = values => !range || (values.includes(minBound) && values.includes(maxBound));
   const clamped = bounds.map(([lower, upper], i) => Math.max(lower, Math.min(upper, sourcePoints[i])));
-  if (fitsEdges(clamped, edges) && reachesEndpoints(clamped)) return clamped.map(value => value / 100);
+  if (fitsEdges(clamped, edges) && reachesEndpoints(clamped)) return clamped.map(grid.rate);
   const least = leastSolution(bounds, edges);
   if (!least) return null;
-  if (reachesEndpoints(least)) return least.map(value => value / 100);
+  if (reachesEndpoints(least)) return least.map(grid.rate);
   if (!least.includes(minBound)) return null;
-  return fitRange(bounds, edges, minBound, maxBound)?.map(value => value / 100) ?? null;
+  return fitRange(bounds, edges, minBound, maxBound)?.map(grid.rate) ?? null;
 }
 
-function alternateIntervals(actual, claims, expected, question, movable, radius) {
+function alternateIntervals(actual, claims, expected, question, movable, grid, radius) {
   if (typeof question === 'string') {
     // A changed set of winners violates at least one of its defining
     // equalities or strict comparisons. Negate one edge at a time.
     for (const [from, to, delta] of rankEdges({type: question, ids: expected}, actual.length)) {
       if (!(movable & ((1 << from) | (1 << to)))) continue;
-      const witness = intervalWitness(actual, claims, movable, {radius, extraEdges: [[to, from, 1 - delta]]});
+      const witness = intervalWitness(actual, claims, movable, grid, {radius, extraEdges: [[to, from, 1 - delta]]});
       if (witness) return witness;
     }
     return null;
@@ -251,39 +283,40 @@ function alternateIntervals(actual, claims, expected, question, movable, radius)
   if (question.type === 'pair') {
     const [first, second] = question.ids;
     if (expected.length === 2) {
-      return intervalWitness(actual, claims, movable, {radius, extraEdges: [[first - 1, second - 1, 1]]}) ??
-        intervalWitness(actual, claims, movable, {radius, extraEdges: [[second - 1, first - 1, 1]]});
+      return intervalWitness(actual, claims, movable, grid, {radius, extraEdges: [[first - 1, second - 1, 1]]}) ??
+        intervalWitness(actual, claims, movable, grid, {radius, extraEdges: [[second - 1, first - 1, 1]]});
     }
     const winner = expected[0];
     const other = winner === first ? second : first;
-    return intervalWitness(actual, claims, movable, {radius, extraEdges: [[winner - 1, other - 1, 0]]});
+    return intervalWitness(actual, claims, movable, grid, {radius, extraEdges: [[winner - 1, other - 1, 0]]});
   }
-  const cutoff = points(question.cutoff);
+  const cutoff = grid.cutoff(question.cutoff);
   // A different answer must change the membership of at least one category.
   for (const [i, value] of actual.entries()) {
     if (!(movable & (1 << i))) continue;
-    const opposite = value >= question.cutoff ? [0, cutoff - 1] : [cutoff, 10000];
-    const candidate = intervalWitness(actual, claims, movable, {index: i, bound: opposite, radius});
+    const opposite = value >= question.cutoff ? [0, cutoff - 1] : [cutoff, grid.max];
+    const candidate = intervalWitness(actual, claims, movable, grid, {index: i, bound: opposite, radius});
     if (candidate) return candidate;
   }
   return null;
 }
 
-export function smallestAnswerShift(rows, question, claims, witness) {
+export function smallestAnswerShift(rows, question, claims, witness, places = defaultDecimalPlaces) {
+  const grid = rateGrid(rows, places);
   const actual = rows.map(row => row.value);
   const selected = readQuestion(question, rows.length);
   const expected = answerValues(actual, selected);
   if (!fits(actual, claims)) return null;
-  const possible = radius => alternateIntervals(actual, claims, expected, selected, (1 << actual.length) - 1, radius);
+  const possible = radius => alternateIntervals(actual, claims, expected, selected, (1 << actual.length) - 1, grid, radius);
   const qualifies = candidate => fits(candidate, claims) && !sameAnswer(answerValues(candidate, selected), expected);
-  let alternate = Array.isArray(witness) && witness.length === actual.length && witness.every(validPercent) && qualifies(witness)
-    ? witness : possible(10000);
+  let alternate = Array.isArray(witness) && witness.length === actual.length && witness.every(grid.includes) && qualifies(witness)
+    ? witness : possible(grid.max);
   if (!alternate) return null;
   let lower = 1;
-  const distance = candidate => Math.max(...candidate.map((value, i) => Math.abs(points(value) - points(actual[i]))));
+  const distance = candidate => Math.max(...candidate.map((value, i) => Math.abs(grid.tick(value) - grid.tick(actual[i]))));
   let upper = distance(alternate);
   // Permitting a larger movement can only add possible charts. Verify the
-  // smallest feasible radius in integer hundredths of a percentage point.
+  // smallest feasible radius in integer grid steps.
   while (lower < upper) {
     const middle = Math.floor((lower + upper) / 2);
     const candidate = possible(middle);
@@ -293,7 +326,7 @@ export function smallestAnswerShift(rows, question, claims, witness) {
     } else lower = middle + 1;
   }
   if (!qualifies(alternate) || distance(alternate) !== upper) throw Error('The smallest shift could not be verified.');
-  return {maximumShift: upper / 100, alternate, alternateAnswer: answerValues(alternate, selected)};
+  return {maximumShift: grid.rate(upper), alternate, alternateAnswer: answerValues(alternate, selected)};
 }
 
 function preferWitness(best, alternate, origin, actual) {
@@ -310,29 +343,30 @@ function preferWitness(best, alternate, origin, actual) {
   return {alternate, origin, changedCategories, displacement};
 }
 
-function oneCategoryWitness(actual, claims, question, qualifies, best) {
+function oneCategoryWitness(actual, claims, question, qualifies, grid, best) {
   // With the other values fixed, facts and answers can only change at a
   // source value or a cutoff. Try those points and their immediate neighbors.
-  const boundaries = [0, 10000, ...actual.map(points)];
-  for (const claim of claims) if (isCutoffClaim(claim)) boundaries.push(points(claim.cutoff));
-  if (isCutoffClaim(question)) boundaries.push(points(question.cutoff));
+  const boundaries = [0, grid.max, ...actual.map(grid.tick)];
+  for (const claim of claims) if (isCutoffClaim(claim)) boundaries.push(grid.cutoff(claim.cutoff));
+  if (isCutoffClaim(question)) boundaries.push(grid.cutoff(question.cutoff));
   const nearby = new Set(boundaries.flatMap(point => [point - 1, point, point + 1]));
   for (const [i, value] of actual.entries()) {
     for (const point of nearby) {
-      const distance = Math.abs(point - points(value));
-      if (point < 0 || point > 10000 || !distance ||
+      const rate = grid.rate(point);
+      const distance = Math.abs(points(rate) - points(value));
+      if (point < 0 || point > grid.max || !distance ||
           (best?.changedCategories === 1 && distance >= best.displacement)) continue;
       const alternate = actual.slice();
-      alternate[i] = point / 100;
+      alternate[i] = rate;
       if (qualifies(alternate)) best = preferWitness(best, alternate, 'browser', actual);
     }
   }
   return best;
 }
 
-function fewestChanges(actual, claims, expected, question, best) {
+function fewestChanges(actual, claims, expected, question, grid, best) {
   const full = (1 << actual.length) - 1;
-  best = preferWitness(best, alternateIntervals(actual, claims, expected, question, full), 'browser', actual);
+  best = preferWitness(best, alternateIntervals(actual, claims, expected, question, full, grid), 'browser', actual);
   if (!best || best.changedCategories <= 2) return best;
   const tiedGroups = claims.filter(claim => claim.type === 'pair' ? claim.higher === 0
     : (claim.type === 'highest' || claim.type === 'lowest') && claim.ids.length > 1)
@@ -350,14 +384,15 @@ function fewestChanges(actual, claims, expected, question, best) {
   // subset has already been ruled out.
   for (let size = 2; size < best.changedCategories; size += 1) {
     for (const movable of masksBySize[size]) {
-      const alternate = alternateIntervals(actual, claims, expected, question, movable);
+      const alternate = alternateIntervals(actual, claims, expected, question, movable, grid);
       if (alternate) return preferWitness(best, alternate, 'browser', actual);
     }
   }
   return best;
 }
 
-export function checkCaption(rows, question, claims, proposed = []) {
+export function checkCaption(rows, question, claims, proposed = [], places = defaultDecimalPlaces) {
+  const grid = rateGrid(rows, places);
   const actual = rows.map(row => row.value);
   const selected = readQuestion(question, rows.length);
   const expected = answerValues(actual, selected);
@@ -368,19 +403,20 @@ export function checkCaption(rows, question, claims, proposed = []) {
   const qualifies = values => fits(values, claims) && !sameAnswer(answerValues(values, selected), expected);
   let best;
   for (const values of proposed.slice(0, 12)) {
-    if (Array.isArray(values) && values.length === actual.length && values.every(validPercent) && qualifies(values)) {
+    if (Array.isArray(values) && values.length === actual.length && values.every(grid.includes) && qualifies(values)) {
       best = preferWitness(best, values, 'cloud', actual);
     }
   }
-  best = oneCategoryWitness(actual, claims, selected, qualifies, best);
-  if (best?.changedCategories !== 1) best = fewestChanges(actual, claims, expected, selected, best);
+  best = oneCategoryWitness(actual, claims, selected, qualifies, grid, best);
+  if (best?.changedCategories !== 1) best = fewestChanges(actual, claims, expected, selected, grid, best);
   if (!best) return {status: 'implied', expected};
   const {alternate, origin, changedCategories} = best;
   if (!qualifies(alternate)) throw Error('The proposed alternate could not be verified.');
   return {status: 'ambiguous', expected, alternate, alternateAnswer: answerValues(alternate, selected), origin, changedCategories};
 }
 
-export function captionCoverage(rows, claims) {
+export function captionCoverage(rows, claims, places = defaultDecimalPlaces) {
+  const grid = rateGrid(rows, places);
   const actual = rows.map(row => row.value);
   if (!fits(actual, claims)) return [];
   const questions = ['highest', 'lowest'];
@@ -394,7 +430,7 @@ export function captionCoverage(rows, claims) {
     const expected = answerValues(actual, question);
     if (claims.some(claim => statesAnswer(claim, question))) return {question, expected, status: 'explicit'};
     // Find the smallest witness only when the editor opens an individual proof.
-    const alternate = alternateIntervals(actual, claims, expected, question, full);
+    const alternate = alternateIntervals(actual, claims, expected, question, full, grid);
     if (alternate && (!fits(alternate, claims) || sameAnswer(answerValues(alternate, question), expected))) {
       throw Error('A question in the coverage check could not be verified.');
     }
@@ -402,7 +438,8 @@ export function captionCoverage(rows, claims) {
   });
 }
 
-export function answerSupport(rows, question, claims) {
+export function answerSupport(rows, question, claims, places = defaultDecimalPlaces) {
+  const grid = rateGrid(rows, places);
   const actual = rows.map(row => row.value);
   const selected = readQuestion(question, rows.length);
   const expected = answerValues(actual, selected);
@@ -410,13 +447,13 @@ export function answerSupport(rows, question, claims) {
   const full = (1 << rows.length) - 1;
   function findAlternate(facts) {
     if (facts.some(fact => statesAnswer(fact, selected))) return null;
-    const witness = alternateIntervals(actual, facts, expected, selected, full);
+    const witness = alternateIntervals(actual, facts, expected, selected, full, grid);
     if (!witness) return null;
     const qualifies = values => fits(values, facts) && !sameAnswer(answerValues(values, selected), expected);
     if (!qualifies(witness)) {
       throw Error('The answer support could not be verified.');
     }
-    const alternate = oneCategoryWitness(actual, facts, selected, qualifies)?.alternate ?? witness;
+    const alternate = oneCategoryWitness(actual, facts, selected, qualifies, grid)?.alternate ?? witness;
     return {alternate, alternateAnswer: answerValues(alternate, selected)};
   }
   if (findAlternate(claims)) return null;
