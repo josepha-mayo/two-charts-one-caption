@@ -50,7 +50,8 @@ try {
       readText(positionals[0], 40000), readText(positionals[1], 12000), readText(positionals[2], 8000),
     ]);
     const check = readPublishCheck(JSON.parse(recipeText));
-    const report = runPublishCheck(readChart(csv, hasMapping ? {category, rate} : undefined), caption, check);
+    const columns = hasMapping ? {category, rate} : check.columns;
+    const report = runPublishCheck(readChart(csv, columns), caption, check, columns);
     const passed = report.status === 'explicit' || report.status === 'implied';
     process.exitCode = passed ? 0 : 1;
     if (json) console.log(JSON.stringify(report, null, 2));

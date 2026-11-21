@@ -193,3 +193,33 @@ test('CLI rechecks the chosen columns of a fresh spreadsheet export', t => {
   assert.equal(missing.status, 2);
   assert.match(JSON.parse(missing.stdout).message, /Specify both/);
 });
+
+test('a saved rate column prevents CI from passing the caption against last week’s data', t => {
+  const directory = mkdtempSync(join(tmpdir(), 'two-charts-rate-'));
+  const csvPath = join(directory, 'export.csv');
+  const checkPath = join(directory, 'check.json');
+  const selected = {category: 'Bus service', rate: 'On-time rate'};
+  const rows = readChart(readExample('current.csv'));
+  const saved = createPublishCheck(rows, check.question, caption, check.claims, selected);
+  writeFileSync(checkPath, JSON.stringify(saved));
+  writeFileSync(csvPath, 'Last week rate,Bus service,On-time rate\n71.5,Local,71.5\n70.5,Select Bus Service,69.99\n65.1,Express,65.1\n');
+  t.after(() => {
+    unlinkSync(csvPath);
+    unlinkSync(checkPath);
+    rmdirSync(directory);
+  });
+
+  const script = fileURLToPath(new URL('../scripts/verify-caption.mjs', import.meta.url));
+  const run = (...args) => spawnSync(process.execPath, [
+    script, checkPath, csvPath, fileURLToPath(example('caption.txt')), '--json', ...args,
+  ], {encoding: 'utf8'});
+  const refreshed = run();
+  assert.equal(refreshed.status, 1, refreshed.stderr);
+  assert.equal(JSON.parse(refreshed.stdout).status, 'conflict');
+  const wrong = run('--category-column', 'Bus service', '--percent-column', 'Last week rate');
+  assert.equal(wrong.status, 1, wrong.stderr);
+  assert.match(JSON.parse(wrong.stdout).message, /saved for “On-time rate” grouped by “Bus service”/);
+  const repair = suggestPublishRepair(readChart(readExample('refreshed.csv')), caption, saved, selected);
+  assert.deepEqual(repair.check.columns, selected);
+  assert.equal(suggestPublishRepair(rows, caption, saved), undefined);
+});

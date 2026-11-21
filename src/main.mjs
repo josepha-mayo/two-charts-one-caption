@@ -227,7 +227,9 @@ function invalidate() {
   status.textContent = '';
   status.removeAttribute('data-state');
   el('recheck-status').textContent = '';
-  el('recheck-source').textContent = `Data in use · ${chartSource.label}`;
+  const columns = chartSource.columns;
+  el('recheck-source').textContent = 'Data in use · ' + chartSource.label +
+    (columns ? ' · ' + columns.rate + ' by ' + columns.category : '');
   el('source-chart-title').textContent = chartSource === refreshedExample ? 'Simulated data refresh' : 'Source chart';
   updateExampleRefresh();
   const showCutoff = isCutoffClaim({type: question.value});
@@ -524,10 +526,10 @@ function clearCsvMapping() {
   el('csv-percent').replaceChildren();
 }
 
-function applyChart(chart, input, source) {
+function applyChart(chart, input, source, columns) {
   clearCsvMapping();
   rows = chart;
-  chartSource = source;
+  chartSource = columns ? {...source, columns} : source;
   csv.value = input;
   if (!source.sourceUrl) {
     exampleReview = null;
@@ -539,6 +541,13 @@ function applyChart(chart, input, source) {
   caption.focus();
 }
 
+function applyImportedChart(table, columns, input, source) {
+  const chart = readChartRows(table, columns);
+  const names = {category: table.headers[columns.category], rate: table.headers[columns.rate]};
+  const unique = Object.values(names).every(name => name && table.headers.indexOf(name) === table.headers.lastIndexOf(name));
+  applyChart(chart, input, source, unique ? names : undefined);
+}
+
 function importChart(input, source = pastedCsv) {
   clearCsvMapping();
   csv.value = input;
@@ -546,16 +555,19 @@ function importChart(input, source = pastedCsv) {
     const table = readCsvTable(input);
     const columns = defaultChartColumns(table.headers);
     if (columns) {
-      applyChart(readChartRows(table, columns), input, source);
+      applyImportedChart(table, columns, input, source);
       return;
     }
     pendingImport = {table, source};
-    for (const id of ['csv-category', 'csv-percent']) {
+    for (const [id, key] of [['csv-category', 'category'], ['csv-percent', 'rate']]) {
       const select = el(id);
       select.add(new Option('Choose a column', ''));
       table.headers.forEach((header, index) => {
         select.add(new Option(header ? `${index + 1}. ${header}` : `Column ${index + 1} (no header)`, index));
       });
+      const required = savedCheck?.columns?.[key];
+      const match = table.headers.indexOf(required);
+      if (match !== -1 && match === table.headers.lastIndexOf(required)) select.value = String(match);
     }
     el('csv-columns').hidden = false;
     csvStatus.textContent = 'Choose two columns to replace the current chart.';
@@ -577,7 +589,7 @@ el('use-csv-columns').addEventListener('click', () => {
   const rate = el('csv-percent').value;
   try {
     if (!category || !rate) throw Error('Choose a category column and a percentage column.');
-    applyChart(readChartRows(table, {category: Number(category), rate: Number(rate)}), csv.value, source);
+    applyImportedChart(table, {category: Number(category), rate: Number(rate)}, csv.value, source);
   } catch (error) {
     csvError(error.message);
   }
@@ -1084,7 +1096,7 @@ el('download-ai-activity').addEventListener('click', () => {
 
 el('save-recheck').addEventListener('click', () => {
   try {
-    const saved = createPublishCheck(rows, selectedQuestion(), caption.value, reviewed);
+    const saved = createPublishCheck(rows, selectedQuestion(), caption.value, reviewed, chartSource.columns);
     downloadFile(JSON.stringify(saved, null, 2) + '\n', 'application/json', 'caption-recheck.json');
   } catch (error) {
     status.textContent = error.message;
@@ -1102,9 +1114,10 @@ let previewedEditorialFile;
 el('save-editor-draft').addEventListener('click', () => {
   try {
     const selected = selectedQuestion();
-    const review = reviewed?.length ? createPublishCheck(rows, selected, caption.value, reviewed) : null;
+    const columns = chartSource.columns;
+    const review = reviewed?.length ? createPublishCheck(rows, selected, caption.value, reviewed, columns) : null;
     const draft = writeEditorialDraft({
-      rows, caption: caption.value, question: selected, sourceNote: chartSource.sourceCitation, review,
+      rows, caption: caption.value, question: selected, sourceNote: chartSource.sourceCitation, review, columns,
     });
     downloadFile(draft, 'application/json', 'two-charts-editorial-draft.json');
     editorialFileStatus.textContent = 'Draft downloaded. It contains the selected chart values.';
@@ -1149,7 +1162,7 @@ editorialFileDialog.addEventListener('close', () => {
   if (!preview || editorialFileDialog.returnValue !== 'open') return;
   const {draft, chart, name} = preview;
   setQuestion(draft.question, chart);
-  applyChart(chart, draft.csv, {label: 'Editorial draft', sourceCitation: draft.sourceNote});
+  applyChart(chart, draft.csv, {label: 'Editorial draft', sourceCitation: draft.sourceNote}, draft.columns);
   caption.value = draft.caption;
   savedCheck = draft.review;
   el('recheck-file-name').textContent = savedCheck ? name : '';
@@ -1166,7 +1179,7 @@ function runSavedCheck(check = savedCheck, feedback = recheckStatus) {
     return;
   }
   try {
-    const input = reviewPublishInputs(rows, caption.value, check);
+    const input = reviewPublishInputs(rows, caption.value, check, chartSource.columns);
     if (input.status === 'review_required') {
       invalidate();
       feedback.textContent = input.message;
@@ -1178,7 +1191,7 @@ function runSavedCheck(check = savedCheck, feedback = recheckStatus) {
     render(check.claims, [], 'Saved check');
     if (result.status === 'conflict') {
       status.textContent = 'Saved check failed. Review the marked excerpt before publishing.';
-      const repair = suggestPublishRepair(rows, caption.value, check);
+      const repair = suggestPublishRepair(rows, caption.value, check, chartSource.columns);
       if (repair) {
         staleRepair = {repair, original: check};
         el('stale-before').textContent = repair.before;

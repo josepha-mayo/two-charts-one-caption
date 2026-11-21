@@ -62,7 +62,7 @@ npm run verify-caption -- examples/bus-cutoff/caption-recheck.json examples/bus-
 
 Try replacing `current.csv` with the simulated `refreshed.csv`. Select Bus Service drops below 70% while the range and named extrema stay the same. The command returns the exact stale excerpt. Exit code 0 means the approved facts still determine the answer, 1 requests editorial review, and 2 indicates invalid input. Call `node scripts/verify-caption.mjs … --json` for machine-readable output without an npm script banner.
 
-For a spreadsheet with more columns, pass the exact, case-sensitive header names for the same two fields you chose in the browser.
+New recheck files remember the selected CSV headers when both headings are unique and nonempty. The browser shows the columns in use and requires the saved pair for that recheck. Place the columns anywhere in the next export. The CLI selects them by exact name automatically. For older files and files saved without unique headings, pass the exact, case-sensitive names you selected in the browser.
 
 ```sh
 npm run verify-caption -- check.json latest.csv caption.txt --category-column "Bus service" --percent-column "On-time rate"

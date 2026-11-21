@@ -44,3 +44,14 @@ test('draft import rejects mixed reviews and oversized files', () => {
   assert.throws(() => readEditorialDraft(' '.repeat(maxEditorialDraftBytes + 1)), /under 160 KB/);
   assert.throws(() => readEditorialDraft(JSON.stringify(review)), /Choose a Two Charts editorial draft/);
 });
+
+test('an editorial draft keeps the selected headers alongside the standard chart CSV', () => {
+  const columns = {category: 'Region, 2024', rate: 'Share saying "yes"'};
+  const selectedReview = createPublishCheck(rows, question, caption, review.claims, columns);
+  const draft = readEditorialDraft(writeEditorialDraft({rows, caption, question, review: selectedReview, columns}));
+  assert.deepEqual(draft.columns, columns);
+  assert.deepEqual(draft.review.columns, columns);
+  assert.deepEqual(readChart(draft.csv), rows);
+  assert.equal(runPublishCheck(rows, caption, draft.review, draft.columns).status, 'explicit');
+  assert.equal(runPublishCheck(rows, caption, draft.review, {...columns, rate: 'Last week'}).status, 'review_required');
+});

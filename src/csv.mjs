@@ -46,6 +46,14 @@ function namedColumn(headers, name) {
   return matches[0];
 }
 
+export function readColumnNames(columns) {
+  if (columns === undefined) return;
+  const {category, rate} = columns ?? {};
+  if (![category, rate].every(name => typeof name === 'string' && name && name.trim() === name) ||
+      category === rate) throw Error('Use two distinct, nonempty CSV header names.');
+  return {category, rate};
+}
+
 export function readChartRows(table, {category, rate} = {}) {
   const {headers, records} = table;
   if (![category, rate].every(index => Number.isInteger(index) && index >= 0 && index < headers.length) ||

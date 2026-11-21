@@ -2,14 +2,15 @@ import {
   answer, answerText, checkCaption, fitsClaim, isCutoffClaim, questionText, readQuestion, sameAnswer, statesAnswer, supportedDetail, validateClaims,
 } from './check.mjs';
 import {checkText, localFacts, readQuotedCutoff, readQuotedFact, withQuotedRankValue} from './draft.mjs';
+import {readColumnNames} from './csv.mjs';
 
 function normalizeCaption(text) {
   if (typeof text !== 'string') throw Error('The check needs the reviewed caption text.');
   return checkText(text.replace(/\r\n/g, '\n'));
 }
 
-export function createPublishCheck(rows, question, caption, claims) {
-  return readPublishCheck({version: 1, labels: rows.map(row => row.label), question, caption, claims});
+export function createPublishCheck(rows, question, caption, claims, columns) {
+  return readPublishCheck({version: 1, labels: rows.map(row => row.label), question, caption, claims, columns});
 }
 
 export function readPublishCheck(check) {
@@ -31,13 +32,19 @@ export function readPublishCheck(check) {
       ? readQuotedCutoff(categories, caption, claim) ?? claim
       : withQuotedRankValue(categories, claim))
     .sort((a, b) => caption.indexOf(a.evidence) - caption.indexOf(b.evidence));
-  return {version: 1, labels, question, caption, claims};
+  const columns = readColumnNames(check.columns);
+  return {version: 1, labels, question, caption, claims, ...(columns && {columns})};
 }
 
-export function reviewPublishInputs(rows, caption, check) {
+export function reviewPublishInputs(rows, caption, check, columns) {
   const draft = normalizeCaption(caption);
   if (draft !== check.caption) {
     return {status: 'review_required', message: 'The caption text changed. Review the new wording before publishing.'};
+  }
+  const required = check.columns;
+  if (required && (columns?.category !== required.category || columns?.rate !== required.rate)) {
+    return {status: 'review_required',
+      message: 'This check was saved for “' + required.rate + '” grouped by “' + required.category + '”. Load those columns or review the caption for the new chart.'};
   }
   const byLabel = new Map(rows.map(row => [row.label, row]));
   const ordered = check.labels.map(label => byLabel.get(label));
@@ -57,8 +64,8 @@ export function reviewPublishInputs(rows, caption, check) {
   return {status: 'ready', rows: ordered};
 }
 
-export function runPublishCheck(rows, caption, check) {
-  const input = reviewPublishInputs(rows, caption, check);
+export function runPublishCheck(rows, caption, check, columns) {
+  const input = reviewPublishInputs(rows, caption, check, columns);
   if (input.status === 'review_required') return input;
   const result = checkCaption(input.rows, check.question, check.claims);
   const report = {
@@ -76,8 +83,8 @@ export function runPublishCheck(rows, caption, check) {
   return report;
 }
 
-export function suggestPublishRepair(rows, caption, check) {
-  const input = reviewPublishInputs(rows, caption, check);
+export function suggestPublishRepair(rows, caption, check, columns) {
+  const input = reviewPublishInputs(rows, caption, check, columns);
   if (input.status !== 'ready') return;
 
   const values = input.rows.map(row => row.value);
@@ -101,8 +108,8 @@ export function suggestPublishRepair(rows, caption, check) {
     const [updatedFact] = localFacts(input.rows, after);
     const nextCaption = text.slice(0, start) + after + text.slice(start + before.length);
     const nextClaims = check.claims.map(fact => fact === claim ? updatedFact : fact);
-    const revised = createPublishCheck(input.rows, currentQuestion, nextCaption, nextClaims);
-    if (runPublishCheck(input.rows, nextCaption, revised).status !== 'explicit') return;
+    const revised = createPublishCheck(input.rows, currentQuestion, nextCaption, nextClaims, check.columns);
+    if (runPublishCheck(input.rows, nextCaption, revised, columns).status !== 'explicit') return;
     return {before, after, caption: nextCaption, check: revised};
   } catch {
     // An ambiguous category name or quote cannot safely be replaced here.
