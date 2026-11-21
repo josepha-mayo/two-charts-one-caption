@@ -4,9 +4,11 @@ import {parseArgs} from 'node:util';
 import {ratePrecisionText, readChart} from '../src/check.mjs';
 import {maxCsvBytes} from '../src/csv.mjs';
 import {readPublishCheck, runPublishCheck} from '../src/publish-check.mjs';
+import {compareFigureRows, maxHtmlBytes, normalizeCaptionSpacing, readFigures} from './read-figure.mjs';
 
 const usage = [
   'Usage: node scripts/verify-caption.mjs check.json chart.csv caption.txt [--category-column HEADER --percent-column HEADER] [--require-checked-wording] [--json]',
+  '       node scripts/verify-caption.mjs check.json chart.csv page.html --html [--caption-id ID] [--check-table] [--json]',
   '       node scripts/verify-caption.mjs --batch release.json [--require-checked-wording] [--json]',
 ].join('\n');
 
@@ -36,24 +38,60 @@ function readBatch(text) {
   }
   const ids = new Set();
   return batch.charts.map(entry => {
-    const {id, check, csv, caption} = entry ?? {};
+    const {id, check, csv, caption, html, captionId, checkTable} = entry ?? {};
+    const hasHtml = html !== undefined;
     if (typeof id !== 'string' || !id.trim() || id.length > 100 || /[\u0000-\u001f]/.test(id) ||
-        ids.has(id) || [check, csv, caption].some(path => typeof path !== 'string' || !path.trim())) {
-      throw Error('Each chart needs a unique ID and paths for its check, CSV and caption.');
+        ids.has(id) || (caption !== undefined) === hasHtml ||
+        [check, csv, hasHtml ? html : caption].some(path => typeof path !== 'string' || !path.trim())) {
+      throw Error('Each chart needs a unique ID, paths for its check and CSV, and either a caption or HTML path.');
+    }
+    if ((!hasHtml && (captionId !== undefined || checkTable !== undefined)) ||
+        (captionId !== undefined && !validHtmlId(captionId)) ||
+        (checkTable !== undefined && typeof checkTable !== 'boolean')) {
+      throw Error('Use captionId and checkTable only with HTML. Supply a figure or caption ID and a boolean table setting.');
     }
     ids.add(id);
-    return {id, check, csv, caption};
+    return {id, check, csv, caption: hasHtml ? html : caption, figure: hasHtml ? {captionId, checkTable} : undefined};
   });
 }
 
-async function checkFiles(paths, {mapping, strict, read = readText}) {
-  const [recipeText, csv, caption] = await Promise.all([
-    read(paths[0], 40000), read(paths[1], maxCsvBytes), read(paths[2], 8000),
+function validHtmlId(id) {
+  return typeof id === 'string' && id.length > 0 && id.length <= 200 && !/[\t\n\f\r ]/.test(id);
+}
+
+async function loadFigures(path) {
+  return readFigures(await readText(path, maxHtmlBytes));
+}
+
+async function checkFiles(paths, {mapping, strict, figure, read = readText, readPage = loadFigures}) {
+  const [recipeText, csv, captionInput] = await Promise.all([
+    read(paths[0], 40000), read(paths[1], maxCsvBytes),
+    figure ? readPage(paths[2]).then(readFigure => readFigure(figure)) : read(paths[2], 8000),
   ]);
   const check = readPublishCheck(JSON.parse(recipeText));
   const columns = mapping ? {...mapping, ...(check.columns?.filter && {filter:check.columns.filter})} : check.columns;
-  const report = runPublishCheck(readChart(csv, columns), caption, check, columns);
-  if (strict && report.uncheckedWordingCount) {
+  const rows = readChart(csv, columns);
+  let report;
+  if (figure && captionInput.text !== normalizeCaptionSpacing(check.caption)) {
+    const missing = check.claims.filter(({evidence}) => !captionInput.text.includes(normalizeCaptionSpacing(evidence)));
+    report = {
+      status: 'review_required',
+      message: 'The HTML figcaption differs from the reviewed caption. Review the wording in the generated page.',
+      missingReviewedExcerpts: [...new Set(missing.map(({evidence}) => evidence))],
+    };
+  } else {
+    report = runPublishCheck(rows, figure ? check.caption : captionInput, check, columns);
+  }
+  if (figure) report.captionSource = 'html_figcaption';
+  if (figure && captionInput.rows) {
+    const mismatches = compareFigureRows(rows, captionInput.rows);
+    report.table = {matches: mismatches.length === 0, mismatches};
+    if (mismatches.length && passed(report)) {
+      report.status = 'review_required';
+      report.message = 'The figure’s HTML data table differs from the current CSV.';
+    }
+  }
+  if (strict && report.uncheckedWordingCount && passed(report)) {
     report.status = 'review_required';
     report.message = 'Some caption wording needs editorial review.';
   }
@@ -78,6 +116,12 @@ function printReport(report) {
     for (const evidence of report.failedFacts ?? []) console.log('Stale excerpt:', JSON.stringify(evidence));
   }
   if (report.uncheckedWordingCount) console.log('Unchecked excerpts:', report.uncheckedWordingCount);
+  for (const text of report.missingReviewedExcerpts ?? []) console.log('Reviewed excerpt missing from the HTML caption:', JSON.stringify(text));
+  if (report.table?.matches) console.log('The HTML data table matches the current CSV.');
+  for (const {label, sourceRate, tableRate} of report.table?.mismatches ?? []) {
+    const rate = value => value === null ? 'missing' : `${value}%`;
+    console.log(`Table difference for ${JSON.stringify(label)}. CSV ${rate(sourceRate)}, HTML ${rate(tableRate)}.`);
+  }
 }
 
 async function checkBatch(path, strict) {
@@ -89,11 +133,16 @@ async function checkBatch(path, strict) {
     if (!files.has(key)) files.set(key, readText(path, limit));
     return files.get(key);
   }
+  let lastPage;
+  function readPage(file) {
+    if (lastPage?.file !== file) lastPage = {file, figures: loadFigures(file)};
+    return lastPage.figures;
+  }
   const checks = [];
   const totals = {passed:0, reviewRequired:0, invalid:0};
-  for (const {id, check, csv, caption} of entries) {
+  for (const {id, check, csv, caption, figure} of entries) {
     try {
-      const report = await checkFiles([check, csv, caption].map(file => resolve(root, file)), {strict, read});
+      const report = await checkFiles([check, csv, caption].map(file => resolve(root, file)), {strict, figure, read, readPage});
       checks.push({id, ...report});
       totals[passed(report) ? 'passed' : 'reviewRequired'] += 1;
     } catch (error) {
@@ -112,6 +161,9 @@ try {
       json: {type: 'boolean'},
       help: {type: 'boolean'},
       batch: {type: 'string'},
+      html: {type: 'boolean'},
+      'caption-id': {type: 'string'},
+      'check-table': {type: 'boolean'},
       'category-column': {type: 'string'},
       'percent-column': {type: 'string'},
       'require-checked-wording': {type: 'boolean'},
@@ -126,8 +178,10 @@ try {
     const rate = values['percent-column'];
     const hasMapping = category !== undefined || rate !== undefined;
     const strict = values['require-checked-wording'];
+    const captionId = values['caption-id'];
+    const checkTable = values['check-table'];
     if (values.batch !== undefined) {
-      if (!values.batch.trim() || positionals.length || hasMapping) throw Error(usage);
+      if (!values.batch.trim() || positionals.length || hasMapping || values.html || captionId !== undefined || checkTable) throw Error(usage);
       const batch = await checkBatch(values.batch, strict);
       process.exitCode = batch.totals.invalid ? 2 : batch.totals.reviewRequired ? 1 : 0;
       if (json) console.log(JSON.stringify(batch, null, 2));
@@ -143,7 +197,12 @@ try {
       if (hasMapping && (!category?.trim() || !rate?.trim())) {
         throw Error('Specify both --category-column and --percent-column with nonempty header names.');
       }
-      const report = await checkFiles(positionals, {strict, mapping: hasMapping ? {category, rate} : undefined});
+      if ((!values.html && (captionId !== undefined || checkTable)) ||
+          (captionId !== undefined && !validHtmlId(captionId))) {
+        throw Error('Use --caption-id and --check-table with --html, and supply an exact HTML ID without spaces.');
+      }
+      const report = await checkFiles(positionals, {strict, mapping: hasMapping ? {category, rate} : undefined,
+        figure: values.html ? {captionId, checkTable} : undefined});
       process.exitCode = passed(report) ? 0 : 1;
       if (json) console.log(JSON.stringify(report, null, 2));
       else printReport(report);

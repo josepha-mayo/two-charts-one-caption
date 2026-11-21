@@ -21,3 +21,5 @@ jobs:
       - run: npm ci
       - run: npm test
       - run: npm run build
+      - name: Verify the example release page against the reviewed caption and CSV
+        run: node scripts/verify-caption.mjs examples/bls-unemployment/caption-recheck.json examples/bls-unemployment/first-published.csv examples/bls-unemployment/published-page.html --html --caption-id unemployment-rates --check-table

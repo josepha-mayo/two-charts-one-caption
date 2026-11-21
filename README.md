@@ -90,9 +90,23 @@ For a chart made from a row group, the recheck file also binds the group header 
 npm run verify-caption -- check.json latest.csv caption.txt --category-column "Bus service" --percent-column "On-time rate"
 ```
 
+### Check the generated page
+
+Pass the HTML built by your publishing system with `--html`. The verifier checks the text in its semantic `<figcaption>` against the saved wording, then rechecks the caption against the current CSV. It reads HTML entities and inline formatting and allows layout whitespace to change. Changed wording requests editorial review and lists any reviewed excerpts missing from the page. If the page has several figures, use `--caption-id` with the exact HTML ID of the figure or its caption.
+
+Add `--check-table` to check a two-column data table in the same figure against the CSV. Use a header row, category names in the first column, and percentage values in the second, as in **HTML with data table**. The CLI reports changed, missing, and extra rates by category. The check reads the generated markup. For content created by script or hidden by CSS, verify the rendered page in a browser.
+
+```sh
+node scripts/verify-caption.mjs examples/bls-unemployment/caption-recheck.json examples/bls-unemployment/first-published.csv examples/bls-unemployment/published-page.html --html --caption-id unemployment-rates --check-table
+```
+
+Using `revised.csv` with that page flags the old cutoff sentence and the stale March and July table cells.
+
 ### Check a release with several charts
 
 Use the paths to each chart’s saved check, current CSV, and final caption in a [batch manifest](examples/bus-cutoff/release.example.json). Relative paths start at the manifest’s directory. Each check uses its saved column and group choices, so several captions can use different groups from one CSV.
+
+For a generated page, use `"html": "dist/report.html"` in place of `caption` on the chart’s entry. Add `"captionId": "unemployment-rates"` to identify the figure and `"checkTable": true` to match its data table to the current CSV. You can mix HTML and text captions in one batch.
 
 ```sh
 node scripts/verify-caption.mjs --batch examples/bus-cutoff/release.example.json --json
