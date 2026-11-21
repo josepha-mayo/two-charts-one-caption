@@ -10,7 +10,7 @@ import {maxEditorialDraftBytes, readEditorialDraft, writeEditorialDraft} from '.
 import {deviceAvailability} from './device.mjs';
 import {saveOfflineApp} from './offline.mjs';
 import {sampleCsv, sampleCaption, cutoffCaption, sampleSource, foodExample, foodNationalExample} from './sample.mjs';
-import {comparisonReport, reviewedDescription} from './report.mjs';
+import {comparisonReport, reviewedDescription, reviewedFragment} from './report.mjs';
 import refreshedSampleCsv from '../examples/bus-cutoff/refreshed.csv?raw';
 import {
   addReaderResponse, createReaderLink, createReaderTest, encodeResponse, readReaderLink,
@@ -179,6 +179,7 @@ function updateExampleRefresh() {
 function invalidate() {
   cancelCloudReview();
   stopDeviceInference('detail');
+  if (publicationDialog.open) publicationDialog.close();
   revision += 1;
   candidate = null;
   reviewed = null;
@@ -230,7 +231,7 @@ function syncActions() {
     'brief-example', 'brief-submit', 'brief-apply', 'recheck-file', 'save-recheck', 'run-recheck',
     'save-editor-draft', 'editor-draft-file',
     'review-saved-caption', 'apply-stale-repair', 'example-refresh', 'csv-category', 'csv-percent',
-    'use-csv-columns', 'check-rewrite', 'rewrite-cloud-preview']) el(id).disabled = busy;
+    'use-csv-columns', 'check-rewrite', 'rewrite-cloud-preview', 'publication', 'export']) el(id).disabled = busy;
   el('confirm-facts').disabled = busy || !candidate?.claims.length;
   el('confirm-rewrite-facts').disabled = busy || !rewriteCandidate?.claims.length;
   for (const control of el('reader-choices').querySelectorAll('button, input')) control.disabled = busy;
@@ -407,10 +408,12 @@ function render(claims, alternatives = [], note = 'Browser check') {
   chart(el('actual'), rows.map(row => row.value), expected, selected);
   const names = answerText(rows, expected);
   const state = result.status;
+  const resolved = canPublish();
   status.dataset.state = state;
   el('comparison').hidden = false;
   el('revision').hidden = state === 'conflict';
-  el('export').hidden = state !== 'explicit' && state !== 'implied';
+  el('export').hidden = !resolved;
+  el('publication').hidden = !resolved;
   el('apply').hidden = state !== 'ambiguous' && state !== 'implied';
   el('nano').hidden = state !== 'ambiguous';
   const guess = readerAnswer === undefined || state !== 'ambiguous' ? ''
@@ -424,7 +427,6 @@ function render(claims, alternatives = [], note = 'Browser check') {
     conflict: 'A checked fact contradicts the source chart. Revise the caption or its interpretation.',
     implied: `The checked facts force the same answer: ${names}. You can still state it directly for readers.`,
   };
-  const resolved = state === 'explicit' || state === 'implied';
   let feedback = '';
   if (resolved && Array.isArray(readerAnswer)) {
     feedback = sameAnswer(readerAnswer, expected)
@@ -1228,9 +1230,63 @@ el('download-comparison').addEventListener('click', () => {
   downloadFile(report, 'text/html;charset=utf-8', 'caption-comparison.html');
 });
 
+function canPublish() {
+  return result?.status === 'explicit' || result?.status === 'implied';
+}
+
 el('export').addEventListener('click', () => {
-  if (result?.status !== 'explicit' && result?.status !== 'implied') return;
-  downloadFile(reviewedDescription(document, caption.value, rows), 'text/html;charset=utf-8', 'chart-description.html');
+  if (!canPublish()) return;
+  downloadFile(reviewedDescription(document, caption.value, rows, chartSource.sourceCitation),
+    'text/html;charset=utf-8', 'chart-description.html');
+});
+
+const publicationDialog = el('publication-dialog');
+const publicationFormat = el('publication-format');
+const publicationContent = el('publication-content');
+const publicationCopy = el('publication-copy');
+const publicationStatus = el('publication-status');
+let publicationVersion = 0;
+
+function showPublicationFormat() {
+  publicationVersion += 1;
+  publicationStatus.textContent = '';
+  const withTable = publicationFormat.value === 'html';
+  publicationContent.value = withTable
+    ? reviewedFragment(document, caption.value, rows, chartSource.sourceCitation)
+    : caption.value;
+  el('publication-note').textContent = withTable
+    ? 'Paste into an HTML block. This includes the source chart values.'
+    : 'Paste into your publishing system’s caption or description field.';
+  publicationCopy.textContent = withTable ? 'Copy HTML source' : 'Copy caption';
+}
+el('publication').addEventListener('click', () => {
+  if (!canPublish()) return;
+  publicationFormat.value = 'caption';
+  showPublicationFormat();
+  publicationDialog.showModal();
+});
+publicationFormat.addEventListener('change', showPublicationFormat);
+publicationDialog.addEventListener('close', () => {
+  publicationVersion += 1;
+  publicationContent.value = '';
+  publicationStatus.textContent = '';
+});
+publicationCopy.addEventListener('click', async () => {
+  if (!publicationDialog.open || !canPublish()) return;
+  const version = publicationVersion;
+  const withTable = publicationFormat.value === 'html';
+  try {
+    await navigator.clipboard.writeText(publicationContent.value);
+    if (publicationDialog.open && version === publicationVersion) {
+      publicationStatus.textContent = withTable ? 'HTML source copied.' : 'Caption copied.';
+    }
+  } catch {
+    if (publicationDialog.open && version === publicationVersion) {
+      publicationContent.focus();
+      publicationContent.select();
+      publicationStatus.textContent = 'Content selected. Use your browser’s copy command.';
+    }
+  }
 });
 
 el('reader-preview').addEventListener('click', () => {

@@ -1,6 +1,6 @@
 import {answerText, fitsClaim, questionText, supportedDetail} from './check.mjs';
 
-const comparisonStyle = `
+const reportStyle = `
   :root { color-scheme: light; color: #17253a; background: #f7f3e9; font: 16px/1.5 system-ui, sans-serif; }
   * { box-sizing: border-box; }
   body { margin: 0; }
@@ -10,6 +10,8 @@ const comparisonStyle = `
   h2 { font-size: 1.15rem; margin: 1.5rem 0 .5rem; }
   header p, caption, .source { color: #445065; }
   p, blockquote { margin: .5rem 0; }
+  figure { margin: 1rem 0; }
+  figcaption { overflow-wrap: anywhere; white-space: pre-wrap; }
   blockquote { padding-inline-start: .8rem; border-inline-start: 3px solid #9a5829; white-space: pre-wrap; overflow-wrap: anywhere; }
   .answers { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .5rem; margin: .8rem 0; }
   .answers div { padding: .65rem; border: 1px solid #b5b6b2; background: #fffdf7; }
@@ -48,6 +50,10 @@ function reportDocument(document, title) {
   viewport.name = 'viewport';
   viewport.content = 'width=device-width, initial-scale=1';
   doc.head.prepend(encoding, viewport);
+  const policy = element(doc, 'meta');
+  policy.httpEquiv = 'Content-Security-Policy';
+  policy.content = "default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'";
+  doc.head.append(policy, element(doc, 'style', reportStyle));
   const main = element(doc, 'main');
   doc.body.append(main);
   return {doc, main};
@@ -78,20 +84,29 @@ function html(doc) {
   return '<!doctype html>' + doc.documentElement.outerHTML;
 }
 
-export function reviewedDescription(document, caption, rows) {
-  const {doc, main} = reportDocument(document, 'Reviewed chart description');
+function reviewedFigure(doc, caption, rows, sourceNote) {
+  const figure = element(doc, 'figure');
+  const description = element(doc, 'figcaption');
+  description.append(element(doc, 'p', caption));
   const {table, body} = dataTable(doc, 'Chart data', ['Category', 'Rate']);
   for (const {label, value} of rows) labelRow(doc, body, label).insertCell().textContent = `${value}%`;
-  main.append(element(doc, 'h1', 'Chart description'), element(doc, 'p', caption), table);
+  figure.append(description, table);
+  if (sourceNote) figure.append(element(doc, 'p', sourceNote));
+  return figure;
+}
+
+export function reviewedFragment(document, caption, rows, sourceNote) {
+  return reviewedFigure(document, caption, rows, sourceNote).outerHTML;
+}
+
+export function reviewedDescription(document, caption, rows, sourceNote) {
+  const {doc, main} = reportDocument(document, 'Reviewed chart description');
+  main.append(element(doc, 'h1', 'Chart description'), reviewedFigure(doc, caption, rows, sourceNote));
   return html(doc);
 }
 
 export function comparisonReport(document, {caption, rows, question, result, claims, describeClaim, sourceNote}) {
   const {doc, main} = reportDocument(document, 'Chart caption comparison');
-  const policy = element(doc, 'meta');
-  policy.httpEquiv = 'Content-Security-Policy';
-  policy.content = "default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'";
-  doc.head.append(policy, element(doc, 'style', comparisonStyle));
   const header = element(doc, 'header');
   header.append(element(doc, 'p', 'Two Charts, One Caption'), element(doc, 'h1', 'Same caption, different answers'));
   const answers = element(doc, 'dl');

@@ -209,6 +209,8 @@ dialog::backdrop { background: #090d18c9; }
 #rewrite-claims { padding-inline-start: 20px; overflow-wrap: anywhere; }
 dialog p { color: var(--muted); margin-top: 8px; }
 dialog p a { color: var(--cool); text-underline-offset: 3px; }
+#publication-dialog label { display: block; margin-block: 10px 6px; }
+#publication-dialog .controls { margin-top: 12px; }
 .cloud-preview { display: grid; grid-template-columns: minmax(0, 1fr); gap: 4px; margin: 14px 0; }
 .cloud-preview dt { color: var(--muted); font-size: .85rem; font-weight: 650; }
 .cloud-preview dd { margin: 0 0 7px; overflow-wrap: anywhere; }

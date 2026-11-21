@@ -115,6 +115,7 @@
         <button type="button" id="open-rewrite">Test my own rewrite</button>
         <button type="button" id="nano">Ask Chrome Nano for the detail</button>
         <button type="button" id="nano-cancel" hidden>Stop waiting for Chrome</button>
+        <button type="button" id="publication" hidden>Copy for publishing</button>
         <button type="button" id="export">Download reviewed text and data</button>
       </div>
       <p id="detail-status" role="status"></p>
@@ -330,6 +331,22 @@
       <button type="submit" value="cancel" autofocus>Cancel</button>
       <button type="submit" value="open" class="primary">Open test</button>
     </form>
+  </dialog>
+  <dialog id="publication-dialog" aria-labelledby="publication-title" aria-describedby="publication-note">
+    <h2 id="publication-title">Copy for publishing</h2>
+    <label for="publication-format">Content format</label>
+    <select id="publication-format">
+      <option value="caption">Caption text</option>
+      <option value="html">HTML with data table</option>
+    </select>
+    <p id="publication-note"></p>
+    <label for="publication-content">Content to copy</label>
+    <textarea id="publication-content" rows="6" readonly spellcheck="false" aria-describedby="publication-note"></textarea>
+    <form method="dialog" class="controls">
+      <button type="button" id="publication-copy" class="primary">Copy caption</button>
+      <button type="submit">Close</button>
+    </form>
+    <p id="publication-status" role="status"></p>
   </dialog>
   <dialog id="editor-draft-dialog" aria-labelledby="editor-draft-title" aria-describedby="editor-draft-note">
     <h2 id="editor-draft-title">Open editorial draft</h2>
