@@ -287,8 +287,16 @@
     </div>
     <p id="rewrite-help">Check your wording against the same chart and question in this browser.</p>
     <p id="rewrite-status" role="status"></p>
+    <section id="rewrite-claim-review" aria-labelledby="rewrite-facts-title" hidden>
+      <h3 id="rewrite-facts-title">Check Gemini’s reading of the rewrite</h3>
+      <ul id="rewrite-claims"></ul>
+      <p id="rewrite-claim-notes"></p>
+      <button type="button" id="confirm-rewrite-facts">These facts capture the rewrite</button>
+    </section>
     <form method="dialog" class="controls">
       <button type="button" id="check-rewrite">Check rewrite</button>
+      <button type="button" id="rewrite-cloud-preview">Review with Gemini</button>
+      <button type="button" id="rewrite-cloud-cancel" hidden>Cancel cloud review</button>
       <button type="submit" value="use" id="use-rewrite" class="primary" disabled>Use checked rewrite</button>
       <button type="submit" value="cancel">Cancel</button>
     </form>

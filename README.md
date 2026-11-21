@@ -32,6 +32,8 @@ After revealing a gap, choose **Download proof with chart data**. The HTML file 
 
 To use your own revision, choose **Test my own rewrite** after a chart check. The dialog keeps the checked caption beside your draft. **Check rewrite** runs the same local sentence checks as the editor and shows whether an alternate answer is still possible. **Use checked rewrite** applies a verified revision and prepares the original and rewritten captions for a reader test.
 
+For freer wording, choose **Review with Gemini** in the rewrite dialog. Review and approve the outgoing rewrite, question, and category names. After Gemini responds, confirm the extracted facts before the browser checks the rewrite. The original caption stays in the editor until you apply the checked rewrite.
+
 Each link contains its own caption, category names, question, and random invitation ID. The reader view does not receive the chart, the source answer, or the other caption. The test and imported responses survive a reload in the editor tab. Each reader tab generates an anonymous response ID so re-importing a code or updating an answer from that tab does not add another response. Counts are descriptive, and the links do not authenticate readers.
 
 Select **Save reader test** to continue later or on another browser. Under **Open a saved reader test**, choose the JSON file and review both captions before opening it. The original links and their collected responses carry over. Keep the JSON with the editor because it includes both captions, the answer, and individual selections. **Download results** gives a text summary for sharing.

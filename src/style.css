@@ -196,6 +196,8 @@ dialog::backdrop { background: #090d18c9; }
 #rewrite-dialog .controls { margin-top: 12px; }
 #rewrite-status:not(:empty) { color: var(--gold); }
 #rewrite-status[data-state="resolved"] { color: var(--mint); }
+#rewrite-claim-review { border-inline-start: 3px solid var(--cool); padding-inline-start: 10px; margin-top: 12px; }
+#rewrite-claims { padding-inline-start: 20px; overflow-wrap: anywhere; }
 dialog p { color: var(--muted); margin-top: 8px; }
 dialog p a { color: var(--cool); text-underline-offset: 3px; }
 .cloud-preview { display: grid; grid-template-columns: minmax(0, 1fr); gap: 4px; margin: 14px 0; }

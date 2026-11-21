@@ -54,8 +54,15 @@ const aiOperations = {
   question: {label: 'Question from private note', route: 'on_device', inputs: ['Private note']},
   detail: {label: 'Caption detail from source chart', route: 'on_device', inputs: ['Source percentages', 'Category IDs', 'Selected question']},
   review: {label: 'Cloud fact draft', route: 'in_cloud', inputs: ['Caption approved for cloud review', 'Category names', 'Selected question']},
+  rewrite: {label: 'Cloud fact draft for rewrite', route: 'in_cloud', inputs: ['Rewrite approved for cloud review', 'Category names', 'Selected question']},
 };
 const aiActivity = new Map();
+const cloudReviewControls = {
+  editor: {feedback: 'status', panel: 'claim-review', list: 'claims', notes: 'claim-rejections',
+    start: 'cloud-preview', cancel: 'cloud-cancel', confirm: 'confirm-facts'},
+  rewrite: {feedback: 'rewrite-status', panel: 'rewrite-claim-review', list: 'rewrite-claims', notes: 'rewrite-claim-notes',
+    start: 'rewrite-cloud-preview', cancel: 'rewrite-cloud-cancel', confirm: 'confirm-rewrite-facts'},
+};
 
 try { tabStorage = window.sessionStorage; } catch { /* Session storage can be disabled. */ }
 
@@ -202,9 +209,12 @@ function syncActions() {
   for (const id of ['check', 'cloud-preview', 'load', 'csv-file', 'example', 'example-select', 'nano', 'apply', 'confirm-facts', 'open-rewrite',
     'brief-example', 'brief-submit', 'brief-apply', 'recheck-file', 'save-recheck', 'run-recheck',
     'review-saved-caption', 'apply-stale-repair', 'example-refresh', 'csv-category', 'csv-percent',
-    'use-csv-columns']) el(id).disabled = busy;
+    'use-csv-columns', 'check-rewrite', 'rewrite-cloud-preview']) el(id).disabled = busy;
+  el('confirm-rewrite-facts').disabled = busy || !rewriteCandidate?.claims.length;
   for (const control of el('reader-choices').querySelectorAll('button, input')) control.disabled = busy;
-  el('cloud-cancel').hidden = !cloudOperation;
+  for (const [target, controls] of Object.entries(cloudReviewControls)) {
+    el(controls.cancel).hidden = cloudOperation?.target !== target;
+  }
 }
 
 function finishCloudReview(operation) {
@@ -218,7 +228,7 @@ function finishCloudReview(operation) {
 function cancelCloudReview() {
   const operation = cloudOperation;
   if (!operation) return;
-  operation.abort();
+  operation.controller.abort();
   finishCloudReview(operation);
 }
 
@@ -640,18 +650,44 @@ el('brief-apply').addEventListener('click', () => {
   question.focus();
 });
 
+function previewCloudReview(target, text, selected) {
+  snapshot = {target, text, prompt: cloudPrompt(rows, selected, text), revision,
+    context: target === 'rewrite' ? rewriteContext : null};
+  el('cloud-question').textContent = questionText(selected);
+  el('cloud-categories').textContent = answerText(rows, rows.map((_, index) => index + 1));
+  el('cloud-caption').textContent = text;
+  el('preview-data').textContent = target === 'rewrite'
+    ? 'The rewrite shown below goes to Google. The separate original caption, private note, and source chart stay in this tab.'
+    : 'Your private note and unpublished chart values stay in this tab.';
+  el('cloud-exact').open = false;
+  el('prompt').textContent = snapshot.prompt;
+  dialog.returnValue = 'cancel';
+  dialog.showModal();
+}
+
+function currentCloudRequest(request) {
+  return request?.revision === revision && (request.target === 'editor' ||
+    (rewriteDialog.open && request.context === rewriteContext && rewriteCaption.value.trim() === request.text));
+}
+
+function showCloudClaims(draft, request, controls) {
+  const {claims, excluded, narrowed, restored} = reviewCloudClaims(rows, request.text, draft.claims);
+  const reviewedDraft = {claims, alternatives: draft.alternatives};
+  if (request.target === 'editor') candidate = reviewedDraft;
+  else rewriteCandidate = {...reviewedDraft, request};
+  const entries = claims.map(claim => make('li', `${describeClaim(claim)} · “${claim.evidence}”`));
+  el(controls.list).replaceChildren(...(entries.length ? entries : [make('li', 'Gemini found no supported quantitative claims.')]));
+  const notes = [];
+  if (excluded) notes.push(`Omitted ${excluded} ${excluded === 1 ? 'draft fact' : 'draft facts'} without distinct supporting wording.`);
+  if (narrowed) notes.push('The quoted wording confirms who qualifies and leaves other categories open.');
+  if (restored) notes.push(`Recovered ${restored} ${restored === 1 ? 'fact' : 'facts'} directly from the caption.`);
+  el(controls.notes).textContent = notes.join(' ');
+  el(controls.panel).hidden = false;
+}
+
 el('cloud-preview').addEventListener('click', () => {
   try {
-    const selected = selectedQuestion();
-    const text = checkText(caption.value);
-    snapshot = {prompt: cloudPrompt(rows, selected, text), revision};
-    el('cloud-question').textContent = questionText(selected);
-    el('cloud-categories').textContent = answerText(rows, rows.map((_, index) => index + 1));
-    el('cloud-caption').textContent = text;
-    el('cloud-exact').open = false;
-    el('prompt').textContent = snapshot.prompt;
-    dialog.returnValue = 'cancel';
-    dialog.showModal();
+    previewCloudReview('editor', checkText(caption.value), selectedQuestion());
   } catch (error) {
     status.textContent = error.message;
   }
@@ -660,60 +696,57 @@ el('cloud-preview').addEventListener('click', () => {
 dialog.addEventListener('close', async () => {
   const request = snapshot;
   snapshot = null;
-  if (busy || dialog.returnValue !== 'send' || request?.revision !== revision) return;
+  if (busy || dialog.returnValue !== 'send' || !currentCloudRequest(request)) return;
+  const controls = cloudReviewControls[request.target];
+  const feedback = el(controls.feedback);
   if (navigator.onLine === false) {
-    status.textContent = 'Reconnect to send the cloud request. You can check the caption in this browser while offline.';
+    feedback.textContent = 'Reconnect to send the cloud request. You can check the caption in this browser while offline.';
     return;
   }
-  candidate = null;
-  el('claim-review').hidden = true;
-  const operation = new AbortController();
+  if (request.target === 'editor') candidate = null;
+  else clearRewriteCheck();
+  el(controls.panel).hidden = true;
+  const operation = {controller: new AbortController(), target: request.target};
   cloudOperation = operation;
-  const ownsReview = () => cloudOperation === operation && request.revision === revision;
+  const ownsReview = () => cloudOperation === operation && currentCloudRequest(request);
   busy = true;
   syncActions();
-  status.textContent = 'Verifying this browser for cloud review…';
-  el('cloud-cancel').focus();
+  feedback.textContent = 'Verifying this browser for cloud review…';
+  el(controls.cancel).focus();
+  let draftReady = false;
   try {
     const firebase = await connectFirebase();
     if (!ownsReview()) return;
     const draft = await firebase.generateInCloud(request.prompt, {
-      signal: operation.signal,
+      signal: operation.controller.signal,
       onSend: () => {
-        if (ownsReview()) status.textContent = 'Waiting for Gemini’s draft…';
+        if (ownsReview()) feedback.textContent = 'Waiting for Gemini’s draft…';
       },
     });
     if (!ownsReview()) return;
-    recordAIResponse('review');
+    recordAIResponse(request.target === 'editor' ? 'review' : 'rewrite');
     if (draft?.supported !== true || !Array.isArray(draft.alternatives)) throw Error('Gemini could not interpret the caption using the supported checks.');
-    const {claims, excluded, narrowed, restored} = reviewCloudClaims(rows, caption.value, draft.claims);
-    candidate = {claims, alternatives: draft.alternatives};
-    const entries = claims.map(claim => {
-      return make('li', `${describeClaim(claim)} · “${claim.evidence}”`);
-    });
-    el('claims').replaceChildren(...(entries.length ? entries : [make('li', 'Gemini found no supported quantitative claims.')]));
-    const notes = [];
-    if (excluded) notes.push(`Omitted ${excluded} ${excluded === 1 ? 'draft fact' : 'draft facts'} without distinct supporting wording.`);
-    if (narrowed) notes.push('The quoted wording confirms who qualifies and leaves other categories open.');
-    if (restored) notes.push(`Recovered ${restored} ${restored === 1 ? 'fact' : 'facts'} directly from the caption.`);
-    el('claim-rejections').textContent = notes.join(' ');
-    el('claim-review').hidden = false;
-    status.textContent = 'Firebase reported in-cloud inference. Check the extracted facts.';
+    showCloudClaims(draft, request, controls);
+    draftReady = true;
+    feedback.textContent = 'Firebase reported in-cloud inference. Check the extracted facts.';
   } catch (error) {
-    if (ownsReview()) status.textContent = error.message;
+    if (ownsReview()) feedback.textContent = error.message;
   } finally {
     if (finishCloudReview(operation)) {
-      el(candidate ? 'confirm-facts' : 'cloud-preview').focus();
+      const confirm = el(controls.confirm);
+      (draftReady && !confirm.disabled ? confirm : el(controls.start)).focus();
     }
   }
 });
 
-el('cloud-cancel').addEventListener('click', () => {
-  if (!cloudOperation) return;
-  cancelCloudReview();
-  status.textContent = 'Cloud review canceled. A request already sent may still finish at Google.';
-  el('check').focus();
-});
+for (const [target, controls] of Object.entries(cloudReviewControls)) {
+  el(controls.cancel).addEventListener('click', () => {
+    if (cloudOperation?.target !== target) return;
+    cancelCloudReview();
+    el(controls.feedback).textContent = 'Cloud review canceled. A request already sent may still finish at Google.';
+    el(target === 'editor' ? 'check' : controls.start).focus();
+  });
+}
 
 el('confirm-facts').addEventListener('click', () => {
   if (!candidate) return;
@@ -789,9 +822,14 @@ const rewriteCaption = el('rewrite-caption');
 const rewriteStatus = el('rewrite-status');
 let rewriteContext;
 let checkedRewrite;
+let rewriteCandidate;
 
 function clearRewriteCheck() {
   checkedRewrite = null;
+  rewriteCandidate = null;
+  if (cloudOperation?.target === 'rewrite') cancelCloudReview();
+  el('rewrite-claim-review').hidden = true;
+  el('confirm-rewrite-facts').disabled = true;
   rewriteStatus.textContent = '';
   rewriteStatus.removeAttribute('data-state');
   el('use-rewrite').disabled = true;
@@ -810,35 +848,63 @@ el('open-rewrite').addEventListener('click', () => {
   rewriteCaption.focus();
 });
 rewriteCaption.addEventListener('input', clearRewriteCheck);
-el('check-rewrite').addEventListener('click', () => {
-  clearRewriteCheck();
+
+function readChangedRewrite() {
   if (rewriteContext?.revision !== revision) {
-    rewriteStatus.textContent = 'The chart or question changed. Reopen the rewrite to check it again.';
+    throw Error('The chart or question changed. Reopen the rewrite to check it again.');
+  }
+  const text = checkText(rewriteCaption.value);
+  if (text === rewriteContext.before) throw Error('Change the wording before checking the rewrite.');
+  return text;
+}
+
+function checkRewrite(text, claims, alternatives = []) {
+  const result = checkCaption(rows, rewriteContext.question, claims, alternatives);
+  if (result.status === 'conflict') {
+    const values = rows.map(row => row.value);
+    const conflict = claims.find(claim => !fitsClaim(values, claim));
+    rewriteStatus.textContent = `This sentence conflicts with the source chart. “${conflict.evidence}”`;
     return;
   }
+  const sourceAnswer = answerText(rows, result.expected);
+  if (result.status === 'ambiguous') {
+    const alternate = answerText(rows, result.alternateAnswer);
+    rewriteStatus.textContent = `The source chart answers “${sourceAnswer}.” The same rewrite also fits a chart that answers “${alternate}.”`;
+    return;
+  }
+  checkedRewrite = {text, claims, expected: result.expected};
+  rewriteStatus.textContent = result.status === 'explicit'
+    ? `The rewrite directly establishes the answer “${sourceAnswer}.”`
+    : `The checked facts force the answer “${sourceAnswer}.” Readers still need to work it out.`;
+  rewriteStatus.dataset.state = 'resolved';
+  el('use-rewrite').disabled = false;
+}
+
+el('check-rewrite').addEventListener('click', () => {
+  clearRewriteCheck();
   try {
-    const text = checkText(rewriteCaption.value);
-    if (text === rewriteContext.before) throw Error('Change the wording before checking the rewrite.');
-    const claims = localCaptionClaims(text);
-    const result = checkCaption(rows, rewriteContext.question, claims);
-    if (result.status === 'conflict') {
-      const values = rows.map(row => row.value);
-      const conflict = claims.find(claim => !fitsClaim(values, claim));
-      rewriteStatus.textContent = `This sentence conflicts with the source chart. “${conflict.evidence}”`;
-      return;
-    }
-    const sourceAnswer = answerText(rows, result.expected);
-    if (result.status === 'ambiguous') {
-      const alternate = answerText(rows, result.alternateAnswer);
-      rewriteStatus.textContent = `The source chart answers “${sourceAnswer}.” The same rewrite also fits a chart that answers “${alternate}.”`;
-      return;
-    }
-    checkedRewrite = {text, claims, expected: result.expected};
-    rewriteStatus.textContent = result.status === 'explicit'
-      ? `The rewrite directly establishes the answer “${sourceAnswer}.”`
-      : `The checked facts force the answer “${sourceAnswer}.” Readers still need to work it out.`;
-    rewriteStatus.dataset.state = 'resolved';
-    el('use-rewrite').disabled = false;
+    const text = readChangedRewrite();
+    checkRewrite(text, localCaptionClaims(text));
+  } catch (error) {
+    rewriteStatus.textContent = error.message;
+  }
+});
+
+el('rewrite-cloud-preview').addEventListener('click', () => {
+  try {
+    previewCloudReview('rewrite', readChangedRewrite(), rewriteContext.question);
+  } catch (error) {
+    rewriteStatus.textContent = error.message;
+  }
+});
+
+el('confirm-rewrite-facts').addEventListener('click', () => {
+  if (!rewriteCandidate?.claims.length || !currentCloudRequest(rewriteCandidate.request)) return;
+  const {request, claims, alternatives} = rewriteCandidate;
+  clearRewriteCheck();
+  try {
+    checkRewrite(request.text, claims, alternatives);
+    (checkedRewrite ? el('use-rewrite') : el('rewrite-cloud-preview')).focus();
   } catch (error) {
     rewriteStatus.textContent = error.message;
   }
